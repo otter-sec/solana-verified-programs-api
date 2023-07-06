@@ -7,17 +7,20 @@ diesel::table! {
         commit_hash -> Nullable<Varchar>,
         program_id -> Varchar,
         lib_name -> Nullable<Varchar>,
-        created_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
     }
 }
 
 diesel::table! {
     verified_programs (id) {
-        id -> VarChar,
+        id -> Varchar,
         program_id -> Varchar,
         is_verified -> Bool,
-        verified_at -> Nullable<Timestamp>,
+        verified_at -> Timestamp,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);
+diesel::allow_tables_to_appear_in_same_query!(
+    solana_program_builds,
+    verified_programs,
+);

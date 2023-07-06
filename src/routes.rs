@@ -1,6 +1,7 @@
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams};
-use crate::operations::{insert_build, verify_build};
+use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerificationStatusParams};
+use crate::operations::{check_is_program_verified, insert_build, verify_build};
 use crate::state::AppState;
+use axum::extract::Path;
 use axum::{
     extract::State,
     routing::{get, post},
@@ -11,8 +12,9 @@ use serde_json::{json, Value};
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
-        .route("/verify", post(handle_verify))
         .route("/", get(index))
+        .route("/verify", post(handle_verify))
+        .route("/status/:address", get(handle_verify_status))
         .with_state(app_state)
 }
 
@@ -34,31 +36,70 @@ async fn index() -> Json<Value> {
     }))
 }
 
+// Route handler for POST /verify which creates a new process to verify the program
 async fn handle_verify(
     State(app): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
-) -> Json<SolanaProgramBuild> {
-    println!("Received payload: {:?}", payload);
-
+) -> Json<Value> {
     let verify_build_data = SolanaProgramBuild {
         id: uuid::Uuid::new_v4().to_string(),
         repository: payload.repository.clone(),
         commit_hash: payload.commit_hash.clone(),
         program_id: payload.program_id.clone(),
         lib_name: payload.lib_name.clone(),
-        created_at: Some(Utc::now().naive_utc()),
+        created_at: Utc::now().naive_utc(),
     };
 
     // insert into database
-    let insert = insert_build(&verify_build_data, app.db_pool).await;
+    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
 
     match insert {
-        Ok(_) => println!("Inserted into database"),
-        Err(e) => println!("Error inserting into database: {:?}", e),
+        Ok(_) => {
+            println!("Inserted into database");
+            //run task in background
+            tokio::spawn(verify_build(app.db_pool.clone(), payload));
+
+            Json(json!(
+                {
+                    "success": true,
+                    "message": "Build verification started",
+                }
+            ))
+        }
+        Err(e) => {
+            println!("Error inserting into database: {:?}", e);
+            Json(json!(
+                {
+                    "success": false,
+                    "error": "Unexpected database error occurred",
+                }
+            ))
+        }
     }
+}
 
-    //run task in background
-    tokio::spawn(verify_build(payload));
+async fn handle_verify_status(
+    State(app): State<AppState>,
+    Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
+) -> Json<Value> {
+    let result = check_is_program_verified(address, app.db_pool.clone()).await;
 
-    Json(verify_build_data)
+    if let Ok(result) = result {
+        return Json(json!(
+            {
+                "success": result,
+                "message": if result {
+                    "On chain program verified"
+                } else {
+                    "On chain program not verified"
+                }
+            }
+        ));
+    }
+    Json(json!(
+        {
+            "status": false,
+            "error": "Unexpected database error occurred",
+        }
+    ))
 }
