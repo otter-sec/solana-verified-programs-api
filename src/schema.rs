@@ -7,6 +7,7 @@ diesel::table! {
         commit_hash -> Nullable<Varchar>,
         program_id -> Varchar,
         lib_name -> Nullable<Varchar>,
+        bpf_flag -> Bool,
         created_at -> Timestamp,
     }
 }

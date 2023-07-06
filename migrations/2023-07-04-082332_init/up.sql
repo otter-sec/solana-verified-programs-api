@@ -5,6 +5,7 @@ CREATE TABLE solana_program_builds (
     commit_hash VARCHAR,
     program_id VARCHAR NOT NULL UNIQUE,
     lib_name VARCHAR,
+    bpf_flag BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id)
 );

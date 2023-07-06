@@ -47,6 +47,7 @@ async fn handle_verify(
         commit_hash: payload.commit_hash.clone(),
         program_id: payload.program_id.clone(),
         lib_name: payload.lib_name.clone(),
+        bpf_flag: payload.bpf_flag.unwrap_or(false),
         created_at: Utc::now().naive_utc(),
     };
 

@@ -11,6 +11,7 @@ pub struct SolanaProgramBuild {
     pub commit_hash: Option<String>,
     pub program_id: String,
     pub lib_name: Option<String>,
+    pub bpf_flag: bool,
     pub created_at: NaiveDateTime,
 }
 

@@ -14,6 +14,7 @@ pub async fn verify_build(
     pool: Pool<ConnectionManager<PgConnection>>,
     payload: SolanaProgramBuildParams,
 ) {
+    println!("Verifying build..");
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo")
         .arg("-um")
@@ -99,6 +100,19 @@ pub async fn insert_verified_build(
     Ok(())
 }
 
+pub async fn get_build(
+    program_address: String,
+    pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<SolanaProgramBuild, diesel::result::Error> {
+    let conn = &mut pool.get().unwrap();
+
+    let res = schema::solana_program_builds::table
+        .filter(schema::solana_program_builds::program_id.eq(program_address))
+        .first::<SolanaProgramBuild>(conn)?;
+
+    Ok(res)
+}
+
 pub async fn check_is_program_verified(
     program_address: String,
     pool: Pool<ConnectionManager<PgConnection>>,
@@ -106,11 +120,32 @@ pub async fn check_is_program_verified(
     let conn = &mut pool.get().unwrap();
 
     let res = schema::verified_programs::table
-        .filter(schema::verified_programs::program_id.eq(program_address))
+        .filter(schema::verified_programs::program_id.eq(&program_address))
         .first::<VerfiedProgram>(conn);
 
     match res {
-        Ok(res) => Ok(res.is_verified),
+        Ok(res) => {
+            // check if the program is verified less than 24 hours ago
+            let now = chrono::Utc::now().naive_utc();
+            let verified_at = res.verified_at;
+            let diff = now - verified_at;
+            if diff.num_hours() < 24 {
+                return Ok(true);
+            }
+            // if the program is verified more than 24 hours ago, rebuild and verify
+            let payload = get_build(program_address, pool.clone()).await?;
+            tokio::spawn(verify_build(
+                pool,
+                SolanaProgramBuildParams {
+                    repository: payload.repository,
+                    program_id: payload.program_id,
+                    commit_hash: payload.commit_hash,
+                    lib_name: payload.lib_name,
+                    bpf_flag: Some(payload.bpf_flag),
+                },
+            ));
+            Ok(false)
+        }
         Err(err) => {
             if err.to_string() == "Record not found" {
                 return Ok(false);
