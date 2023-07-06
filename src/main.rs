@@ -28,7 +28,7 @@ async fn main() {
 
     let app = create_router(app_state);
 
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("Listening on {}", addr);
 
     axum::Server::bind(&addr)
