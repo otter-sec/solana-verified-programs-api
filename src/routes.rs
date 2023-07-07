@@ -27,9 +27,10 @@ async fn index() -> Json<Value> {
                 "description": "Verify a program",
                 "params" : {
                     "repo": "Git repository URL",
-                    "commit": "Commit hash ",
+                    "commit": "(Optional) Commit hash of the repository. If not specified, the latest commit will be used.",
                     "program_id": "Program ID of the program in mainnet",
-                    "lib_name": "(Optional) If the repository contains multiple programs, specify the name of the library name of the program to build and verify."
+                    "lib_name": "(Optional) If the repository contains multiple programs, specify the name of the library name of the program to build and verify.",
+                    "bpf_flag": "(Optional)  If the program requires cargo build-bpf (instead of cargo build-sbf), as for an Anchor program, set this flag."
                 }
             },
         ]

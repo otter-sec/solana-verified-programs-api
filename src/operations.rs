@@ -1,5 +1,7 @@
 use crate::diesel::{ExpressionMethods, RunQueryDsl};
 use crate::schema;
+use diesel::r2d2::PooledConnection;
+use diesel::result::Error as DieselError;
 use diesel::QueryDsl;
 
 use diesel::{
@@ -39,9 +41,16 @@ pub async fn verify_build(
     let output = cmd.output().expect("Failed to execute command");
 
     if output.status.success() {
-        let result = String::from_utf8(output.stdout).unwrap();
+        let result = String::from_utf8(output.stdout);
+        let result = match result {
+            Ok(result) => result,
+            Err(err) => {
+                println!("Failed to get the output from program: {}", err);
+                return;
+            }
+        };
 
-        // last line of output is the result
+        // last line of output has the result
         if let Some(last_line) = get_last_line(&result) {
             if last_line.contains("Program hash matches") {
                 println!("Program hashes match");
@@ -56,11 +65,10 @@ pub async fn verify_build(
                 println!("Program hashes do not match");
             }
         } else {
-            println!("Failed to execute the program.");
+            println!("Failed to get the output from program.");
         }
     } else {
-        let result = String::from_utf8(output.stderr).unwrap();
-        println!("Result: {}", result);
+        println!("Failed to execute the program.");
     }
 }
 
@@ -68,11 +76,30 @@ fn get_last_line(output: &str) -> Option<String> {
     output.lines().last().map(|line| line.to_owned())
 }
 
+// DB operations
+pub async fn get_db_connection(
+    pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<PooledConnection<ConnectionManager<PgConnection>>, diesel::result::Error> {
+    let conn = pool.get();
+
+    let conn = match conn {
+        Ok(conn) => conn,
+        Err(err) => {
+            println!("Failed to get connection: {}", err);
+            return Err(DieselError::DatabaseError(
+                diesel::result::DatabaseErrorKind::ClosedConnection,
+                Box::new(err.to_string()),
+            ));
+        }
+    };
+    Ok(conn)
+}
+
 pub async fn insert_build(
     payload: &SolanaProgramBuild,
     pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<(), diesel::result::Error> {
-    let conn = &mut pool.get().unwrap();
+    let conn = &mut get_db_connection(pool).await?;
 
     diesel::insert_into(schema::solana_program_builds::table)
         .values(payload)
@@ -88,7 +115,7 @@ pub async fn insert_verified_build(
     payload: &VerfiedProgram,
     pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<(), diesel::result::Error> {
-    let conn = &mut pool.get().unwrap();
+    let conn = &mut get_db_connection(pool).await?;
 
     diesel::insert_into(schema::verified_programs::table)
         .values(payload)
@@ -102,10 +129,8 @@ pub async fn insert_verified_build(
 
 pub async fn get_build(
     program_address: String,
-    pool: Pool<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
 ) -> Result<SolanaProgramBuild, diesel::result::Error> {
-    let conn = &mut pool.get().unwrap();
-
     let res = schema::solana_program_builds::table
         .filter(schema::solana_program_builds::program_id.eq(program_address))
         .first::<SolanaProgramBuild>(conn)?;
@@ -117,7 +142,7 @@ pub async fn check_is_program_verified(
     program_address: String,
     pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<bool, diesel::result::Error> {
-    let conn = &mut pool.get().unwrap();
+    let conn = &mut get_db_connection(pool.clone()).await?;
 
     let res = schema::verified_programs::table
         .filter(schema::verified_programs::program_id.eq(&program_address))
@@ -129,22 +154,21 @@ pub async fn check_is_program_verified(
             let now = chrono::Utc::now().naive_utc();
             let verified_at = res.verified_at;
             let diff = now - verified_at;
-            if diff.num_hours() < 24 {
-                return Ok(true);
+            if diff.num_hours() > 24 {
+                // if the program is verified more than 24 hours ago, rebuild and verify
+                let payload = get_build(program_address, conn).await?;
+                tokio::spawn(verify_build(
+                    pool,
+                    SolanaProgramBuildParams {
+                        repository: payload.repository,
+                        program_id: payload.program_id,
+                        commit_hash: payload.commit_hash,
+                        lib_name: payload.lib_name,
+                        bpf_flag: Some(payload.bpf_flag),
+                    },
+                ));
             }
-            // if the program is verified more than 24 hours ago, rebuild and verify
-            let payload = get_build(program_address, pool.clone()).await?;
-            tokio::spawn(verify_build(
-                pool,
-                SolanaProgramBuildParams {
-                    repository: payload.repository,
-                    program_id: payload.program_id,
-                    commit_hash: payload.commit_hash,
-                    lib_name: payload.lib_name,
-                    bpf_flag: Some(payload.bpf_flag),
-                },
-            ));
-            Ok(false)
+            Ok(res.is_verified)
         }
         Err(err) => {
             if err.to_string() == "Record not found" {
