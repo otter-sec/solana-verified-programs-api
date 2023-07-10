@@ -4,6 +4,7 @@ use diesel::r2d2::PooledConnection;
 use diesel::result::Error as DieselError;
 use diesel::QueryDsl;
 
+use crate::errors::ApiError;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
@@ -16,7 +17,7 @@ use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram
 pub async fn verify_build(
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
     payload: SolanaProgramBuildParams,
-) {
+) -> Result<VerfiedProgram, ApiError> {
     tracing::info!("Verifying build..");
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo")
@@ -48,38 +49,41 @@ pub async fn verify_build(
                 Ok(result) => result,
                 Err(err) => {
                     tracing::error!("Failed to get the output from program: {}", err);
-                    return;
+                    return Err(ApiError::ParseError(
+                        "Failed to get the output from program".to_owned(),
+                    ));
                 }
             };
 
+            let onchain_hash = extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
+            let build_hash =
+                extract_hash(&result, "Executable Program Hash from repo:").unwrap_or_default();
+
             // last line of output has the result
             if let Some(last_line) = get_last_line(&result) {
-                if last_line.contains("Program hash matches") {
-                    tracing::info!("Program hashes match");
-                    let onchain_hash =
-                        extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
-                    let build_hash = extract_hash(&result, "Executable Program Hash from repo:")
-                        .unwrap_or_default();
-                    let verified_build = VerfiedProgram {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        program_id: payload.program_id.clone(),
-                        is_verified: true,
-                        on_chain_hash: onchain_hash,
-                        executable_hash: build_hash,
-                        verified_at: chrono::Utc::now().naive_utc(),
-                    };
-                    let _ = insert_verified_build(&verified_build, pool).await;
-                } else {
-                    tracing::info!("Program hashes do not match");
-                }
+                let verified_build = VerfiedProgram {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    program_id: payload.program_id.clone(),
+                    is_verified: last_line.contains("Program hash matches"),
+                    on_chain_hash: onchain_hash,
+                    executable_hash: build_hash,
+                    verified_at: chrono::Utc::now().naive_utc(),
+                };
+                let _ = insert_verified_build(&verified_build, pool).await;
+                Ok(verified_build)
             } else {
                 tracing::error!("Failed to get the output from program.");
+                Err(ApiError::Custom(
+                    "Failed to get the output from program".to_owned(),
+                ))
             }
         } else {
             tracing::error!("Failed to execute the program.");
+            Err(ApiError::BuildError)
         }
     } else {
         tracing::error!("Failed to execute the program.");
+        Err(ApiError::BuildError)
     }
 }
 
@@ -178,7 +182,7 @@ pub async fn check_is_program_verified(
                 // if the program is verified more than 24 hours ago, rebuild and verify
                 let payload = get_build(program_address, conn).await?;
                 tokio::spawn(async move {
-                    verify_build(
+                    let _ = verify_build(
                         pool,
                         SolanaProgramBuildParams {
                             repository: payload.repository,

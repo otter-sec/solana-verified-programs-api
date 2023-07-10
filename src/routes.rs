@@ -14,6 +14,7 @@ pub fn create_router(app_state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/verify", post(handle_verify))
+        .route("/verify_sync", post(handle_verify_sync))
         .route("/status/:address", get(handle_verify_status))
         .with_state(app_state)
 }
@@ -60,7 +61,7 @@ async fn handle_verify(
             tracing::info!("Inserted into database");
             //run task in background
             tokio::spawn(async move {
-                verify_build(app.db_pool.clone(), payload).await;
+                let _ = verify_build(app.db_pool.clone(), payload).await;
             });
 
             Json(json!(
@@ -82,6 +83,66 @@ async fn handle_verify(
     }
 }
 
+async fn handle_verify_sync(
+    State(app): State<AppState>,
+    Json(payload): Json<SolanaProgramBuildParams>,
+) -> Json<Value> {
+    let verify_build_data = SolanaProgramBuild {
+        id: uuid::Uuid::new_v4().to_string(),
+        repository: payload.repository.clone(),
+        commit_hash: payload.commit_hash.clone(),
+        program_id: payload.program_id.clone(),
+        lib_name: payload.lib_name.clone(),
+        bpf_flag: payload.bpf_flag.unwrap_or(false),
+        created_at: Utc::now().naive_utc(),
+    };
+
+    // insert into database
+    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
+
+    match insert {
+        Ok(_) => {
+            tracing::info!("Inserted into database");
+            //run task in background
+            // let result = verify_build(app.db_pool.clone(), payload).await;
+            let handle =
+                tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
+
+            let result = handle.await.expect("Task panicked").await;
+            match result {
+                Ok(verified_program) => {
+                    tracing::info!("Build verification completed");
+                    Json(json!(
+                        {
+                            "success": true,
+                            "message": "Build verification completed",
+                            "on_chain_hash": verified_program.on_chain_hash,
+                            "executable_hash": verified_program.executable_hash,
+                        }
+                    ))
+                }
+                Err(e) => {
+                    tracing::error!("Error verifying build: {:?}", e);
+                    Json(json!(
+                        {
+                            "success": false,
+                            "error": format!("unexpected error occurred {:?}", e)
+                        }
+                    ))
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error inserting into database: {:?}", e);
+            Json(json!(
+                {
+                    "success": false,
+                    "error": format!("unexpected database error occurred {:?}", e)
+                }
+            ))
+        }
+    }
+}
 async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
