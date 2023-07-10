@@ -57,9 +57,11 @@ async fn handle_verify(
 
     match insert {
         Ok(_) => {
-            println!("Inserted into database");
+            tracing::info!("Inserted into database");
             //run task in background
-            tokio::spawn(verify_build(app.db_pool.clone(), payload));
+            tokio::spawn(async move {
+                verify_build(app.db_pool.clone(), payload).await;
+            });
 
             Json(json!(
                 {
@@ -69,7 +71,7 @@ async fn handle_verify(
             ))
         }
         Err(e) => {
-            println!("Error inserting into database: {:?}", e);
+            tracing::error!("Error inserting into database: {:?}", e);
             Json(json!(
                 {
                     "success": false,
