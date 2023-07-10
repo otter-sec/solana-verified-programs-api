@@ -59,7 +59,9 @@ async fn handle_verify(
         Ok(_) => {
             tracing::info!("Inserted into database");
             //run task in background
-            tokio::spawn(verify_build(app.db_pool.clone(), payload));
+            tokio::spawn(async move {
+                verify_build(app.db_pool.clone(), payload).await;
+            });
 
             Json(json!(
                 {
