@@ -22,3 +22,17 @@ services:
       - /tmp:/tmp
     depends_on:
       - db
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    links:
+      - api
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ngnix/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
+      - ./ngnix/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
