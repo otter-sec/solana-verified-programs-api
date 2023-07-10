@@ -5,6 +5,7 @@ use state::AppState;
 use std::env;
 
 extern crate diesel;
+extern crate tracing;
 
 mod models;
 mod operations;
@@ -29,7 +30,7 @@ async fn main() {
     let app = create_router(app_state);
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("Listening on {}", addr);
+    tracing::info!("Listening on {}", addr);
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())

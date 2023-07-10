@@ -16,7 +16,7 @@ pub async fn verify_build(
     pool: Pool<ConnectionManager<PgConnection>>,
     payload: SolanaProgramBuildParams,
 ) {
-    println!("Verifying build..");
+    tracing::info!("Verifying build..");
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo")
         .arg("-um")
@@ -38,37 +38,41 @@ pub async fn verify_build(
         }
     }
 
-    let output = cmd.output().expect("Failed to execute command");
+    let output = cmd.output();
 
-    if output.status.success() {
-        let result = String::from_utf8(output.stdout);
-        let result = match result {
-            Ok(result) => result,
-            Err(err) => {
-                println!("Failed to get the output from program: {}", err);
-                return;
-            }
-        };
+    if let Ok(output) = output {
+        if output.status.success() {
+            let result = String::from_utf8(output.stdout);
+            let result = match result {
+                Ok(result) => result,
+                Err(err) => {
+                    tracing::error!("Failed to get the output from program: {}", err);
+                    return;
+                }
+            };
 
-        // last line of output has the result
-        if let Some(last_line) = get_last_line(&result) {
-            if last_line.contains("Program hash matches") {
-                println!("Program hashes match");
-                let verified_build = VerfiedProgram {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    program_id: payload.program_id.clone(),
-                    is_verified: true,
-                    verified_at: chrono::Utc::now().naive_utc(),
-                };
-                let _ = insert_verified_build(&verified_build, pool).await;
+            // last line of output has the result
+            if let Some(last_line) = get_last_line(&result) {
+                if last_line.contains("Program hash matches") {
+                    tracing::info!("Program hashes match");
+                    let verified_build = VerfiedProgram {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        program_id: payload.program_id.clone(),
+                        is_verified: true,
+                        verified_at: chrono::Utc::now().naive_utc(),
+                    };
+                    let _ = insert_verified_build(&verified_build, pool).await;
+                } else {
+                    tracing::info!("Program hashes do not match");
+                }
             } else {
-                println!("Program hashes do not match");
+                tracing::error!("Failed to get the output from program.");
             }
         } else {
-            println!("Failed to get the output from program.");
+            tracing::error!("Failed to execute the program.");
         }
     } else {
-        println!("Failed to execute the program.");
+        tracing::error!("Failed to execute the program.");
     }
 }
 
@@ -85,7 +89,7 @@ pub async fn get_db_connection(
     let conn = match conn {
         Ok(conn) => conn,
         Err(err) => {
-            println!("Failed to get connection: {}", err);
+            tracing::error!("Failed to get connection: {}", err);
             return Err(DieselError::DatabaseError(
                 diesel::result::DatabaseErrorKind::ClosedConnection,
                 Box::new(err.to_string()),
