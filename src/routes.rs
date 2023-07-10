@@ -173,6 +173,7 @@ async fn handle_verify_status(
             }
         ));
     }
+    tracing::error!("Error inserting into database: {:?}", result.err());
     Json(json!(
         {
             "status": false,
