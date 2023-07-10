@@ -17,8 +17,13 @@ diesel::table! {
         id -> Varchar,
         program_id -> Varchar,
         is_verified -> Bool,
+        on_chain_hash -> Varchar,
+        executable_hash -> Varchar,
         verified_at -> Timestamp,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);
+diesel::allow_tables_to_appear_in_same_query!(
+    solana_program_builds,
+    verified_programs,
+);

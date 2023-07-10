@@ -23,6 +23,8 @@ pub struct VerfiedProgram {
     pub id: String,
     pub program_id: String,
     pub is_verified: bool,
+    pub on_chain_hash: String,
+    pub executable_hash: String,
     pub verified_at: NaiveDateTime,
 }
 

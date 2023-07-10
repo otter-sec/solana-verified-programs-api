@@ -15,6 +15,8 @@ CREATE TABLE verified_programs (
     id VARCHAR PRIMARY KEY,
     program_id VARCHAR NOT NULL UNIQUE,
     is_verified BOOLEAN NOT NULL,
+    on_chain_hash VARCHAR NOT NULL,
+    executable_hash VARCHAR NOT NULL,
     verified_at TIMESTAMP NOT NULL DEFAULT NOW(),
     FOREIGN KEY (program_id) REFERENCES solana_program_builds (program_id)
 );
