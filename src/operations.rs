@@ -162,16 +162,19 @@ pub async fn check_is_program_verified(
             if diff.num_hours() > 24 {
                 // if the program is verified more than 24 hours ago, rebuild and verify
                 let payload = get_build(program_address, conn).await?;
-                tokio::spawn(verify_build(
-                    pool,
-                    SolanaProgramBuildParams {
-                        repository: payload.repository,
-                        program_id: payload.program_id,
-                        commit_hash: payload.commit_hash,
-                        lib_name: payload.lib_name,
-                        bpf_flag: Some(payload.bpf_flag),
-                    },
-                ));
+                tokio::spawn(async move {
+                    verify_build(
+                        pool,
+                        SolanaProgramBuildParams {
+                            repository: payload.repository,
+                            program_id: payload.program_id,
+                            commit_hash: payload.commit_hash,
+                            lib_name: payload.lib_name,
+                            bpf_flag: Some(payload.bpf_flag),
+                        },
+                    )
+                    .await;
+                });
             }
             Ok(res.is_verified)
         }
