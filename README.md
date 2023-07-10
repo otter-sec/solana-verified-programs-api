@@ -31,8 +31,48 @@ curl --location 'localhost:3000/verify' \
 }'
 ```
 
+- Upon submitting a job the endpint will start a new verification of the program and returns a message.
+
+  - If there are no errors the response will be:
+
+  ```json
+  {
+      "message": "Build verification started",
+      "success": true
+  }
+  ```
+
+  - If there are errors the response will be:
+
+  ```json
+  {
+      "message": "Error message",
+      "success": false
+  }
+  ```
+
 ### Get the status of a verification
 
 ```bash
 curl --location 'localhost:3000/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY'
 ```
+
+- Returns the status of the verification
+
+  - If the given program is verified the response will be:
+
+  ```json
+  {
+      "message": "On chain program verified",
+      "success": true
+  }
+  ```
+
+  - else the response will be:
+
+  ```json
+  {
+      "message": "On chain program not verified",
+      "success": false
+  }
+  ```
