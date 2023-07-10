@@ -1,4 +1,8 @@
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerificationStatusParams};
+use crate::models::{
+    ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
+    SuccessResponse, VerificationStatusParams, VerificationStatusResponse, VerifyAsyncResponse,
+    VerifySyncResponse,
+};
 use crate::operations::{check_is_program_verified, insert_build, verify_build};
 use crate::state::AppState;
 use axum::extract::Path;
@@ -42,7 +46,7 @@ async fn index() -> Json<Value> {
 async fn handle_verify(
     State(app): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
-) -> Json<Value> {
+) -> Json<ApiResponse> {
     let verify_build_data = SolanaProgramBuild {
         id: uuid::Uuid::new_v4().to_string(),
         repository: payload.repository.clone(),
@@ -64,21 +68,19 @@ async fn handle_verify(
                 let _ = verify_build(app.db_pool.clone(), payload).await;
             });
 
-            Json(json!(
-                {
-                    "success": true,
-                    "message": "Build verification started",
-                }
-            ))
+            Json(ApiResponse::Success(SuccessResponse::VerifyAsync(
+                VerifyAsyncResponse {
+                    status: Status::Success,
+                    message: "Build verification started".to_string(),
+                },
+            )))
         }
         Err(e) => {
             tracing::error!("Error inserting into database: {:?}", e);
-            Json(json!(
-                {
-                    "success": false,
-                    "error": format!("unexpected database error occurred {:?}", e)
-                }
-            ))
+            Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "unexpected error occurred".to_string(),
+            }))
         }
     }
 }
@@ -86,7 +88,7 @@ async fn handle_verify(
 async fn handle_verify_sync(
     State(app): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
-) -> Json<Value> {
+) -> Json<ApiResponse> {
     let verify_build_data = SolanaProgramBuild {
         id: uuid::Uuid::new_v4().to_string(),
         repository: payload.repository.clone(),
@@ -104,7 +106,6 @@ async fn handle_verify_sync(
         Ok(_) => {
             tracing::info!("Inserted into database");
             //run task in background
-            // let result = verify_build(app.db_pool.clone(), payload).await;
             let handle =
                 tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
 
@@ -114,70 +115,67 @@ async fn handle_verify_sync(
                 match res.await {
                     Ok(verified_program) => {
                         tracing::info!("Build verification completed");
-                        Json(json!(
-                            {
-                                "success": true,
-                                "message": "Build verification completed",
-                                "on_chain_hash": verified_program.on_chain_hash,
-                                "executable_hash": verified_program.executable_hash,
-                            }
-                        ))
+                        Json(ApiResponse::Success(SuccessResponse::VerifySync(
+                            VerifySyncResponse {
+                                status: Status::Success,
+                                is_verified: verified_program.is_verified,
+                                on_chain_hash: verified_program.on_chain_hash,
+                                executable_hash: verified_program.executable_hash,
+                                message: if verified_program.is_verified {
+                                    "On chain program verified".to_string()
+                                } else {
+                                    "On chain program not verified".to_string()
+                                },
+                            },
+                        )))
                     }
                     Err(e) => {
                         tracing::error!("Error verifying build: {:?}", e);
-                        Json(json!(
-                            {
-                                "success": false,
-                                "error": format!("unexpected error occurred {:?}", e)
-                            }
-                        ))
+                        Json(ApiResponse::Error(ErrorResponse {
+                            status: Status::Error,
+                            error: format!("unexpected error occurred {:?}", e),
+                        }))
                     }
                 }
             } else {
                 let err_info = format!("unexpected error occurred {:?}", task.err());
                 tracing::error!(err_info);
-                Json(json!(
-                    {
-                        "success": false,
-                        "error": err_info,
-                    }
-                ))
+                Json(ApiResponse::Error(ErrorResponse {
+                    status: Status::Error,
+                    error: err_info,
+                }))
             }
         }
         Err(e) => {
             tracing::error!("Error inserting into database: {:?}", e);
-            Json(json!(
-                {
-                    "success": false,
-                    "error": format!("unexpected error occurred")
-                }
-            ))
+            Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "unexpected error occurred".to_string(),
+            }))
         }
     }
 }
 async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
-) -> Json<Value> {
+) -> Json<ApiResponse> {
     let result = check_is_program_verified(address, app.db_pool.clone()).await;
 
     if let Ok(result) = result {
-        return Json(json!(
-            {
-                "success": result,
-                "message": if result {
-                    "On chain program verified"
+        return Json(ApiResponse::Success(SuccessResponse::VerificationStatus(
+            VerificationStatusResponse {
+                is_verified: result,
+                message: if result {
+                    "On chain program verified".to_string()
                 } else {
-                    "On chain program not verified"
-                }
-            }
-        ));
+                    "On chain program not verified".to_string()
+                },
+            },
+        )));
     }
-    tracing::error!("Error inserting into database: {:?}", result.err());
-    Json(json!(
-        {
-            "status": false,
-            "error": "Unexpected error occurred",
-        }
-    ))
+    tracing::error!("Error getting data from database: {:?}", result.err());
+    Json(ApiResponse::Error(ErrorResponse {
+        status: Status::Error,
+        error: "unexpected error occurred".to_string(),
+    }))
 }
