@@ -34,5 +34,5 @@ services:
       - api
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ngnix/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
-      - ./ngnix/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+      - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
+      - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
