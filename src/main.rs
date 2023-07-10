@@ -2,7 +2,7 @@ use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use routes::create_router;
 use state::AppState;
-use std::env;
+use std::{env, sync::Arc};
 
 extern crate diesel;
 extern crate tracing;
@@ -25,7 +25,9 @@ async fn main() {
         ))
         .expect("Failed to create database connection pool");
 
-    let app_state = AppState { db_pool: pool };
+    let app_state = AppState {
+        db_pool: Arc::new(pool),
+    };
 
     let app = create_router(app_state);
 

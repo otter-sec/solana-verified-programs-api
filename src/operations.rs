@@ -9,11 +9,12 @@ use diesel::{
     PgConnection,
 };
 use std::process::Command;
+use std::sync::Arc;
 
 use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram};
 
 pub async fn verify_build(
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
     payload: SolanaProgramBuildParams,
 ) {
     tracing::info!("Verifying build..");
@@ -82,7 +83,7 @@ fn get_last_line(output: &str) -> Option<String> {
 
 // DB operations
 pub async fn get_db_connection(
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<PooledConnection<ConnectionManager<PgConnection>>, diesel::result::Error> {
     let conn = pool.get();
 
@@ -101,7 +102,7 @@ pub async fn get_db_connection(
 
 pub async fn insert_build(
     payload: &SolanaProgramBuild,
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<(), diesel::result::Error> {
     let conn = &mut get_db_connection(pool).await?;
 
@@ -117,7 +118,7 @@ pub async fn insert_build(
 
 pub async fn insert_verified_build(
     payload: &VerfiedProgram,
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<(), diesel::result::Error> {
     let conn = &mut get_db_connection(pool).await?;
 
@@ -144,7 +145,7 @@ pub async fn get_build(
 
 pub async fn check_is_program_verified(
     program_address: String,
-    pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<bool, diesel::result::Error> {
     let conn = &mut get_db_connection(pool.clone()).await?;
 
