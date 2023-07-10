@@ -7,7 +7,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ~/data:/var/lib/postgresql/data
+      - /pgdata:/var/lib/postgresql/data
       - ./migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/init.sql
 
   api:

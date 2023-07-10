@@ -56,10 +56,16 @@ pub async fn verify_build(
             if let Some(last_line) = get_last_line(&result) {
                 if last_line.contains("Program hash matches") {
                     tracing::info!("Program hashes match");
+                    let onchain_hash =
+                        extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
+                    let build_hash = extract_hash(&result, "Executable Program Hash from repo:")
+                        .unwrap_or_default();
                     let verified_build = VerfiedProgram {
                         id: uuid::Uuid::new_v4().to_string(),
                         program_id: payload.program_id.clone(),
                         is_verified: true,
+                        on_chain_hash: onchain_hash,
+                        executable_hash: build_hash,
                         verified_at: chrono::Utc::now().naive_utc(),
                     };
                     let _ = insert_verified_build(&verified_build, pool).await;
@@ -79,6 +85,15 @@ pub async fn verify_build(
 
 fn get_last_line(output: &str) -> Option<String> {
     output.lines().last().map(|line| line.to_owned())
+}
+
+fn extract_hash(output: &str, prefix: &str) -> Option<String> {
+    if let Some(line) = output.lines().find(|line| line.starts_with(prefix)) {
+        let hash = line.trim_start_matches(prefix.trim()).trim();
+        Some(hash.to_owned())
+    } else {
+        None
+    }
 }
 
 // DB operations

@@ -75,7 +75,7 @@ async fn handle_verify(
             Json(json!(
                 {
                     "success": false,
-                    "error": "Unexpected database error occurred",
+                    "error": format!("unexpected database error occurred {:?}", e)
                 }
             ))
         }
