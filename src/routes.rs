@@ -149,7 +149,7 @@ async fn handle_verify_sync(
             Json(json!(
                 {
                     "success": false,
-                    "error": format!("unexpected database error occurred {:?}", e)
+                    "error": format!("unexpected error occurred")
                 }
             ))
         }
@@ -176,7 +176,7 @@ async fn handle_verify_status(
     Json(json!(
         {
             "status": false,
-            "error": "Unexpected database error occurred",
+            "error": "Unexpected error occurred",
         }
     ))
 }
