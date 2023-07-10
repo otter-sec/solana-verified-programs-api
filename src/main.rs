@@ -16,7 +16,7 @@ mod state;
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-
+    tracing_subscriber::fmt::init();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set in .env file");
 
     let pool = diesel::r2d2::Pool::builder()
