@@ -108,28 +108,40 @@ async fn handle_verify_sync(
             let handle =
                 tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
 
-            let result = handle.await.expect("Task panicked").await;
-            match result {
-                Ok(verified_program) => {
-                    tracing::info!("Build verification completed");
-                    Json(json!(
-                        {
-                            "success": true,
-                            "message": "Build verification completed",
-                            "on_chain_hash": verified_program.on_chain_hash,
-                            "executable_hash": verified_program.executable_hash,
-                        }
-                    ))
+            let task = handle.await;
+
+            if let Ok(res) = task {
+                match res.await {
+                    Ok(verified_program) => {
+                        tracing::info!("Build verification completed");
+                        Json(json!(
+                            {
+                                "success": true,
+                                "message": "Build verification completed",
+                                "on_chain_hash": verified_program.on_chain_hash,
+                                "executable_hash": verified_program.executable_hash,
+                            }
+                        ))
+                    }
+                    Err(e) => {
+                        tracing::error!("Error verifying build: {:?}", e);
+                        Json(json!(
+                            {
+                                "success": false,
+                                "error": format!("unexpected error occurred {:?}", e)
+                            }
+                        ))
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Error verifying build: {:?}", e);
-                    Json(json!(
-                        {
-                            "success": false,
-                            "error": format!("unexpected error occurred {:?}", e)
-                        }
-                    ))
-                }
+            } else {
+                let err_info = format!("unexpected error occurred {:?}", task.err());
+                tracing::error!(err_info);
+                Json(json!(
+                    {
+                        "success": false,
+                        "error": err_info,
+                    }
+                ))
             }
         }
         Err(e) => {
