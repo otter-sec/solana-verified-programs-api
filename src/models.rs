@@ -79,13 +79,10 @@ pub struct VerifyAsyncResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(untagged)]
 pub enum SuccessResponse {
-    #[serde(rename = "VerifySync")]
     VerifySync(VerifySyncResponse),
-    #[serde(rename = "VerificationStatus")]
     VerificationStatus(VerificationStatusResponse),
-    #[serde(rename = "VerifyAsync")]
     VerifyAsync(VerifyAsyncResponse),
 }
 

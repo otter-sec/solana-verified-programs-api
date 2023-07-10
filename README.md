@@ -37,7 +37,6 @@ curl --location 'localhost:3000/verify' \
 
   ```json
   {
-    "type": "VerifyAsync",
     "status": "success",
     "message": "Build verification started"
   }
@@ -80,23 +79,25 @@ curl --location 'localhost:3000/verify_sync' \
   - When the job is finished the response will be:
 
   ```json
-    {
-      "executable_hash": "7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d",
-      "message": "Build verification completed",
-      "on_chain_hash": "7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d",
-      "success": true
-    }
+  {
+    "status": "success",
+    "is_verified": true,
+    "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
+    "executable_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
+    "message": "On chain program verified"
+  }
   ```
 
   - Incase if the hashes doesn't match
 
   ```json
-    {
-      "executable_hash": "7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d",
-      "message": "Build verification completed",
-      "on_chain_hash": "G13ab11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5a1ec3e1",
-      "success": false
-    }
+  {
+    "status": "success",
+    "is_verified": false,
+    "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
+    "executable_hash": "fed5d956fc389b5b09a354340d479b07cfc66dd9f8d0af76a0e8e950c1c58680",
+    "message": "On chain program not verified"
+  }
   ```
 
   - If there are asny errors the response will be:
@@ -120,7 +121,6 @@ curl --location 'localhost:3000/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqd
 
   ```json
   {
-    "type": "VerificationStatus",
     "is_verified": true,
     "message": "On chain program verified"
   }
@@ -130,7 +130,6 @@ curl --location 'localhost:3000/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqd
 
   ```json
   {
-    "type": "VerificationStatus",
     "is_verified": false,
     "message": "On chain program is not verified"
   }
