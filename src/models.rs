@@ -41,3 +41,54 @@ pub struct SolanaProgramBuildParams {
 pub(crate) struct VerificationStatusParams {
     pub address: String,
 }
+
+// Types for API responses
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Status {
+    Success,
+    Error,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifySyncResponse {
+    pub status: Status,
+    pub is_verified: bool,
+    pub on_chain_hash: String,
+    pub executable_hash: String,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    pub status: Status,
+    pub error: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerificationStatusResponse {
+    pub is_verified: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyAsyncResponse {
+    pub status: Status,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SuccessResponse {
+    VerifySync(VerifySyncResponse),
+    VerificationStatus(VerificationStatusResponse),
+    VerifyAsync(VerifyAsyncResponse),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ApiResponse {
+    Success(SuccessResponse),
+    Error(ErrorResponse),
+}

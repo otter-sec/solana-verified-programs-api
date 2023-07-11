@@ -7,6 +7,7 @@ use std::{env, sync::Arc};
 extern crate diesel;
 extern crate tracing;
 
+mod errors;
 mod models;
 mod operations;
 mod routes;
