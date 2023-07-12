@@ -1,4 +1,4 @@
-# Solana Verified Programs APP
+# Solana Verified Programs API
 
 ## Usage
 
