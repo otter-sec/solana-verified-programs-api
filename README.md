@@ -100,7 +100,7 @@ curl --location 'localhost:3000/verify_sync' \
   }
   ```
 
-  - If there are asny errors the response will be:
+  - If there are any errors the response will be:
 
   ```json
   {
