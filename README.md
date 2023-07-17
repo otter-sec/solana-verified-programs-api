@@ -11,7 +11,7 @@ docker compose up --build
 ### Start a new verification of a program
 
 ```bash
-curl --location 'localhost:3000/verify' \
+curl --location 'https://verify.osec.io/verify' \
 --header 'Content-Type: application/json' \
 --data '{
   "repository": "https://github.com/Ellipsis-Labs/phoenix-v1",
@@ -20,7 +20,7 @@ curl --location 'localhost:3000/verify' \
 ```
 
 ```bash
-curl --location 'localhost:3000/verify' \
+curl --location 'https://verify.osec.io/verify' \
 --header 'Content-Type: application/json' \
 --data '{
   "repository": "https://github.com/Squads-Protocol/squads-mpl",
@@ -54,7 +54,7 @@ curl --location 'localhost:3000/verify' \
 ### Synchronously verify a program
 
 ```bash
-curl --location 'localhost:3000/verify_sync' \
+curl --location 'https://verify.osec.io/verify_sync' \
 --header 'Content-Type: application/json' \
 --data '{
   "repository": "https://github.com/Ellipsis-Labs/phoenix-v1",
@@ -63,7 +63,7 @@ curl --location 'localhost:3000/verify_sync' \
 ```
 
 ```bash
-curl --location 'localhost:3000/verify_sync' \
+curl --location 'https://verify.osec.io/verify_sync' \
 --header 'Content-Type: application/json' \
 --data '{
   "repository": "https://github.com/Squads-Protocol/squads-mpl",
@@ -112,7 +112,7 @@ curl --location 'localhost:3000/verify_sync' \
 ### Get the status of a verification
 
 ```bash
-curl --location 'localhost:3000/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY'
+curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY'
 ```
 
 - Returns the status of the verification
