@@ -4,7 +4,8 @@ use crate::models::{
     VerifySyncResponse,
 };
 use crate::operations::{
-    check_is_build_params_exists, check_is_program_verified, insert_build, verify_build,
+    check_is_build_params_exists_already, check_is_program_verified_within_24hrs, insert_build,
+    verify_build,
 };
 use crate::state::AppState;
 use axum::extract::Path;
@@ -60,7 +61,7 @@ async fn handle_verify(
     };
 
     // First check if the program is already verified
-    let is_verified = check_is_build_params_exists(&payload, app.db_pool.clone()).await;
+    let is_verified = check_is_build_params_exists_already(&payload, app.db_pool.clone()).await;
 
     if let Ok(is_verified) = is_verified {
         if is_verified {
@@ -99,6 +100,7 @@ async fn handle_verify(
     }
 }
 
+// Route handler for POST /sync_verify which creates a new process to verify the program synchronously
 async fn handle_verify_sync(
     State(app): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
@@ -114,7 +116,7 @@ async fn handle_verify_sync(
     };
 
     // First check if the program is already verified
-    let is_verified = check_is_build_params_exists(&payload, app.db_pool.clone()).await;
+    let is_verified = check_is_build_params_exists_already(&payload, app.db_pool.clone()).await;
 
     if let Ok(is_verified) = is_verified {
         if is_verified {
@@ -182,11 +184,12 @@ async fn handle_verify_sync(
     }
 }
 
+//  Route handler for GET /status/:address which checks if the program is verified or not
 async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    let result = check_is_program_verified(address, app.db_pool.clone()).await;
+    let result = check_is_program_verified_within_24hrs(address, app.db_pool.clone()).await;
 
     if let Ok(result) = result {
         return Json(ApiResponse::Success(SuccessResponse::VerificationStatus(

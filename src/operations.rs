@@ -14,6 +14,20 @@ use std::sync::Arc;
 
 use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram};
 
+/// The `verify_build` function verifies a Solana program build by executing the `solana-verify` command
+/// and parsing the output to determine if the program hash matches and storing the verified build
+/// information in a database.
+///
+/// Arguments:
+///
+/// * `pool`: `pool` is an Arc of a connection pool to a PostgreSQL database. It is used to interact
+/// with the database and perform database operations.
+/// * `payload`: The `payload` parameter is of type `SolanaProgramBuildParams`
+///
+/// Returns:
+///
+/// The function `verify_build` returns a `Result` with the success case containing a `VerifiedProgram`
+/// struct and the error case containing an `ApiError`.
 pub async fn verify_build(
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
     payload: SolanaProgramBuildParams,
@@ -151,6 +165,21 @@ pub async fn insert_verified_build(
     Ok(())
 }
 
+/// The function `get_build` retrieves a Solana program build from a database based on its program
+/// address.
+///
+/// Arguments:
+///
+/// * `program_address`: The `program_address` parameter is a reference to a `String` that represents
+/// the address of a Solana program.
+/// * `conn`: The `conn` parameter is a mutable reference to a `PooledConnection` object, which
+/// represents a connection to a PostgreSQL database. It is used to execute SQL queries and interact
+/// with the database.
+///
+/// Returns:
+///
+/// a Result type with the possible outcomes being either an Ok variant containing a SolanaProgramBuild
+/// struct or an Err variant containing a diesel::result::Error.
 pub async fn get_build(
     program_address: &String,
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
@@ -162,7 +191,18 @@ pub async fn get_build(
     Ok(res)
 }
 
-pub async fn check_is_build_params_exists(
+/// The function `check_is_build_params_exists_already` checks if the given build parameters exist in the
+/// database.
+///
+/// Arguments:
+///
+/// * `payload`: The `payload` parameter is of type `SolanaProgramBuildParams`, which is a reference to
+/// a struct containing build parameters for a Solana program.
+/// * `pool`: The `pool` parameter is an `Arc` (atomic reference count) of a connection pool.
+///
+/// Returns: Whether the build parameters exist in the database or not. The return type is
+/// a `Result<bool, diesel::result::Error>`.
+pub async fn check_is_build_params_exists_already(
     payload: &SolanaProgramBuildParams,
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<bool, diesel::result::Error> {
@@ -180,7 +220,18 @@ pub async fn check_is_build_params_exists(
 
     Ok(false)
 }
-pub async fn check_is_program_verified(
+/// The function `check_is_program_verified_within_24hrs` checks if a program is verified within the last 24 hours
+/// and rebuilds and verifies it if it is not.
+///
+/// Arguments:
+///
+/// * `program_address`: The `program_address` parameter is a string that represents the address of a
+/// program. It is used to query the database and check if the program is verified.
+/// * `pool`: The `pool` parameter is an `Arc` (atomic reference count) of a connection pool.
+///
+/// Returns: Whether the program is verified or not. The return type is
+/// a `Result<bool, diesel::result::Error>`.
+pub async fn check_is_program_verified_within_24hrs(
     program_address: String,
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<bool, diesel::result::Error> {
