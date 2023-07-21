@@ -3,7 +3,9 @@ use crate::models::{
     SuccessResponse, VerificationStatusParams, VerificationStatusResponse, VerifyAsyncResponse,
     VerifySyncResponse,
 };
-use crate::operations::{check_is_program_verified, insert_build, verify_build};
+use crate::operations::{
+    check_is_build_params_exists, check_is_program_verified, insert_build, verify_build,
+};
 use crate::state::AppState;
 use axum::extract::Path;
 use axum::{
@@ -57,6 +59,18 @@ async fn handle_verify(
         created_at: Utc::now().naive_utc(),
     };
 
+    // First check if the program is already verified
+    let is_verified = check_is_build_params_exists(&payload, app.db_pool.clone()).await;
+
+    if let Ok(is_verified) = is_verified {
+        if is_verified {
+            return Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            }));
+        }
+    }
+
     // insert into database
     let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
 
@@ -99,13 +113,25 @@ async fn handle_verify_sync(
         created_at: Utc::now().naive_utc(),
     };
 
-    // insert into database
+    // First check if the program is already verified
+    let is_verified = check_is_build_params_exists(&payload, app.db_pool.clone()).await;
+
+    if let Ok(is_verified) = is_verified {
+        if is_verified {
+            return Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            }));
+        }
+    }
+
+    // Else insert into database
     let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
 
     match insert {
         Ok(_) => {
             tracing::info!("Inserted into database");
-            //run task in background
+            // Run task in background
             let handle =
                 tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
 
@@ -155,6 +181,7 @@ async fn handle_verify_sync(
         }
     }
 }
+
 async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,

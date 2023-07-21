@@ -152,7 +152,7 @@ pub async fn insert_verified_build(
 }
 
 pub async fn get_build(
-    program_address: String,
+    program_address: &String,
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
 ) -> Result<SolanaProgramBuild, diesel::result::Error> {
     let res = schema::solana_program_builds::table
@@ -162,6 +162,24 @@ pub async fn get_build(
     Ok(res)
 }
 
+pub async fn check_is_build_params_exists(
+    payload: &SolanaProgramBuildParams,
+    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
+) -> Result<bool, diesel::result::Error> {
+    let conn = &mut get_db_connection(pool).await?;
+
+    let build = get_build(&payload.program_id, conn).await?;
+
+    if build.repository == payload.repository
+        && build.commit_hash == payload.commit_hash
+        && build.lib_name == payload.lib_name
+        && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
+    {
+        return Ok(true);
+    }
+
+    Ok(false)
+}
 pub async fn check_is_program_verified(
     program_address: String,
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
@@ -180,7 +198,7 @@ pub async fn check_is_program_verified(
             let diff = now - verified_at;
             if diff.num_hours() > 24 {
                 // if the program is verified more than 24 hours ago, rebuild and verify
-                let payload = get_build(program_address, conn).await?;
+                let payload = get_build(&program_address, conn).await?;
                 tokio::spawn(async move {
                     let _ = verify_build(
                         pool,
