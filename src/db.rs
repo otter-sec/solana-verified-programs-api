@@ -20,6 +20,7 @@ pub struct DbClient {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
 }
 
+// TODO: use diesel async
 impl DbClient {
     pub fn new(db_url: &str) -> Self {
         Self {
