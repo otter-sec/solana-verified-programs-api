@@ -3,10 +3,8 @@ pub fn get_last_line(output: &str) -> Option<String> {
 }
 
 pub fn extract_hash(output: &str, prefix: &str) -> Option<String> {
-    if let Some(line) = output.lines().find(|line| line.starts_with(prefix)) {
+    output.lines().find(|line| line.starts_with(prefix)).map(|line| {
         let hash = line.trim_start_matches(prefix.trim()).trim();
-        Some(hash.to_owned())
-    } else {
-        None
-    }
+        hash.to_owned()
+    })
 }
