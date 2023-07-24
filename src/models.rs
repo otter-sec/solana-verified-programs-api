@@ -19,7 +19,7 @@ pub struct SolanaProgramBuild {
     Debug, Clone, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
 )]
 #[diesel(table_name = verified_programs, primary_key(id))]
-pub struct VerfiedProgram {
+pub struct VerifiedProgram {
     pub id: String,
     pub program_id: String,
     pub is_verified: bool,

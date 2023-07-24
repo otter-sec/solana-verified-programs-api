@@ -1,23 +1,28 @@
-use crate::diesel::{ExpressionMethods, RunQueryDsl};
-use crate::schema;
-use diesel::r2d2::PooledConnection;
-use diesel::result::Error as DieselError;
-use diesel::QueryDsl;
-
 use crate::errors::ApiError;
-use diesel::{
-    r2d2::{ConnectionManager, Pool},
-    PgConnection,
-};
+use crate::state::AppState;
 use std::process::Command;
-use std::sync::Arc;
 
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram};
+use crate::models::{SolanaProgramBuildParams, VerifiedProgram};
+use crate::utils::{extract_hash, get_last_line};
 
+/// The `verify_build` function verifies a Solana program build by executing the `solana-verify` command
+/// and parsing the output to determine if the program hash matches and storing the verified build
+/// information in a database.
+///
+/// Arguments:
+///
+/// * `pool`: `pool` is an Arc of a connection pool to a PostgreSQL database. It is used to interact
+/// with the database and perform database operations.
+/// * `payload`: The `payload` parameter is of type `SolanaProgramBuildParams`
+///
+/// Returns:
+///
+/// The function `verify_build` returns a `Result` with the success case containing a `VerifiedProgram`
+/// struct and the error case containing an `ApiError`.
 pub async fn verify_build(
-    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
+    app_state: AppState,
     payload: SolanaProgramBuildParams,
-) -> Result<VerfiedProgram, ApiError> {
+) -> Result<VerifiedProgram, ApiError> {
     tracing::info!("Verifying build..");
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo")
@@ -61,7 +66,7 @@ pub async fn verify_build(
 
             // last line of output has the result
             if let Some(last_line) = get_last_line(&result) {
-                let verified_build = VerfiedProgram {
+                let verified_build = VerifiedProgram {
                     id: uuid::Uuid::new_v4().to_string(),
                     program_id: payload.program_id.clone(),
                     is_verified: last_line.contains("Program hash matches"),
@@ -69,7 +74,10 @@ pub async fn verify_build(
                     executable_hash: build_hash,
                     verified_at: chrono::Utc::now().naive_utc(),
                 };
-                let _ = insert_verified_build(&verified_build, pool).await;
+                let _ = app_state
+                    .db_client
+                    .insert_or_update_verified_build(&verified_build)
+                    .await;
                 Ok(verified_build)
             } else {
                 tracing::error!("Failed to get the output from program.");
@@ -87,90 +95,24 @@ pub async fn verify_build(
     }
 }
 
-fn get_last_line(output: &str) -> Option<String> {
-    output.lines().last().map(|line| line.to_owned())
-}
-
-fn extract_hash(output: &str, prefix: &str) -> Option<String> {
-    if let Some(line) = output.lines().find(|line| line.starts_with(prefix)) {
-        let hash = line.trim_start_matches(prefix.trim()).trim();
-        Some(hash.to_owned())
-    } else {
-        None
-    }
-}
-
-// DB operations
-pub async fn get_db_connection(
-    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
-) -> Result<PooledConnection<ConnectionManager<PgConnection>>, diesel::result::Error> {
-    let conn = pool.get();
-
-    let conn = match conn {
-        Ok(conn) => conn,
-        Err(err) => {
-            tracing::error!("Failed to get connection: {}", err);
-            return Err(DieselError::DatabaseError(
-                diesel::result::DatabaseErrorKind::ClosedConnection,
-                Box::new(err.to_string()),
-            ));
-        }
-    };
-    Ok(conn)
-}
-
-pub async fn insert_build(
-    payload: &SolanaProgramBuild,
-    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
-) -> Result<(), diesel::result::Error> {
-    let conn = &mut get_db_connection(pool).await?;
-
-    diesel::insert_into(schema::solana_program_builds::table)
-        .values(payload)
-        .on_conflict(schema::solana_program_builds::program_id)
-        .do_update()
-        .set(payload)
-        .execute(conn)?;
-
-    Ok(())
-}
-
-pub async fn insert_verified_build(
-    payload: &VerfiedProgram,
-    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
-) -> Result<(), diesel::result::Error> {
-    let conn = &mut get_db_connection(pool).await?;
-
-    diesel::insert_into(schema::verified_programs::table)
-        .values(payload)
-        .on_conflict(schema::verified_programs::program_id)
-        .do_update()
-        .set(payload)
-        .execute(conn)?;
-
-    Ok(())
-}
-
-pub async fn get_build(
+/// The function `check_is_program_verified_within_24hrs` checks if a program is verified within the last 24 hours
+/// and rebuilds and verifies it if it is not.
+///
+/// Arguments:
+///
+/// * `program_address`: The `program_address` parameter is a string that represents the address of a
+/// program. It is used to query the database and check if the program is verified.
+///
+/// Returns: Whether the program is verified or not. The return type is
+/// a `Result<bool, diesel::result::Error>`.
+pub async fn check_is_program_verified_within_24hrs(
+    app_state: AppState,
     program_address: String,
-    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
-) -> Result<SolanaProgramBuild, diesel::result::Error> {
-    let res = schema::solana_program_builds::table
-        .filter(schema::solana_program_builds::program_id.eq(program_address))
-        .first::<SolanaProgramBuild>(conn)?;
-
-    Ok(res)
-}
-
-pub async fn check_is_program_verified(
-    program_address: String,
-    pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<bool, diesel::result::Error> {
-    let conn = &mut get_db_connection(pool.clone()).await?;
-
-    let res = schema::verified_programs::table
-        .filter(schema::verified_programs::program_id.eq(&program_address))
-        .first::<VerfiedProgram>(conn);
+    let res = app_state
+        .db_client
+        .get_verified_build(&program_address)
+        .await;
 
     match res {
         Ok(res) => {
@@ -180,10 +122,13 @@ pub async fn check_is_program_verified(
             let diff = now - verified_at;
             if diff.num_hours() > 24 {
                 // if the program is verified more than 24 hours ago, rebuild and verify
-                let payload = get_build(program_address, conn).await?;
+                let payload = app_state
+                    .db_client
+                    .get_build_params(&program_address)
+                    .await?;
                 tokio::spawn(async move {
                     let _ = verify_build(
-                        pool,
+                        app_state,
                         SolanaProgramBuildParams {
                             repository: payload.repository,
                             program_id: payload.program_id,
@@ -204,4 +149,24 @@ pub async fn check_is_program_verified(
             Err(err)
         }
     }
+}
+
+pub async fn check_is_build_params_exists_already(
+    app_state: AppState,
+    payload: &SolanaProgramBuildParams,
+) -> Result<bool, diesel::result::Error> {
+    let build = app_state
+        .db_client
+        .get_build_params(&payload.program_id)
+        .await?;
+
+    if build.repository == payload.repository
+        && build.commit_hash == payload.commit_hash
+        && build.lib_name == payload.lib_name
+        && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
+    {
+        return Ok(true);
+    }
+
+    Ok(false)
 }

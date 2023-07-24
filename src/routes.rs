@@ -3,7 +3,9 @@ use crate::models::{
     SuccessResponse, VerificationStatusParams, VerificationStatusResponse, VerifyAsyncResponse,
     VerifySyncResponse,
 };
-use crate::operations::{check_is_program_verified, insert_build, verify_build};
+use crate::operations::{
+    check_is_build_params_exists_already, check_is_program_verified_within_24hrs, verify_build,
+};
 use crate::state::AppState;
 use axum::extract::Path;
 use axum::{
@@ -57,15 +59,30 @@ async fn handle_verify(
         created_at: Utc::now().naive_utc(),
     };
 
+    // First check if the program is already verified
+    let is_exists = check_is_build_params_exists_already(app.clone(), &payload).await;
+
+    if let Ok(is_exists) = is_exists {
+        if is_exists {
+            return Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            }));
+        }
+    }
+
     // insert into database
-    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
+    let insert = app
+        .db_client
+        .insert_or_update_build(&verify_build_data)
+        .await;
 
     match insert {
         Ok(_) => {
             tracing::info!("Inserted into database");
             //run task in background
             tokio::spawn(async move {
-                let _ = verify_build(app.db_pool.clone(), payload).await;
+                let _ = verify_build(app, payload).await;
             });
 
             Json(ApiResponse::Success(SuccessResponse::VerifyAsync(
@@ -85,6 +102,7 @@ async fn handle_verify(
     }
 }
 
+// Route handler for POST /sync_verify which creates a new process to verify the program synchronously
 async fn handle_verify_sync(
     State(app): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
@@ -99,15 +117,29 @@ async fn handle_verify_sync(
         created_at: Utc::now().naive_utc(),
     };
 
-    // insert into database
-    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
+    // First check if the program is already verified
+    let is_exists = check_is_build_params_exists_already(app.clone(), &payload).await;
+
+    if let Ok(is_exists) = is_exists {
+        if is_exists {
+            return Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            }));
+        }
+    }
+
+    // Else insert into database
+    let insert = app
+        .db_client
+        .insert_or_update_build(&verify_build_data)
+        .await;
 
     match insert {
         Ok(_) => {
             tracing::info!("Inserted into database");
-            //run task in background
-            let handle =
-                tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
+            // Run task in background
+            let handle = tokio::task::spawn_blocking(move || verify_build(app, payload));
 
             let task = handle.await;
 
@@ -155,11 +187,13 @@ async fn handle_verify_sync(
         }
     }
 }
+
+//  Route handler for GET /status/:address which checks if the program is verified or not
 async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    let result = check_is_program_verified(address, app.db_pool.clone()).await;
+    let result = check_is_program_verified_within_24hrs(app, address).await;
 
     if let Ok(result) = result {
         return Json(ApiResponse::Success(SuccessResponse::VerificationStatus(
