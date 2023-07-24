@@ -4,8 +4,7 @@ use crate::models::{
     VerifySyncResponse,
 };
 use crate::operations::{
-    check_is_build_params_exists_already, check_is_program_verified_within_24hrs, insert_build,
-    verify_build,
+    check_is_build_params_exists_already, check_is_program_verified_within_24hrs, verify_build,
 };
 use crate::state::AppState;
 use axum::extract::Path;
@@ -61,10 +60,10 @@ async fn handle_verify(
     };
 
     // First check if the program is already verified
-    let is_verified = check_is_build_params_exists_already(&payload, app.db_pool.clone()).await;
+    let is_exists = check_is_build_params_exists_already(app.clone(), &payload).await;
 
-    if let Ok(is_verified) = is_verified {
-        if is_verified {
+    if let Ok(is_exists) = is_exists {
+        if is_exists {
             return Json(ApiResponse::Error(ErrorResponse {
                 status: Status::Error,
                 error: "We have already processed this request".to_string(),
@@ -73,14 +72,17 @@ async fn handle_verify(
     }
 
     // insert into database
-    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
+    let insert = app
+        .db_client
+        .insert_or_update_build(&verify_build_data)
+        .await;
 
     match insert {
         Ok(_) => {
             tracing::info!("Inserted into database");
             //run task in background
             tokio::spawn(async move {
-                let _ = verify_build(app.db_pool.clone(), payload).await;
+                let _ = verify_build(app, payload).await;
             });
 
             Json(ApiResponse::Success(SuccessResponse::VerifyAsync(
@@ -116,10 +118,10 @@ async fn handle_verify_sync(
     };
 
     // First check if the program is already verified
-    let is_verified = check_is_build_params_exists_already(&payload, app.db_pool.clone()).await;
+    let is_exists = check_is_build_params_exists_already(app.clone(), &payload).await;
 
-    if let Ok(is_verified) = is_verified {
-        if is_verified {
+    if let Ok(is_exists) = is_exists {
+        if is_exists {
             return Json(ApiResponse::Error(ErrorResponse {
                 status: Status::Error,
                 error: "We have already processed this request".to_string(),
@@ -128,14 +130,16 @@ async fn handle_verify_sync(
     }
 
     // Else insert into database
-    let insert = insert_build(&verify_build_data, app.db_pool.clone()).await;
+    let insert = app
+        .db_client
+        .insert_or_update_build(&verify_build_data)
+        .await;
 
     match insert {
         Ok(_) => {
             tracing::info!("Inserted into database");
             // Run task in background
-            let handle =
-                tokio::task::spawn_blocking(move || verify_build(app.db_pool.clone(), payload));
+            let handle = tokio::task::spawn_blocking(move || verify_build(app, payload));
 
             let task = handle.await;
 
@@ -189,7 +193,7 @@ async fn handle_verify_status(
     State(app): State<AppState>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    let result = check_is_program_verified_within_24hrs(address, app.db_pool.clone()).await;
+    let result = check_is_program_verified_within_24hrs(app, address).await;
 
     if let Ok(result) = result {
         return Json(ApiResponse::Success(SuccessResponse::VerificationStatus(

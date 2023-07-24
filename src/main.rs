@@ -1,8 +1,7 @@
-use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use routes::create_router;
 use state::AppState;
-use std::{env, sync::Arc};
+use std::env;
 
 extern crate diesel;
 extern crate tracing;
@@ -13,6 +12,7 @@ mod operations;
 mod routes;
 mod schema;
 mod state;
+mod utils;
 
 #[tokio::main]
 async fn main() {
@@ -20,15 +20,9 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set in .env file");
 
-    let pool = diesel::r2d2::Pool::builder()
-        .build(diesel::r2d2::ConnectionManager::<PgConnection>::new(
-            database_url,
-        ))
-        .expect("Failed to create database connection pool");
+    let db_client = state::DbClient::new(&database_url);
 
-    let app_state = AppState {
-        db_pool: Arc::new(pool),
-    };
+    let app_state = AppState { db_client };
 
     let app = create_router(app_state);
 
