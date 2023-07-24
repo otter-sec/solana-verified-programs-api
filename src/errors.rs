@@ -20,4 +20,4 @@ pub enum ApiError {
     DbPool(#[from] diesel::r2d2::PoolError),
 }
 
-pub type Result<T> = std::result::Result<T, ApiError>;
+// pub type Result<T> = std::result::Result<T, ApiError>;

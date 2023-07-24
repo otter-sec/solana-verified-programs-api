@@ -1,13 +1,12 @@
-use diesel::{
-    expression_methods::ExpressionMethods,
-    query_dsl::QueryDsl,
-    r2d2::{ConnectionManager, Pool},
-    PgConnection, RunQueryDsl,
-};
+use anyhow::Result;
+use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection, RunQueryDsl};
+
 use tokio::process::Command;
 
 use crate::{
-    errors::{ApiError, Result},
+    errors::ApiError,
     models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram},
 };
 use crate::{
@@ -17,57 +16,62 @@ use crate::{
 
 #[derive(Clone)]
 pub struct DbClient {
-    pub db_pool: Pool<ConnectionManager<PgConnection>>,
+    pub db_pool: Pool<AsyncPgConnection>,
 }
 
 // TODO: use diesel async
 impl DbClient {
     pub fn new(db_url: &str) -> Self {
-        Self {
-            db_pool: Pool::builder()
-                .build(ConnectionManager::<PgConnection>::new(db_url))
-                .expect("Failed to create pool."),
-        }
+        let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(db_url);
+        let pool = Pool::builder(config)
+            .build()
+            .expect("Failed to create DB Pool");
+        Self { db_pool: pool }
     }
 
     pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<()> {
-        let conn = &mut self.db_pool.get()?;
+        let conn = &mut self.db_pool.get().await?;
+
         diesel::insert_into(schema::solana_program_builds::table)
             .values(payload)
             .on_conflict(schema::solana_program_builds::program_id)
             .do_update()
             .set(payload)
-            .execute(conn)?;
+            .execute(conn)
+            .await?;
 
         Ok(())
     }
 
     pub async fn insert_or_update_verified_build(&self, payload: &VerifiedProgram) -> Result<()> {
-        let conn = &mut self.db_pool.get()?;
+        let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(schema::verified_programs::table)
             .values(payload)
             .on_conflict(schema::verified_programs::program_id)
             .do_update()
             .set(payload)
-            .execute(conn)?;
+            .execute(conn)
+            .await?;
 
         Ok(())
     }
 
     pub async fn get_build_params(&self, program_address: &String) -> Result<SolanaProgramBuild> {
-        let conn = &mut self.db_pool.get()?;
+        let conn = &mut self.db_pool.get().await?;
         let res = schema::solana_program_builds::table
             .filter(schema::solana_program_builds::program_id.eq(program_address))
-            .first::<SolanaProgramBuild>(conn)?;
+            .first::<SolanaProgramBuild>(conn)
+            .await?;
 
         Ok(res)
     }
 
     pub async fn get_verified_build(&self, program_address: &String) -> Result<VerifiedProgram> {
-        let conn = &mut self.db_pool.get()?;
+        let conn = &mut self.db_pool.get().await?;
         let res = schema::verified_programs::table
             .filter(schema::verified_programs::program_id.eq(program_address))
-            .first::<VerifiedProgram>(conn)?;
+            .first::<VerifiedProgram>(conn)
+            .await?;
 
         Ok(res)
     }
@@ -174,7 +178,7 @@ impl DbClient {
         let output = cmd.output().await?;
         let result = String::from_utf8(output.stderr)?;
         if !output.status.success() {
-            return Err(ApiError::Build(result));
+            return Err(anyhow::Error::new(ApiError::Build(result)));
         }
 
         let onchain_hash = extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
