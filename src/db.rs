@@ -7,7 +7,7 @@ use diesel::{
 use tokio::process::Command;
 
 use crate::{
-    errors::ApiError,
+    errors::{ApiError, Result},
     models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram},
 };
 use crate::{
@@ -29,12 +29,8 @@ impl DbClient {
         }
     }
 
-    pub async fn insert_or_update_build(
-        &self,
-        payload: &SolanaProgramBuild,
-    ) -> Result<(), diesel::result::Error> {
-        let conn = &mut self.db_pool.get().unwrap();
-
+    pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<()> {
+        let conn = &mut self.db_pool.get()?;
         diesel::insert_into(schema::solana_program_builds::table)
             .values(payload)
             .on_conflict(schema::solana_program_builds::program_id)
@@ -45,12 +41,8 @@ impl DbClient {
         Ok(())
     }
 
-    pub async fn insert_or_update_verified_build(
-        &self,
-        payload: &VerifiedProgram,
-    ) -> Result<(), diesel::result::Error> {
-        let conn = &mut self.db_pool.get().unwrap();
-
+    pub async fn insert_or_update_verified_build(&self, payload: &VerifiedProgram) -> Result<()> {
+        let conn = &mut self.db_pool.get()?;
         diesel::insert_into(schema::verified_programs::table)
             .values(payload)
             .on_conflict(schema::verified_programs::program_id)
@@ -61,11 +53,8 @@ impl DbClient {
         Ok(())
     }
 
-    pub async fn get_build_params(
-        &self,
-        program_address: &String,
-    ) -> Result<SolanaProgramBuild, diesel::result::Error> {
-        let conn = &mut self.db_pool.get().unwrap();
+    pub async fn get_build_params(&self, program_address: &String) -> Result<SolanaProgramBuild> {
+        let conn = &mut self.db_pool.get()?;
         let res = schema::solana_program_builds::table
             .filter(schema::solana_program_builds::program_id.eq(program_address))
             .first::<SolanaProgramBuild>(conn)?;
@@ -73,11 +62,8 @@ impl DbClient {
         Ok(res)
     }
 
-    pub async fn get_verified_build(
-        &self,
-        program_address: &String,
-    ) -> Result<VerifiedProgram, diesel::result::Error> {
-        let conn = &mut self.db_pool.get().unwrap();
+    pub async fn get_verified_build(&self, program_address: &String) -> Result<VerifiedProgram> {
+        let conn = &mut self.db_pool.get()?;
         let res = schema::verified_programs::table
             .filter(schema::verified_programs::program_id.eq(program_address))
             .first::<VerifiedProgram>(conn)?;
@@ -98,9 +84,8 @@ impl DbClient {
     pub async fn check_is_program_verified_within_24hrs(
         &self,
         program_address: String,
-    ) -> Result<bool, diesel::result::Error> {
+    ) -> Result<bool> {
         let res = self.get_verified_build(&program_address).await;
-
         match res {
             Ok(res) => {
                 // check if the program is verified less than 24 hours ago
@@ -139,7 +124,7 @@ impl DbClient {
     pub async fn check_is_build_params_exists_already(
         &self,
         payload: &SolanaProgramBuildParams,
-    ) -> Result<bool, diesel::result::Error> {
+    ) -> Result<bool> {
         let build = self.get_build_params(&payload.program_id).await?;
         let res = build.repository == payload.repository
             && build.commit_hash == payload.commit_hash
@@ -162,10 +147,7 @@ impl DbClient {
     ///
     /// The function `verify_build` returns a `Result` with the success case containing a `VerifiedProgram`
     /// struct and the error case containing an `ApiError`.
-    pub async fn verify_build(
-        &self,
-        payload: SolanaProgramBuildParams,
-    ) -> Result<VerifiedProgram, ApiError> {
+    pub async fn verify_build(&self, payload: SolanaProgramBuildParams) -> Result<VerifiedProgram> {
         tracing::info!("Verifying build..");
         let mut cmd = Command::new("solana-verify");
         cmd.arg("verify-from-repo")
@@ -188,48 +170,29 @@ impl DbClient {
             }
         }
 
-        let Ok(output) = cmd.output().await else {
-            // TODO: log a level above
-            // tracing::error!("Failed to execute the program.");
-            return Err(ApiError::BuildError)
-        };
-
+        let output = cmd.output().await?;
+        let result = String::from_utf8(output.stderr)?;
         if !output.status.success() {
-            return Err(ApiError::BuildError);
+            return Err(ApiError::Build(result));
         }
-
-        let result = String::from_utf8(output.stdout);
-        let result = match result {
-            Ok(result) => result,
-            Err(err) => {
-                tracing::error!("Failed to get the output from program: {}", err);
-                return Err(ApiError::ParseError(
-                    "Failed to get the output from program".to_owned(),
-                ));
-            }
-        };
 
         let onchain_hash = extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
         let build_hash =
             extract_hash(&result, "Executable Program Hash from repo:").unwrap_or_default();
 
         // last line of output has the result
-        if let Some(last_line) = get_last_line(&result) {
-            let verified_build = VerifiedProgram {
-                id: uuid::Uuid::new_v4().to_string(),
-                program_id: payload.program_id.clone(),
-                is_verified: last_line.contains("Program hash matches"),
-                on_chain_hash: onchain_hash,
-                executable_hash: build_hash,
-                verified_at: chrono::Utc::now().naive_utc(),
-            };
-            let _ = self.insert_or_update_verified_build(&verified_build).await;
-            Ok(verified_build)
-        } else {
-            tracing::error!("Failed to get the output from program.");
-            Err(ApiError::Custom(
-                "Failed to get the output from program".to_owned(),
-            ))
-        }
+        let last_line = get_last_line(&result).ok_or_else(|| {
+            ApiError::Build("Failed to build and get output from program".to_string())
+        })?;
+        let verified_build = VerifiedProgram {
+            id: uuid::Uuid::new_v4().to_string(),
+            program_id: payload.program_id,
+            is_verified: last_line.contains("Program hash matches"),
+            on_chain_hash: onchain_hash,
+            executable_hash: build_hash,
+            verified_at: chrono::Utc::now().naive_utc(),
+        };
+        let _ = self.insert_or_update_verified_build(&verified_build).await;
+        Ok(verified_build)
     }
 }

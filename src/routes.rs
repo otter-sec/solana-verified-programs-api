@@ -1,8 +1,8 @@
+use crate::db::DbClient;
 use crate::models::{
     ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     SuccessResponse, VerificationStatusParams, VerificationStatusResponse, VerifyAsyncResponse,
 };
-use crate::db::DbClient;
 use axum::extract::Path;
 use axum::{
     extract::State,

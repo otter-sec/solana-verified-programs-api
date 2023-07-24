@@ -23,7 +23,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
-    solana_program_builds,
-    verified_programs,
-);
+diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);

@@ -1,18 +1,23 @@
-#[derive(Debug)]
+use std::string::FromUtf8Error;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
 pub enum ApiError {
-    Custom(String),
-    BuildError,
-    ParseError(String),
+    #[error(transparent)]
+    Io(#[from] tokio::io::Error),
+
+    #[error("Failed building: {0}")]
+    Build(String),
+
+    #[error("Failed parsing utf8 string: {0}")]
+    Utf8(#[from] FromUtf8Error),
+
+    #[error(transparent)]
+    Diesel(#[from] diesel::result::Error),
+
+    #[error(transparent)]
+    DbPool(#[from] diesel::r2d2::PoolError),
 }
 
-impl std::fmt::Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ApiError::Custom(msg) => write!(f, "{}", msg),
-            ApiError::BuildError => write!(f, "Failed to build the program"),
-            ApiError::ParseError(msg) => write!(f, "Failed : {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for ApiError {}
+pub type Result<T> = std::result::Result<T, ApiError>;
