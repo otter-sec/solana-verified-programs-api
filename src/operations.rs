@@ -12,7 +12,7 @@ use diesel::{
 use std::process::Command;
 use std::sync::Arc;
 
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram};
+use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 
 /// The `verify_build` function verifies a Solana program build by executing the `solana-verify` command
 /// and parsing the output to determine if the program hash matches and storing the verified build
@@ -31,7 +31,7 @@ use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerfiedProgram
 pub async fn verify_build(
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
     payload: SolanaProgramBuildParams,
-) -> Result<VerfiedProgram, ApiError> {
+) -> Result<VerifiedProgram, ApiError> {
     tracing::info!("Verifying build..");
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo")
@@ -75,7 +75,7 @@ pub async fn verify_build(
 
             // last line of output has the result
             if let Some(last_line) = get_last_line(&result) {
-                let verified_build = VerfiedProgram {
+                let verified_build = VerifiedProgram {
                     id: uuid::Uuid::new_v4().to_string(),
                     program_id: payload.program_id.clone(),
                     is_verified: last_line.contains("Program hash matches"),
@@ -150,7 +150,7 @@ pub async fn insert_build(
 }
 
 pub async fn insert_verified_build(
-    payload: &VerfiedProgram,
+    payload: &VerifiedProgram,
     pool: Arc<Pool<ConnectionManager<PgConnection>>>,
 ) -> Result<(), diesel::result::Error> {
     let conn = &mut get_db_connection(pool).await?;
@@ -239,7 +239,7 @@ pub async fn check_is_program_verified_within_24hrs(
 
     let res = schema::verified_programs::table
         .filter(schema::verified_programs::program_id.eq(&program_address))
-        .first::<VerfiedProgram>(conn);
+        .first::<VerifiedProgram>(conn);
 
     match res {
         Ok(res) => {
