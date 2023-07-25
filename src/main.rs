@@ -5,12 +5,12 @@ use std::env;
 extern crate diesel;
 extern crate tracing;
 
+mod builder;
 mod db;
 mod errors;
 mod models;
 mod routes;
 mod schema;
-mod utils;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 

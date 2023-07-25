@@ -1,7 +1,8 @@
+use crate::builder::verify_build;
 use crate::db::DbClient;
 use crate::models::{
     ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-    SuccessResponse, VerificationStatusParams, VerificationStatusResponse, VerifyAsyncResponse,
+    StatusResponse, VerificationStatusParams, VerifyResponse,
 };
 use axum::extract::Path;
 use axum::{
@@ -68,31 +69,37 @@ async fn verify(
     }
 
     // insert into database
-    let insert = db.insert_or_update_build(&verify_build_data).await;
-
-    match insert {
-        Ok(_) => {
-            tracing::info!("Inserted into database");
-            //run task in background
-            tokio::spawn(async move {
-                let _ = db.verify_build(payload).await;
-            });
-
-            Json(ApiResponse::Success(SuccessResponse::VerifyAsync(
-                VerifyAsyncResponse {
-                    status: Status::Success,
-                    message: "Build verification started".to_string(),
-                },
-            )))
-        }
-        Err(e) => {
-            tracing::error!("Error inserting into database: {:?}", e);
-            Json(ApiResponse::Error(ErrorResponse {
+    if let Err(e) = db.insert_or_update_build(&verify_build_data).await {
+        tracing::error!("Error inserting into database: {:?}", e);
+        return Json(
+            ErrorResponse {
                 status: Status::Error,
                 error: "unexpected error occurred".to_string(),
-            }))
-        }
+            }
+            .into(),
+        );
     }
+
+    tracing::info!("Inserted into database");
+    //run task in background
+    tokio::spawn(async move {
+        match verify_build(payload).await {
+            Ok(res) => {
+                let _ = db.insert_or_update_verified_build(&res).await;
+            }
+            Err(err) => {
+                tracing::error!("Error verifying build: {:?}", err);
+            }
+        }
+    });
+
+    Json(
+        VerifyResponse {
+            status: Status::Success,
+            message: "Build verification started".to_string(),
+        }
+        .into(),
+    )
 }
 
 // Route handler for POST /sync_verify which creates a new process to verify the program synchronously
@@ -183,23 +190,27 @@ async fn verify_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    let result = db.check_is_program_verified_within_24hrs(address).await;
-
-    if let Ok(result) = result {
-        return Json(ApiResponse::Success(SuccessResponse::VerificationStatus(
-            VerificationStatusResponse {
+    match db.check_is_program_verified_within_24hrs(address).await {
+        Ok(result) => Json(
+            StatusResponse {
                 is_verified: result,
                 message: if result {
                     "On chain program verified".to_string()
                 } else {
                     "On chain program not verified".to_string()
                 },
-            },
-        )));
+            }
+            .into(),
+        ),
+        Err(err) => {
+            tracing::error!("Error getting data from database: {}", err);
+            Json(
+                ErrorResponse {
+                    status: Status::Error,
+                    error: "unexpected error occurred".to_string(),
+                }
+                .into(),
+            )
+        }
     }
-    tracing::error!("Error getting data from database: {:?}", result.err());
-    Json(ApiResponse::Error(ErrorResponse {
-        status: Status::Error,
-        error: "unexpected error occurred".to_string(),
-    }))
 }
