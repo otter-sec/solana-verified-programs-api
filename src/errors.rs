@@ -16,6 +16,5 @@ pub enum ApiError {
     Diesel(#[from] diesel::result::Error),
 
     #[error(transparent)]
-    DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError)
+    DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError),
 }
-

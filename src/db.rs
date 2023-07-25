@@ -1,7 +1,7 @@
-use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
+use crate::Result;
+use diesel::query_dsl::QueryDsl;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection, RunQueryDsl};
-use crate::Result;
 
 use tokio::process::Command;
 
@@ -28,21 +28,22 @@ impl DbClient {
         Self { db_pool: pool }
     }
 
-    pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<()> {
+    pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<usize> {
         let conn = &mut self.db_pool.get().await?;
-
         diesel::insert_into(schema::solana_program_builds::table)
             .values(payload)
             .on_conflict(schema::solana_program_builds::program_id)
             .do_update()
             .set(payload)
             .execute(conn)
-            .await?;
-
-        Ok(())
+            .await
+            .map_err(Into::into)
     }
 
-    pub async fn insert_or_update_verified_build(&self, payload: &VerifiedProgram) -> Result<()> {
+    pub async fn insert_or_update_verified_build(
+        &self,
+        payload: &VerifiedProgram,
+    ) -> Result<usize> {
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(schema::verified_programs::table)
             .values(payload)
@@ -50,29 +51,26 @@ impl DbClient {
             .do_update()
             .set(payload)
             .execute(conn)
-            .await?;
-
-        Ok(())
+            .await
+            .map_err(Into::into)
     }
 
-    pub async fn get_build_params(&self, program_address: &String) -> Result<SolanaProgramBuild> {
+    pub async fn get_build_params(&self, program_address: &str) -> Result<SolanaProgramBuild> {
         let conn = &mut self.db_pool.get().await?;
-        let res = schema::solana_program_builds::table
-            .filter(schema::solana_program_builds::program_id.eq(program_address))
+        schema::solana_program_builds::table
+            .find(program_address)
             .first::<SolanaProgramBuild>(conn)
-            .await?;
-
-        Ok(res)
+            .await
+            .map_err(Into::into)
     }
 
-    pub async fn get_verified_build(&self, program_address: &String) -> Result<VerifiedProgram> {
+    pub async fn get_verified_build(&self, program_address: &str) -> Result<VerifiedProgram> {
         let conn = &mut self.db_pool.get().await?;
-        let res = schema::verified_programs::table
-            .filter(schema::verified_programs::program_id.eq(program_address))
+        schema::verified_programs::table
+            .find(program_address)
             .first::<VerifiedProgram>(conn)
-            .await?;
-
-        Ok(res)
+            .await
+            .map_err(Into::into)
     }
 
     /// The function `check_is_program_verified_within_24hrs` checks if a program is verified within the last 24 hours
