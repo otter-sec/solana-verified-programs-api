@@ -81,8 +81,7 @@ impl DbClient {
     /// * `program_address`: The `program_address` parameter is a string that represents the address of a
     /// program. It is used to query the database and check if the program is verified.
     ///
-    /// Returns: Whether the program is verified or not. The return type is
-    /// a `Result<bool, diesel::result::Error>`.
+    /// Returns: Whether the program is verified or not.
     pub async fn check_is_program_verified_within_24hrs(
         &self,
         program_address: String,
@@ -116,6 +115,7 @@ impl DbClient {
             }
             Err(err) => {
                 if err.to_string() == "Record not found" {
+                    tracing::info!("{}: Program record not found in database", program_address);
                     return Ok(false);
                 }
                 Err(err)
@@ -132,6 +132,12 @@ impl DbClient {
             && build.commit_hash == payload.commit_hash
             && build.lib_name == payload.lib_name
             && build.bpf_flag == payload.bpf_flag.unwrap_or(false);
+        if res {
+            tracing::info!(
+                "Build params already exists for this program {}",
+                payload.program_id
+            );
+        }
         Ok(res)
     }
 }

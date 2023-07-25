@@ -69,6 +69,14 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
     let last_line = get_last_line(&result).ok_or_else(|| {
         ApiError::Build("Failed to build and get output from program".to_string())
     })?;
+
+    tracing::info!(
+        "{} build hash {} On chain hash {}",
+        payload.program_id,
+        build_hash,
+        onchain_hash
+    );
+
     let verified_build = VerifiedProgram {
         id: uuid::Uuid::new_v4().to_string(),
         program_id: payload.program_id,

@@ -149,7 +149,8 @@ async fn verify_sync(
     }
 
     tracing::info!("Inserted into database");
-    //run task in background
+
+    // run task and wait for it to finish
     match verify_build(payload).await {
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
