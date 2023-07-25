@@ -14,13 +14,13 @@ use serde_json::{json, Value};
 
 pub fn create_router(db: DbClient) -> Router {
     Router::new()
-        .route("/", get(index))
-        .route("/verify", post(handle_verify))
-        .route("/status/:address", get(handle_verify_status))
+        .route("/", get(|| async { index() }))
+        .route("/verify", post(verify))
+        .route("/status/:address", get(verify_status))
         .with_state(db)
 }
 
-async fn index() -> Json<Value> {
+fn index() -> Json<Value> {
     Json(json!({
         "endpoints": [
             {
@@ -40,7 +40,7 @@ async fn index() -> Json<Value> {
 }
 
 // Route handler for POST /verify which creates a new process to verify the program
-async fn handle_verify(
+async fn verify(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> Json<ApiResponse> {
@@ -55,15 +55,16 @@ async fn handle_verify(
     };
 
     // First check if the program is already verified
-    let is_exists = db.check_is_build_params_exists_already(&payload).await;
+    let is_exists = db
+        .check_is_build_params_exists_already(&payload)
+        .await
+        .unwrap_or(false);
 
-    if let Ok(is_exists) = is_exists {
-        if is_exists {
-            return Json(ApiResponse::Error(ErrorResponse {
-                status: Status::Error,
-                error: "We have already processed this request".to_string(),
-            }));
-        }
+    if is_exists {
+        return Json(ApiResponse::Error(ErrorResponse {
+            status: Status::Error,
+            error: "We have already processed this request".to_string(),
+        }));
     }
 
     // insert into database
@@ -178,7 +179,7 @@ async fn handle_verify(
 // }
 
 //  Route handler for GET /status/:address which checks if the program is verified or not
-async fn handle_verify_status(
+async fn verify_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
