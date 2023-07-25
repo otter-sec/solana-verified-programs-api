@@ -56,7 +56,7 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
     }
 
     let output = cmd.output().await?;
-    let result = String::from_utf8(output.stderr)?;
+    let result = String::from_utf8(output.stdout)?;
     if !output.status.success() {
         return Err(ApiError::Build(result));
     }
