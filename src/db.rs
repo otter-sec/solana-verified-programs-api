@@ -94,7 +94,7 @@ impl DbClient {
                 let now = chrono::Utc::now().naive_utc();
                 let verified_at = res.verified_at;
                 let diff = now - verified_at;
-                if diff.num_hours() >= 24 {
+                if diff.num_hours() >= 24 && res.is_verified {
                     // if the program is verified more than 24 hours ago, rebuild and verify
                     // TODO: move this task spawn elsewhere
                     let payload = self.get_build_params(&program_address).await?;
