@@ -1,5 +1,4 @@
 use std::string::FromUtf8Error;
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -17,7 +16,6 @@ pub enum ApiError {
     Diesel(#[from] diesel::result::Error),
 
     #[error(transparent)]
-    DbPool(#[from] diesel::r2d2::PoolError),
+    DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError)
 }
 
-// pub type Result<T> = std::result::Result<T, ApiError>;

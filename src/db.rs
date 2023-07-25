@@ -1,7 +1,7 @@
-use anyhow::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection, RunQueryDsl};
+use crate::Result;
 
 use tokio::process::Command;
 
@@ -19,7 +19,6 @@ pub struct DbClient {
     pub db_pool: Pool<AsyncPgConnection>,
 }
 
-// TODO: use diesel async
 impl DbClient {
     pub fn new(db_url: &str) -> Self {
         let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(db_url);
@@ -178,7 +177,7 @@ impl DbClient {
         let output = cmd.output().await?;
         let result = String::from_utf8(output.stderr)?;
         if !output.status.success() {
-            return Err(anyhow::Error::new(ApiError::Build(result)));
+            return Err(ApiError::Build(result));
         }
 
         let onchain_hash = extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();

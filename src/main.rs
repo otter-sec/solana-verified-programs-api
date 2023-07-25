@@ -12,6 +12,8 @@ mod routes;
 mod schema;
 mod utils;
 
+pub type Result<T> = std::result::Result<T, errors::ApiError>;
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
