@@ -4,6 +4,7 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::RunQueryDsl;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
 
+use crate::builder::verify_build;
 use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 
 #[derive(Clone)]
@@ -96,20 +97,17 @@ impl DbClient {
                 if diff.num_hours() >= 24 {
                     // if the program is verified more than 24 hours ago, rebuild and verify
                     // TODO: move this task spawn elsewhere
-                    // let payload = self.get_build_params(&program_address).await?;
-                    // tokio::spawn(async move {
-                    //     let _ = self.verify_build(
-                    //         db,
-                    //         SolanaProgramBuildParams {
-                    //             repository: payload.repository,
-                    //             program_id: payload.program_id,
-                    //             commit_hash: payload.commit_hash,
-                    //             lib_name: payload.lib_name,
-                    //             bpf_flag: Some(payload.bpf_flag),
-                    //         },
-                    //     )
-                    //     .await;
-                    // });
+                    let payload = self.get_build_params(&program_address).await?;
+                    tokio::spawn(async move {
+                        let _ = verify_build(SolanaProgramBuildParams {
+                            repository: payload.repository,
+                            program_id: payload.program_id,
+                            commit_hash: payload.commit_hash,
+                            lib_name: payload.lib_name,
+                            bpf_flag: Some(payload.bpf_flag),
+                        })
+                        .await;
+                    });
                 }
                 Ok(res.is_verified)
             }
