@@ -12,6 +12,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
 pub fn create_router(db: DbClient) -> Router {
     Router::new()
@@ -21,23 +22,29 @@ pub fn create_router(db: DbClient) -> Router {
         .with_state(db)
 }
 
+static INDEX_JSON: OnceLock<Value> = OnceLock::new();
+// static i: Value = json!({ "test": "hello" });
+
 fn index() -> Json<Value> {
-    Json(json!({
-        "endpoints": [
-            {
-                "path": "/verify",
-                "method": "POST",
-                "description": "Verify a program",
-                "params" : {
-                    "repo": "Git repository URL",
-                    "commit": "(Optional) Commit hash of the repository. If not specified, the latest commit will be used.",
-                    "program_id": "Program ID of the program in mainnet",
-                    "lib_name": "(Optional) If the repository contains multiple programs, specify the name of the library name of the program to build and verify.",
-                    "bpf_flag": "(Optional)  If the program requires cargo build-bpf (instead of cargo build-sbf), as for an Anchor program, set this flag."
-                }
-            },
-        ]
-    }))
+    let value = INDEX_JSON.get_or_init(||
+        json!({
+            "endpoints": [
+                {
+                    "path": "/verify",
+                    "method": "POST",
+                    "description": "Verify a program",
+                    "params" : {
+                        "repo": "Git repository URL",
+                        "commit": "(Optional) Commit hash of the repository. If not specified, the latest commit will be used.",
+                        "program_id": "Program ID of the program in mainnet",
+                        "lib_name": "(Optional) If the repository contains multiple programs, specify the name of the library name of the program to build and verify.",
+                        "bpf_flag": "(Optional)  If the program requires cargo build-bpf (instead of cargo build-sbf), as for an Anchor program, set this flag."
+                    }
+                },
+            ]
+        })
+    );
+    Json(value.clone())
 }
 
 // Route handler for POST /verify which creates a new process to verify the program
