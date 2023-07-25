@@ -1,5 +1,5 @@
 use crate::Result;
-use diesel::query_dsl::QueryDsl;
+use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::RunQueryDsl;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
@@ -67,7 +67,7 @@ impl DbClient {
 
         let conn = &mut self.db_pool.get().await?;
         verified_programs
-            .find(program_address)
+            .filter(crate::schema::verified_programs::program_id.eq(program_address))
             .first::<VerifiedProgram>(conn)
             .await
             .map_err(Into::into)
