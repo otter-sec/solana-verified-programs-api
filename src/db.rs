@@ -63,6 +63,19 @@ impl DbClient {
             .map_err(Into::into)
     }
 
+    pub async fn update_verified_build_time(&self, program_address: &str) -> Result<usize> {
+        use crate::schema::verified_programs::dsl::*;
+
+        let time_now = chrono::Utc::now().naive_utc();
+        let conn = &mut self.db_pool.get().await?;
+        diesel::update(verified_programs)
+            .filter(program_id.eq(program_address))
+            .set(verified_at.eq(time_now))
+            .execute(conn)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn get_verified_build(&self, program_address: &str) -> Result<VerifiedProgram> {
         use crate::schema::verified_programs::dsl::*;
 
@@ -84,7 +97,7 @@ impl DbClient {
     ///
     /// Returns: Whether the program is verified or not.
     pub async fn check_is_program_verified_within_24hrs(
-        &self,
+        self,
         program_address: String,
     ) -> Result<bool> {
         let res = self.get_verified_build(&program_address).await;
@@ -96,10 +109,17 @@ impl DbClient {
                 let diff = now - verified_at;
                 if diff.num_hours() >= 24 && res.is_verified {
                     // if the program is verified more than 24 hours ago, rebuild and verify
-                    // TODO: move this task spawn elsewhere
                     let payload_last_build = self.get_build_params(&program_address).await?;
                     tokio::spawn(async move {
-                        let _ = reverify(payload_last_build, res.on_chain_hash).await;
+                        let status = reverify(payload_last_build, res.on_chain_hash).await;
+                        match status {
+                            Ok(true) => {
+                                let _ = self.update_verified_build_time(&program_address).await;
+                                tracing::info!("Re-verification not needed")
+                            }
+                            Ok(false) => tracing::error!("Re-verification needed"),
+                            Err(_) => tracing::error!("Re-Verify failed"),
+                        }
                     });
                 }
                 Ok(res.is_verified)
