@@ -1,7 +1,7 @@
 use tokio::process::Command;
 
 use crate::errors::ApiError;
-use crate::models::{SolanaProgramBuildParams, VerifiedProgram};
+use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 use crate::Result;
 
 fn get_last_line(output: &str) -> Option<String> {
@@ -90,12 +90,13 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
 }
 
 pub async fn reverify(
-    payload: SolanaProgramBuildParams,
+    build_data_from_db: SolanaProgramBuild,
     onchain_hash_from_db: String,
 ) -> Result<bool> {
     // Get on-chain hash and compare with the one in the database
     let mut cmd = Command::new("solana-verify");
-    cmd.arg("get-program-hash").arg(&payload.program_id);
+    cmd.arg("get-program-hash")
+        .arg(&build_data_from_db.program_id);
 
     let output = cmd
         .output()
@@ -124,7 +125,14 @@ pub async fn reverify(
                 onchain_hash_from_db,
                 result
             );
-            let _ = verify_build(payload).await;
+            let _ = verify_build(SolanaProgramBuildParams {
+                program_id: build_data_from_db.program_id,
+                repository: build_data_from_db.repository,
+                commit_hash: build_data_from_db.commit_hash,
+                lib_name: build_data_from_db.lib_name,
+                bpf_flag: Some(build_data_from_db.bpf_flag),
+            })
+            .await;
             Ok(false)
         }
     }

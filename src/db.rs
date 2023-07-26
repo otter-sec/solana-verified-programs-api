@@ -94,22 +94,12 @@ impl DbClient {
                 let now = chrono::Utc::now().naive_utc();
                 let verified_at = res.verified_at;
                 let diff = now - verified_at;
-                if diff.num_hours() < 24 && res.is_verified {
+                if diff.num_hours() >= 24 && res.is_verified {
                     // if the program is verified more than 24 hours ago, rebuild and verify
                     // TODO: move this task spawn elsewhere
-                    let payload = self.get_build_params(&program_address).await?;
+                    let payload_last_build = self.get_build_params(&program_address).await?;
                     tokio::spawn(async move {
-                        let _ = reverify(
-                            SolanaProgramBuildParams {
-                                repository: payload.repository,
-                                program_id: payload.program_id,
-                                commit_hash: payload.commit_hash,
-                                lib_name: payload.lib_name,
-                                bpf_flag: Some(payload.bpf_flag),
-                            },
-                            res.on_chain_hash,
-                        )
-                        .await;
+                        let _ = reverify(payload_last_build, res.on_chain_hash).await;
                     });
                 }
                 Ok(res.is_verified)
