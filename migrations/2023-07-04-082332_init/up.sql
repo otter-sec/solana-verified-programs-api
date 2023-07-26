@@ -7,7 +7,7 @@ CREATE TABLE solana_program_builds (
     lib_name VARCHAR,
     bpf_flag BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (id)
+    PRIMARY KEY (program_id)
 );
 
 

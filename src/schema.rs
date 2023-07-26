@@ -1,7 +1,7 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    solana_program_builds (id) {
+    solana_program_builds (program_id) {
         id -> Varchar,
         repository -> Varchar,
         commit_hash -> Nullable<Varchar>,
@@ -22,6 +22,8 @@ diesel::table! {
         verified_at -> Timestamp,
     }
 }
+
+diesel::joinable!(verified_programs -> solana_program_builds (program_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     solana_program_builds,
