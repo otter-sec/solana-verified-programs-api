@@ -88,3 +88,44 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
     Ok(verified_build)
     // let _ = self.insert_or_update_verified_build(&verified_build).await;
 }
+
+pub async fn reverify(
+    payload: SolanaProgramBuildParams,
+    onchain_hash_from_db: String,
+) -> Result<bool> {
+    // Get on-chain hash and compare with the one in the database
+    let mut cmd = Command::new("solana-verify");
+    cmd.arg("get-program-hash").arg(&payload.program_id);
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|_| ApiError::Custom("Failed to run process get-program-hash".to_string()))?;
+
+    if !output.status.success() {
+        tracing::error!(
+            "Failed to get on-chain hash {}",
+            String::from_utf8(output.stderr)?
+        );
+        Err(ApiError::Custom("Failed to get on-chain hash".to_string()))
+    } else {
+        let result = String::from_utf8(output.stdout).unwrap();
+        let hash = get_last_line(&result).ok_or_else(|| {
+            ApiError::Custom("Failed to build and get output from program".to_string())
+        })?;
+        // If they are the same, update the verified build time and return
+        if hash == onchain_hash_from_db {
+            tracing::info!("On-chain hash matches");
+            Ok(true)
+        } else {
+            // If they are different, reverify the build
+            tracing::info!(
+                "On-chain hash does not match {}:{}",
+                onchain_hash_from_db,
+                result
+            );
+            let _ = verify_build(payload).await;
+            Ok(false)
+        }
+    }
+}

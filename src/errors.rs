@@ -9,6 +9,9 @@ pub enum ApiError {
     #[error("Failed building: {0}")]
     Build(String),
 
+    #[error("Unexpected Error: {0}")]
+    Custom(String),
+
     #[error("Failed parsing utf8 string: {0}")]
     Utf8(#[from] FromUtf8Error),
 
