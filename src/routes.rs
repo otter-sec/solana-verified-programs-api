@@ -4,22 +4,90 @@ use crate::models::{
     ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     StatusResponse, VerificationStatusParams, VerifyResponse,
 };
-use axum::extract::Path;
 use axum::{
-    extract::State,
+    error_handling::HandleErrorLayer,
+    extract::{Path, State},
+    http::{Method, StatusCode},
     routing::{get, post},
-    Json, Router,
+    BoxError, Json, Router,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
+use std::time::Duration;
+use tower::{buffer::BufferLayer, limit::RateLimitLayer, ServiceBuilder};
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
+    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
+};
+use tracing::Level;
 
 pub fn create_router(db: DbClient) -> Router {
+    let error_handler = || {
+        ServiceBuilder::new().layer(HandleErrorLayer::new(|err: BoxError| async move {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Unhandled error: {}", err),
+            )
+        }))
+    };
+
+    let global_rate_limit = |req_per_sec: u64| {
+        ServiceBuilder::new()
+            .layer(error_handler())
+            .layer(BufferLayer::new(1024))
+            .layer(RateLimitLayer::new(req_per_sec, Duration::from_secs(1)))
+    };
+
+    let rate_limit_per_ip = |timeout: u64, limit: u32| {
+        let config = Box::new(
+            GovernorConfigBuilder::default()
+                .per_second(timeout)
+                .burst_size(limit)
+                .use_headers()
+                .key_extractor(SmartIpKeyExtractor)
+                .finish()
+                .unwrap(),
+        );
+
+        ServiceBuilder::new()
+            .layer(error_handler())
+            .layer(GovernorLayer {
+                config: Box::leak(config),
+            })
+    };
+
+    let cors = |method: Method| {
+        ServiceBuilder::new().layer(CorsLayer::new().allow_methods(method).allow_origin(Any))
+    };
+
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(DefaultMakeSpan::new().include_headers(true))
+        .on_request(DefaultOnRequest::new().level(Level::INFO))
+        .on_response(DefaultOnResponse::new().level(Level::INFO));
+
     Router::new()
         .route("/", get(|| async { index() }))
         .route("/verify", post(verify_async))
         .route("/verify_sync", post(verify_sync))
+        .layer(
+            global_rate_limit(100)
+                .layer(rate_limit_per_ip(10, 1))
+                .layer(cors(Method::POST))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
         .route("/status/:address", get(verify_status))
+        .layer(
+            global_rate_limit(10000)
+                .layer(rate_limit_per_ip(1, 100))
+                .layer(cors(Method::GET))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
+        .layer(trace_layer)
         .with_state(db)
 }
 
