@@ -75,8 +75,8 @@ pub fn create_router(db: DbClient) -> Router {
         .route("/verify", post(verify_async))
         .route("/verify_sync", post(verify_sync))
         .layer(
-            global_rate_limit(100)
-                .layer(rate_limit_per_ip(10, 1))
+            global_rate_limit(1)
+                .layer(rate_limit_per_ip(30, 1))
                 .layer(cors(Method::POST))
                 .layer(CompressionLayer::new().zstd(true)),
         )
