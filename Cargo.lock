@@ -1653,6 +1653,7 @@ dependencies = [
  "diesel",
  "diesel-async",
  "dotenv",
+ "libc",
  "serde",
  "serde_json",
  "thiserror",

@@ -3,6 +3,7 @@ use tokio::process::Command;
 use crate::errors::ApiError;
 use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 use crate::Result;
+use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 
 fn get_last_line(output: &str) -> Option<String> {
     output.lines().last().map(ToOwned::to_owned)
@@ -35,6 +36,23 @@ fn extract_hash(output: &str, prefix: &str) -> Option<String> {
 pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
 
+    // Original R limit
+    let mut original_rlimit = rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // 1 GB memory limit
+    let max_ram_usage_bytes: c_ulong = 1024 * 1024 * 1024;
+    unsafe {
+        getrlimit(RLIMIT_AS, &mut original_rlimit);
+        setrlimit(
+            libc::RLIMIT_AS,
+            &libc::rlimit {
+                rlim_cur: max_ram_usage_bytes,
+                rlim_max: max_ram_usage_bytes,
+            },
+        );
+    }
     // Run solana-verify command
     let mut cmd = Command::new("solana-verify");
     cmd.arg("verify-from-repo").arg("-um");
@@ -102,6 +120,12 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
         executable_hash: build_hash,
         verified_at: chrono::Utc::now().naive_utc(),
     };
+
+    // Reset R limit
+    unsafe {
+        setrlimit(RLIMIT_AS, &original_rlimit);
+    }
+
     Ok(verified_build)
     // let _ = self.insert_or_update_verified_build(&verified_build).await;
 }
