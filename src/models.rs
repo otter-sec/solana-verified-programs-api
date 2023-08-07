@@ -11,6 +11,9 @@ pub struct SolanaProgramBuild {
     pub commit_hash: Option<String>,
     pub program_id: String,
     pub lib_name: Option<String>,
+    pub base_docker_image: Option<String>,
+    pub mount_path: Option<String>,
+    pub cargo_args: Option<Vec<String>>,
     pub bpf_flag: bool,
     pub created_at: NaiveDateTime,
 }
@@ -35,6 +38,9 @@ pub struct SolanaProgramBuildParams {
     pub commit_hash: Option<String>,
     pub lib_name: Option<String>,
     pub bpf_flag: Option<bool>,
+    pub base_image: Option<String>,
+    pub mount_path: Option<String>,
+    pub cargo_args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

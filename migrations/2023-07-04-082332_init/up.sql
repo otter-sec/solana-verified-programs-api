@@ -5,6 +5,9 @@ CREATE TABLE solana_program_builds (
     commit_hash VARCHAR,
     program_id VARCHAR NOT NULL UNIQUE,
     lib_name VARCHAR,
+    base_docker_image VARCHAR,
+    mount_path VARCHAR,
+    cargo_args TEXT[],
     bpf_flag BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     PRIMARY KEY (program_id)

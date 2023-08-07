@@ -119,7 +119,7 @@ fn index() -> Json<Value> {
 async fn verify_async(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
-) -> Json<ApiResponse> {
+) -> (StatusCode, Json<ApiResponse>) {
     let verify_build_data = SolanaProgramBuild {
         id: uuid::Uuid::new_v4().to_string(),
         repository: payload.repository.clone(),
@@ -128,6 +128,9 @@ async fn verify_async(
         lib_name: payload.lib_name.clone(),
         bpf_flag: payload.bpf_flag.unwrap_or(false),
         created_at: Utc::now().naive_utc(),
+        base_docker_image: payload.base_image.clone(),
+        mount_path: payload.mount_path.clone(),
+        cargo_args: payload.cargo_args.clone(),
     };
 
     // First check if the program is already verified
@@ -137,21 +140,27 @@ async fn verify_async(
         .unwrap_or(false);
 
     if is_exists {
-        return Json(ApiResponse::Error(ErrorResponse {
-            status: Status::Error,
-            error: "We have already processed this request".to_string(),
-        }));
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            })),
+        );
     }
 
     // insert into database
     if let Err(e) = db.insert_or_update_build(&verify_build_data).await {
         tracing::error!("Error inserting into database: {:?}", e);
-        return Json(
-            ErrorResponse {
-                status: Status::Error,
-                error: "unexpected error occurred".to_string(),
-            }
-            .into(),
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                ErrorResponse {
+                    status: Status::Error,
+                    error: "unexpected error occurred".to_string(),
+                }
+                .into(),
+            ),
         );
     }
 
@@ -168,19 +177,22 @@ async fn verify_async(
         }
     });
 
-    Json(
-        VerifyResponse {
-            status: Status::Success,
-            message: "Build verification started".to_string(),
-        }
-        .into(),
+    (
+        StatusCode::OK,
+        Json(
+            VerifyResponse {
+                status: Status::Success,
+                message: "Build verification started".to_string(),
+            }
+            .into(),
+        ),
     )
 }
 
 async fn verify_sync(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
-) -> Json<ApiResponse> {
+) -> (StatusCode, Json<ApiResponse>) {
     let verify_build_data = SolanaProgramBuild {
         id: uuid::Uuid::new_v4().to_string(),
         repository: payload.repository.clone(),
@@ -189,6 +201,9 @@ async fn verify_sync(
         lib_name: payload.lib_name.clone(),
         bpf_flag: payload.bpf_flag.unwrap_or(false),
         created_at: Utc::now().naive_utc(),
+        base_docker_image: payload.base_image.clone(),
+        mount_path: payload.mount_path.clone(),
+        cargo_args: payload.cargo_args.clone(),
     };
 
     // First check if the program is already verified
@@ -198,21 +213,27 @@ async fn verify_sync(
         .unwrap_or(false);
 
     if is_exists {
-        return Json(ApiResponse::Error(ErrorResponse {
-            status: Status::Error,
-            error: "We have already processed this request".to_string(),
-        }));
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::Error(ErrorResponse {
+                status: Status::Error,
+                error: "We have already processed this request".to_string(),
+            })),
+        );
     }
 
     // insert into database
     if let Err(e) = db.insert_or_update_build(&verify_build_data).await {
         tracing::error!("Error inserting into database: {:?}", e);
-        return Json(
-            ErrorResponse {
-                status: Status::Error,
-                error: "unexpected error occurred".to_string(),
-            }
-            .into(),
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                ErrorResponse {
+                    status: Status::Error,
+                    error: "unexpected error occurred".to_string(),
+                }
+                .into(),
+            ),
         );
     }
 
@@ -222,26 +243,32 @@ async fn verify_sync(
     match verify_build(payload).await {
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
-            Json(
-                StatusResponse {
-                    is_verified: res.is_verified,
-                    message: if res.is_verified {
-                        "On chain program verified".to_string()
-                    } else {
-                        "On chain program not verified".to_string()
-                    },
-                }
-                .into(),
+            (
+                StatusCode::OK,
+                Json(
+                    StatusResponse {
+                        is_verified: res.is_verified,
+                        message: if res.is_verified {
+                            "On chain program verified".to_string()
+                        } else {
+                            "On chain program not verified".to_string()
+                        },
+                    }
+                    .into(),
+                ),
             )
         }
         Err(err) => {
             tracing::error!("Error verifying build: {:?}", err);
-            Json(
-                ErrorResponse {
-                    status: Status::Error,
-                    error: "unexpected error occurred".to_string(),
-                }
-                .into(),
+            (
+                StatusCode::OK,
+                Json(
+                    ErrorResponse {
+                        status: Status::Error,
+                        error: "unexpected error occurred".to_string(),
+                    }
+                    .into(),
+                ),
             )
         }
     }

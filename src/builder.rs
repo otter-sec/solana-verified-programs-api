@@ -34,13 +34,12 @@ fn extract_hash(output: &str, prefix: &str) -> Option<String> {
 /// struct and the error case containing an `ApiError`.
 pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
-    let mut cmd = Command::new("solana-verify");
-    cmd.arg("verify-from-repo")
-        .arg("-um")
-        .arg("--program-id")
-        .arg(&payload.program_id)
-        .arg(payload.repository);
 
+    // Run solana-verify command
+    let mut cmd = Command::new("solana-verify");
+    cmd.arg("verify-from-repo").arg("-um");
+
+    // Add optional arguments
     if let Some(commit) = payload.commit_hash {
         cmd.arg("--commit-hash").arg(commit);
     }
@@ -49,11 +48,29 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
         cmd.arg("--library-name").arg(library_name);
     }
 
+    if let Some(base_image) = payload.base_image {
+        cmd.arg("--base-image").arg(base_image);
+    }
+
+    if let Some(mount_path) = payload.mount_path {
+        cmd.arg("--mount-path").arg(mount_path);
+    }
+
     if let Some(bpf_flag) = payload.bpf_flag {
         if bpf_flag {
             cmd.arg("--bpf");
         }
     }
+
+    cmd.arg("--program-id")
+        .arg(&payload.program_id)
+        .arg(payload.repository);
+
+    if let Some(cargo_args) = payload.cargo_args {
+        cmd.arg("--").args(&cargo_args);
+    }
+
+    tracing::info!("Running command: {:?}", cmd);
 
     let output = cmd.output().await?;
     let result = String::from_utf8(output.stdout)?;
@@ -131,6 +148,9 @@ pub async fn reverify(
                 commit_hash: build_data_from_db.commit_hash,
                 lib_name: build_data_from_db.lib_name,
                 bpf_flag: Some(build_data_from_db.bpf_flag),
+                base_image: build_data_from_db.base_docker_image,
+                mount_path: build_data_from_db.mount_path,
+                cargo_args: build_data_from_db.cargo_args,
             })
             .await;
             Ok(false)
