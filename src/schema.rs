@@ -7,6 +7,9 @@ diesel::table! {
         commit_hash -> Nullable<Varchar>,
         program_id -> Varchar,
         lib_name -> Nullable<Varchar>,
+        base_docker_image -> Nullable<Varchar>,
+        mount_path -> Nullable<Varchar>,
+        cargo_args -> Nullable<Array<Text>>,
         bpf_flag -> Bool,
         created_at -> Timestamp,
     }
@@ -25,7 +28,4 @@ diesel::table! {
 
 diesel::joinable!(verified_programs -> solana_program_builds (program_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    solana_program_builds,
-    verified_programs,
-);
+diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);

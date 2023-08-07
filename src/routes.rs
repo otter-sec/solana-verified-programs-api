@@ -128,6 +128,9 @@ async fn verify_async(
         lib_name: payload.lib_name.clone(),
         bpf_flag: payload.bpf_flag.unwrap_or(false),
         created_at: Utc::now().naive_utc(),
+        base_docker_image: payload.base_image.clone(),
+        mount_path: payload.mount_path.clone(),
+        cargo_args: payload.cargo_args.clone(),
     };
 
     // First check if the program is already verified
@@ -189,6 +192,9 @@ async fn verify_sync(
         lib_name: payload.lib_name.clone(),
         bpf_flag: payload.bpf_flag.unwrap_or(false),
         created_at: Utc::now().naive_utc(),
+        base_docker_image: payload.base_image.clone(),
+        mount_path: payload.mount_path.clone(),
+        cargo_args: payload.cargo_args.clone(),
     };
 
     // First check if the program is already verified
