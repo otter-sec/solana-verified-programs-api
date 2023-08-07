@@ -67,7 +67,7 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
         .arg(payload.repository);
 
     if let Some(cargo_args) = payload.cargo_args {
-        cmd.args(&cargo_args);
+        cmd.arg("--").args(&cargo_args);
     }
 
     tracing::info!("Running command: {:?}", cmd);
