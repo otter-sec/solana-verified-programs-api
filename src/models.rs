@@ -43,6 +43,13 @@ pub struct SolanaProgramBuildParams {
     pub cargo_args: Option<Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerificationResponse {
+    pub is_verified: bool,
+    pub on_chain_hash: String,
+    pub executable_hash: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct VerificationStatusParams {
     pub address: String,
@@ -67,6 +74,8 @@ pub struct ErrorResponse {
 pub struct StatusResponse {
     pub is_verified: bool,
     pub message: String,
+    pub on_chain_hash: String,
+    pub executable_hash: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

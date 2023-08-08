@@ -103,10 +103,13 @@ fn index() -> Json<Value> {
                     "description": "Verify a program",
                     "params" : {
                         "repo": "Git repository URL",
-                        "commit": "(Optional) Commit hash of the repository. If not specified, the latest commit will be used.",
                         "program_id": "Program ID of the program in mainnet",
+                        "commit": "(Optional) Commit hash of the repository. If not specified, the latest commit will be used.",
                         "lib_name": "(Optional) If the repository contains multiple programs, specify the name of the library name of the program to build and verify.",
-                        "bpf_flag": "(Optional)  If the program requires cargo build-bpf (instead of cargo build-sbf), as for an Anchor program, set this flag."
+                        "bpf_flag": "(Optional)  If the program requires cargo build-bpf (instead of cargo build-sbf), as for an Anchor program, set this flag.",
+                        "base_image": "(Optional) Base docker image to use for building the program.",
+                        "mount_path": "(Optional) Mount path for the repository.",
+                        "cargo_args": "(Optional) Cargo args to pass to the build command. It should be Vector of strings."
                     }
                 },
             ]
@@ -253,6 +256,8 @@ async fn verify_sync(
                         } else {
                             "On chain program not verified".to_string()
                         },
+                        on_chain_hash: res.on_chain_hash,
+                        executable_hash: res.executable_hash,
                     }
                     .into(),
                 ),
@@ -282,12 +287,14 @@ async fn verify_status(
     match db.check_is_program_verified_within_24hrs(address).await {
         Ok(result) => Json(
             StatusResponse {
-                is_verified: result,
-                message: if result {
+                is_verified: result.is_verified,
+                message: if result.is_verified {
                     "On chain program verified".to_string()
                 } else {
                     "On chain program not verified".to_string()
                 },
+                on_chain_hash: result.on_chain_hash,
+                executable_hash: result.executable_hash,
             }
             .into(),
         ),

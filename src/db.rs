@@ -5,7 +5,9 @@ use diesel_async::RunQueryDsl;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
 
 use crate::builder::reverify;
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
+use crate::models::{
+    SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+};
 
 #[derive(Clone)]
 pub struct DbClient {
@@ -99,7 +101,7 @@ impl DbClient {
     pub async fn check_is_program_verified_within_24hrs(
         self,
         program_address: String,
-    ) -> Result<bool> {
+    ) -> Result<VerificationResponse> {
         let res = self.get_verified_build(&program_address).await;
         match res {
             Ok(res) => {
@@ -110,8 +112,9 @@ impl DbClient {
                 if diff.num_hours() >= 24 && res.is_verified {
                     // if the program is verified more than 24 hours ago, rebuild and verify
                     let payload_last_build = self.get_build_params(&program_address).await?;
+                    let on_chain_hash = res.on_chain_hash.clone();
                     tokio::spawn(async move {
-                        let status = reverify(payload_last_build, res.on_chain_hash).await;
+                        let status = reverify(payload_last_build, on_chain_hash).await;
                         match status {
                             Ok(true) => {
                                 let _ = self.update_verified_build_time(&program_address).await;
@@ -122,12 +125,22 @@ impl DbClient {
                         }
                     });
                 }
-                Ok(res.is_verified)
+                Ok(VerificationResponse {
+                    is_verified: res.is_verified,
+                    on_chain_hash: res.on_chain_hash,
+                    executable_hash: res.executable_hash,
+                })
             }
             Err(err) => {
                 if err.to_string() == "Record not found" {
                     tracing::info!("{}: Program record not found in database", program_address);
-                    return Ok(false);
+                    return Ok({
+                        VerificationResponse {
+                            is_verified: false,
+                            on_chain_hash: "".to_string(),
+                            executable_hash: "".to_string(),
+                        }
+                    });
                 }
                 Err(err)
             }
