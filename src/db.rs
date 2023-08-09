@@ -150,18 +150,45 @@ impl DbClient {
     pub async fn check_is_build_params_exists_already(
         &self,
         payload: &SolanaProgramBuildParams,
-    ) -> Result<bool> {
+    ) -> Result<(bool, Option<VerificationResponse>)> {
         let build = self.get_build_params(&payload.program_id).await?;
+        tracing::info!("DB {:?}", build);
+        tracing::info!("Payload {:?}", payload);
+
         let res = build.repository == payload.repository
             && build.commit_hash == payload.commit_hash
             && build.lib_name == payload.lib_name
-            && build.bpf_flag == payload.bpf_flag.unwrap_or(false);
+            && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
+            && build.base_docker_image == payload.base_image
+            && build.mount_path == payload.mount_path
+            && build.cargo_args
+                == if payload.cargo_args.is_none() {
+                    Some([].to_vec())
+                } else {
+                    payload.cargo_args.clone()
+                };
         if res {
             tracing::info!(
-                "Build params already exists for this program {}",
+                "Build params already exists for this program :{}",
                 payload.program_id
             );
+            let verification_status = self.get_verified_build(&payload.program_id).await;
+            match verification_status {
+                Ok(verification_status) => {
+                    return Ok((
+                        true,
+                        Some(VerificationResponse {
+                            is_verified: verification_status.is_verified,
+                            on_chain_hash: verification_status.on_chain_hash,
+                            executable_hash: verification_status.executable_hash,
+                        }),
+                    ))
+                }
+                Err(_) => {
+                    return Ok((true, None));
+                }
+            }
         }
-        Ok(res)
+        Ok((res, None))
     }
 }

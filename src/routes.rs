@@ -140,9 +140,27 @@ async fn verify_async(
     let is_exists = db
         .check_is_build_params_exists_already(&payload)
         .await
-        .unwrap_or(false);
+        .unwrap_or((false, None));
 
-    if is_exists {
+    if is_exists.0 {
+        if let Some(res) = is_exists.1 {
+            return (
+                StatusCode::CONFLICT,
+                Json(
+                    StatusResponse {
+                        is_verified: res.is_verified,
+                        message: if res.is_verified {
+                            "On chain program verified".to_string()
+                        } else {
+                            "On chain program not verified".to_string()
+                        },
+                        on_chain_hash: res.on_chain_hash,
+                        executable_hash: res.executable_hash,
+                    }
+                    .into(),
+                ),
+            );
+        }
         return (
             StatusCode::CONFLICT,
             Json(ApiResponse::Error(ErrorResponse {
@@ -213,15 +231,38 @@ async fn verify_sync(
     let is_exists = db
         .check_is_build_params_exists_already(&payload)
         .await
-        .unwrap_or(false);
+        .unwrap_or((false, None));
 
-    if is_exists {
+    if is_exists.0 {
+        if let Some(res) = is_exists.1 {
+            return (
+                StatusCode::CONFLICT,
+                Json(
+                    StatusResponse {
+                        is_verified: res.is_verified,
+                        message: if res.is_verified {
+                            "On chain program verified".to_string()
+                        } else {
+                            "On chain program not verified".to_string()
+                        },
+                        on_chain_hash: res.on_chain_hash,
+                        executable_hash: res.executable_hash,
+                    }
+                    .into(),
+                ),
+            );
+        }
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse::Error(ErrorResponse {
-                status: Status::Error,
-                error: "We have already processed this request".to_string(),
-            })),
+            Json(
+                StatusResponse {
+                    is_verified: false,
+                    message: "We have already processed this request".to_string(),
+                    on_chain_hash: "".to_string(),
+                    executable_hash: "".to_string(),
+                }
+                .into(),
+            ),
         );
     }
 
