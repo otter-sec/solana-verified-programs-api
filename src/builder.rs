@@ -130,12 +130,15 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
     // let _ = self.insert_or_update_verified_build(&verified_build).await;
 }
 
-pub async fn get_on_chain_hash(program_id: String) -> Result<String> {
+pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let mut cmd = Command::new("solana-verify");
-    cmd.arg("get-program-hash").arg(&program_id);
+    cmd.arg("get-program-hash").arg(program_id);
 
-    let output = cmd.output().await?;
-    let result = String::from_utf8(output.stdout)?;
+    let output = cmd
+        .output()
+        .await
+        .map_err(|_| ApiError::Custom("Failed to run process get-program-hash".to_string()))?;
+
     if !output.status.success() {
         tracing::error!(
             "Failed to get on-chain hash {}",
@@ -143,38 +146,23 @@ pub async fn get_on_chain_hash(program_id: String) -> Result<String> {
         );
         return Err(ApiError::Custom("Failed to get on-chain hash".to_string()));
     }
-
-    let onchain_hash = extract_hash(&result, "On-chain Program Hash:").unwrap_or_default();
-    Ok(onchain_hash)
+    let result = String::from_utf8(output.stdout)?;
+    let hash = get_last_line(&result).ok_or_else(|| {
+        ApiError::Custom("Failed to build and get output from program".to_string())
+    })?;
+    Ok(hash)
 }
 
-pub async fn reverify_if_needed(
-    build_data_from_db: SolanaProgramBuild,
-    onchain_hash_from_db: String,
-) -> Result<bool> {
-    // Get on-chain hash and compare with the one in the database
-    let onchain_hash_from_rpc = get_on_chain_hash(build_data_from_db.program_id.clone()).await?;
-    if onchain_hash_from_rpc == onchain_hash_from_db {
-        tracing::info!("On-chain hash matches");
-        Ok(true)
-    } else {
-        // If they are different, rebuild and verify
-        tracing::info!(
-            "On-chain hash does not match {}:{}",
-            onchain_hash_from_db,
-            onchain_hash_from_rpc
-        );
-        let _ = verify_build(SolanaProgramBuildParams {
-            program_id: build_data_from_db.program_id,
-            repository: build_data_from_db.repository,
-            commit_hash: build_data_from_db.commit_hash,
-            lib_name: build_data_from_db.lib_name,
-            bpf_flag: Some(build_data_from_db.bpf_flag),
-            base_image: build_data_from_db.base_docker_image,
-            mount_path: build_data_from_db.mount_path,
-            cargo_args: build_data_from_db.cargo_args,
-        })
-        .await;
-        Ok(false)
-    }
+pub async fn reverify(build_data_from_db: SolanaProgramBuild) {
+    let _ = verify_build(SolanaProgramBuildParams {
+        program_id: build_data_from_db.program_id,
+        repository: build_data_from_db.repository,
+        commit_hash: build_data_from_db.commit_hash,
+        lib_name: build_data_from_db.lib_name,
+        bpf_flag: Some(build_data_from_db.bpf_flag),
+        base_image: build_data_from_db.base_docker_image,
+        mount_path: build_data_from_db.mount_path,
+        cargo_args: build_data_from_db.cargo_args,
+    })
+    .await;
 }

@@ -6,7 +6,7 @@ use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
 use r2d2_redis::redis::Commands;
 use r2d2_redis::{r2d2, RedisConnectionManager};
 
-use crate::builder::reverify_if_needed;
+use crate::builder::{get_on_chain_hash, reverify};
 use crate::models::{
     SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
@@ -179,54 +179,50 @@ impl DbClient {
         let res = self.get_verified_build(&program_address).await;
         match res {
             Ok(res) => {
-                let in_cache = self
+                let check_result_in_cache = self
                     .check_cache(&res.executable_hash, &program_address)
-                    .await?;
+                    .await;
 
-                if in_cache {
-                    return Ok(VerificationResponse {
-                        is_verified: res.is_verified,
-                        on_chain_hash: res.on_chain_hash,
-                        executable_hash: res.executable_hash,
-                    });
-                } else {
-                    let onchainhash = crate::builder::get_on_chain_hash(program_address.clone())
-                        .await
-                        .unwrap_or_default();
-                    let _ = self.set_cache(&program_address, &onchainhash).await;
-                    if onchainhash == res.on_chain_hash {
-                        tracing::info!("On-chain hash matches");
-                        return Ok(VerificationResponse {
-                            is_verified: res.is_verified,
-                            on_chain_hash: res.on_chain_hash,
-                            executable_hash: res.executable_hash,
+                if let Ok(found) = check_result_in_cache {
+                    if found {
+                        tracing::info!("Cache hit for program: {}", program_address);
+                        return Ok({
+                            VerificationResponse {
+                                is_verified: true,
+                                on_chain_hash: res.on_chain_hash,
+                                executable_hash: res.executable_hash,
+                            }
                         });
                     }
                 }
-                // check if the program is verified less than 24 hours ago
-                let now = chrono::Utc::now().naive_utc();
-                let verified_at = res.verified_at;
-                let diff = now - verified_at;
-                if diff.num_hours() >= 24 && res.is_verified {
-                    // if the program is verified more than 24 hours ago, rebuild and verify
-                    let payload_last_build = self.get_build_params(&program_address).await?;
-                    let on_chain_hash = res.on_chain_hash.clone();
-                    tokio::spawn(async move {
-                        let status = reverify_if_needed(payload_last_build, on_chain_hash).await;
-                        match status {
-                            Ok(true) => {
-                                let _ = self.update_verified_build_time(&program_address).await;
-                                tracing::info!("Re-verification not needed")
+
+                let on_chain_hash = get_on_chain_hash(&program_address).await;
+
+                if let Ok(on_chain_hash) = on_chain_hash {
+                    self.set_cache(&program_address, &on_chain_hash).await?;
+                    if on_chain_hash == res.on_chain_hash {
+                        tracing::info!("On chain hash matches. Returning the cached value.");
+                        return Ok({
+                            VerificationResponse {
+                                is_verified: true,
+                                on_chain_hash: res.on_chain_hash,
+                                executable_hash: res.executable_hash,
                             }
-                            Ok(false) => tracing::error!("Re-verification needed"),
-                            Err(_) => tracing::error!("Re-Verify failed"),
-                        }
-                    });
+                        });
+                    }
                 }
-                Ok(VerificationResponse {
-                    is_verified: res.is_verified,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
+
+                let payload_last_build = self.get_build_params(&program_address).await?;
+                tokio::spawn(async move {
+                    reverify(payload_last_build).await;
+                    let _ = self.update_verified_build_time(&program_address).await;
+                });
+                Ok({
+                    VerificationResponse {
+                        is_verified: res.on_chain_hash == res.executable_hash,
+                        on_chain_hash: res.on_chain_hash,
+                        executable_hash: res.executable_hash,
+                    }
                 })
             }
             Err(err) => {
