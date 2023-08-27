@@ -130,14 +130,9 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
     // let _ = self.insert_or_update_verified_build(&verified_build).await;
 }
 
-pub async fn reverify(
-    build_data_from_db: SolanaProgramBuild,
-    onchain_hash_from_db: String,
-) -> Result<bool> {
-    // Get on-chain hash and compare with the one in the database
+pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let mut cmd = Command::new("solana-verify");
-    cmd.arg("get-program-hash")
-        .arg(&build_data_from_db.program_id);
+    cmd.arg("get-program-hash").arg(program_id);
 
     let output = cmd
         .output()
@@ -149,35 +144,25 @@ pub async fn reverify(
             "Failed to get on-chain hash {}",
             String::from_utf8(output.stderr)?
         );
-        Err(ApiError::Custom("Failed to get on-chain hash".to_string()))
-    } else {
-        let result = String::from_utf8(output.stdout).unwrap();
-        let hash = get_last_line(&result).ok_or_else(|| {
-            ApiError::Custom("Failed to build and get output from program".to_string())
-        })?;
-        // If they are the same, update the verified build time and return
-        if hash == onchain_hash_from_db {
-            tracing::info!("On-chain hash matches");
-            Ok(true)
-        } else {
-            // If they are different, reverify the build
-            tracing::info!(
-                "On-chain hash does not match {}:{}",
-                onchain_hash_from_db,
-                result
-            );
-            let _ = verify_build(SolanaProgramBuildParams {
-                program_id: build_data_from_db.program_id,
-                repository: build_data_from_db.repository,
-                commit_hash: build_data_from_db.commit_hash,
-                lib_name: build_data_from_db.lib_name,
-                bpf_flag: Some(build_data_from_db.bpf_flag),
-                base_image: build_data_from_db.base_docker_image,
-                mount_path: build_data_from_db.mount_path,
-                cargo_args: build_data_from_db.cargo_args,
-            })
-            .await;
-            Ok(false)
-        }
+        return Err(ApiError::Custom("Failed to get on-chain hash".to_string()));
     }
+    let result = String::from_utf8(output.stdout)?;
+    let hash = get_last_line(&result).ok_or_else(|| {
+        ApiError::Custom("Failed to build and get output from program".to_string())
+    })?;
+    Ok(hash)
+}
+
+pub async fn reverify(build_data_from_db: SolanaProgramBuild) {
+    let _ = verify_build(SolanaProgramBuildParams {
+        program_id: build_data_from_db.program_id,
+        repository: build_data_from_db.repository,
+        commit_hash: build_data_from_db.commit_hash,
+        lib_name: build_data_from_db.lib_name,
+        bpf_flag: Some(build_data_from_db.bpf_flag),
+        base_image: build_data_from_db.base_docker_image,
+        mount_path: build_data_from_db.mount_path,
+        cargo_args: build_data_from_db.cargo_args,
+    })
+    .await;
 }

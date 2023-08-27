@@ -3,8 +3,10 @@ use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::RunQueryDsl;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
+use r2d2_redis::redis::Commands;
+use r2d2_redis::{r2d2, RedisConnectionManager};
 
-use crate::builder::reverify;
+use crate::builder::{get_on_chain_hash, reverify};
 use crate::models::{
     SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
@@ -12,15 +14,26 @@ use crate::models::{
 #[derive(Clone)]
 pub struct DbClient {
     pub db_pool: Pool<AsyncPgConnection>,
+    pub redis_pool: r2d2::Pool<RedisConnectionManager>,
 }
 
 impl DbClient {
-    pub fn new(db_url: &str) -> Self {
+    pub fn new(db_url: &str, redis_url: &str) -> Self {
         let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(db_url);
-        let pool = Pool::builder(config)
+        let postgres_pool = Pool::builder(config)
             .build()
             .expect("Failed to create DB Pool");
-        Self { db_pool: pool }
+        let manager = RedisConnectionManager::new(redis_url).expect(
+            "Failed to create Redis connection manager. Check that REDIS_URL is set in .env file",
+        );
+        let redis_pool = r2d2::Pool::builder().build(manager).expect(
+            "Failed to create Redis connection pool. Check that REDIS_URL is set in .env file",
+        );
+
+        Self {
+            db_pool: postgres_pool,
+            redis_pool,
+        }
     }
 
     pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<usize> {
@@ -89,6 +102,67 @@ impl DbClient {
             .map_err(Into::into)
     }
 
+    // Redis cache SET and Value expiring in 60 seconds
+    pub async fn set_cache(&self, program_address: &str, value: &str) -> Result<()> {
+        let cache_res = self.redis_pool.get();
+        let mut redis_conn = match cache_res {
+            Ok(conn) => conn,
+            Err(err) => {
+                tracing::error!("Redis connection error: {}", err);
+                return Err(err.into());
+            }
+        };
+        let _: () = redis_conn.set_ex(program_address, value, 60).unwrap();
+        tracing::info!("Cache set for program: {}", program_address);
+        Ok(())
+    }
+
+    // Redis cache GET program_hash and return the value
+    pub async fn get_cache(&self, program_address: &str) -> Result<String> {
+        let cache_res = self.redis_pool.get();
+        let mut redis_conn = match cache_res {
+            Ok(conn) => conn,
+            Err(err) => {
+                tracing::error!("Redis connection error: {}", err);
+                return Err(err.into());
+            }
+        };
+        let res = redis_conn.get(program_address);
+        match res {
+            Ok(res) => Ok(res),
+            Err(err) => {
+                tracing::error!("Redis connection error: {}", err);
+                Err(err.into())
+            }
+        }
+    }
+
+    pub async fn check_cache(&self, build_hash: &str, program_address: &str) -> Result<bool> {
+        // Try to get the program from the cache and check if the hash matches
+        let cache_res = self.get_cache(program_address).await;
+        match cache_res {
+            Ok(res) => {
+                if res == build_hash {
+                    tracing::info!(
+                        "Cache hit for program: {} And hash matches",
+                        program_address
+                    );
+                    Ok(true)
+                } else {
+                    tracing::info!(
+                        "Cache hit for program: {} And hash doesn't matches",
+                        program_address
+                    );
+                    Ok(false)
+                }
+            }
+            Err(err) => {
+                tracing::error!("Redis connection error: {}", err);
+                Ok(false)
+            }
+        }
+    }
+
     /// The function `check_is_program_verified_within_24hrs` checks if a program is verified within the last 24 hours
     /// and rebuilds and verifies it if it is not.
     ///
@@ -105,30 +179,50 @@ impl DbClient {
         let res = self.get_verified_build(&program_address).await;
         match res {
             Ok(res) => {
-                // check if the program is verified less than 24 hours ago
-                let now = chrono::Utc::now().naive_utc();
-                let verified_at = res.verified_at;
-                let diff = now - verified_at;
-                if diff.num_hours() >= 24 && res.is_verified {
-                    // if the program is verified more than 24 hours ago, rebuild and verify
-                    let payload_last_build = self.get_build_params(&program_address).await?;
-                    let on_chain_hash = res.on_chain_hash.clone();
-                    tokio::spawn(async move {
-                        let status = reverify(payload_last_build, on_chain_hash).await;
-                        match status {
-                            Ok(true) => {
-                                let _ = self.update_verified_build_time(&program_address).await;
-                                tracing::info!("Re-verification not needed")
+                let check_result_in_cache = self
+                    .check_cache(&res.executable_hash, &program_address)
+                    .await;
+
+                if let Ok(found) = check_result_in_cache {
+                    if found {
+                        tracing::info!("Cache hit for program: {}", program_address);
+                        return Ok({
+                            VerificationResponse {
+                                is_verified: true,
+                                on_chain_hash: res.on_chain_hash,
+                                executable_hash: res.executable_hash,
                             }
-                            Ok(false) => tracing::error!("Re-verification needed"),
-                            Err(_) => tracing::error!("Re-Verify failed"),
-                        }
-                    });
+                        });
+                    }
                 }
-                Ok(VerificationResponse {
-                    is_verified: res.is_verified,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
+
+                let on_chain_hash = get_on_chain_hash(&program_address).await;
+
+                if let Ok(on_chain_hash) = on_chain_hash {
+                    self.set_cache(&program_address, &on_chain_hash).await?;
+                    if on_chain_hash == res.on_chain_hash {
+                        tracing::info!("On chain hash matches. Returning the cached value.");
+                        return Ok({
+                            VerificationResponse {
+                                is_verified: true,
+                                on_chain_hash: res.on_chain_hash,
+                                executable_hash: res.executable_hash,
+                            }
+                        });
+                    }
+                }
+
+                let payload_last_build = self.get_build_params(&program_address).await?;
+                tokio::spawn(async move {
+                    reverify(payload_last_build).await;
+                    let _ = self.update_verified_build_time(&program_address).await;
+                });
+                Ok({
+                    VerificationResponse {
+                        is_verified: res.on_chain_hash == res.executable_hash,
+                        on_chain_hash: res.on_chain_hash,
+                        executable_hash: res.executable_hash,
+                    }
                 })
             }
             Err(err) => {

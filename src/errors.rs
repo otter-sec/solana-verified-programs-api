@@ -19,5 +19,11 @@ pub enum ApiError {
     Diesel(#[from] diesel::result::Error),
 
     #[error(transparent)]
+    Redis(#[from] r2d2_redis::r2d2::Error),
+
+    #[error(transparent)]
+    RedisPool(#[from] r2d2_redis::redis::RedisError),
+
+    #[error(transparent)]
     DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError),
 }
