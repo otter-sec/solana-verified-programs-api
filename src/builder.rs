@@ -1,7 +1,7 @@
 use tokio::process::Command;
 
 use crate::errors::ApiError;
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
+use crate::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::Result;
 use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 
@@ -151,18 +151,4 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
         ApiError::Custom("Failed to build and get output from program".to_string())
     })?;
     Ok(hash)
-}
-
-pub async fn reverify(build_data_from_db: SolanaProgramBuild) {
-    let _ = verify_build(SolanaProgramBuildParams {
-        program_id: build_data_from_db.program_id,
-        repository: build_data_from_db.repository,
-        commit_hash: build_data_from_db.commit_hash,
-        lib_name: build_data_from_db.lib_name,
-        bpf_flag: Some(build_data_from_db.bpf_flag),
-        base_image: build_data_from_db.base_docker_image,
-        mount_path: build_data_from_db.mount_path,
-        cargo_args: build_data_from_db.cargo_args,
-    })
-    .await;
 }
