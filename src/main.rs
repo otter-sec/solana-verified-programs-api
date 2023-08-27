@@ -20,8 +20,9 @@ async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt::init();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set in .env file");
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL not set in .env file");
 
-    let db_client = db::DbClient::new(&database_url);
+    let db_client = db::DbClient::new(&database_url, &redis_url);
     let app = create_router(db_client);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
