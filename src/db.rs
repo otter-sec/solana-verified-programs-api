@@ -6,7 +6,7 @@ use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
 use r2d2_redis::redis::Commands;
 use r2d2_redis::{r2d2, RedisConnectionManager};
 
-use crate::builder::{get_on_chain_hash, reverify};
+use crate::builder::get_on_chain_hash;
 use crate::models::{
     SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
@@ -74,19 +74,6 @@ impl DbClient {
         solana_program_builds
             .find(program_address)
             .first::<SolanaProgramBuild>(conn)
-            .await
-            .map_err(Into::into)
-    }
-
-    pub async fn update_verified_build_time(&self, program_address: &str) -> Result<usize> {
-        use crate::schema::verified_programs::dsl::*;
-
-        let time_now = chrono::Utc::now().naive_utc();
-        let conn = &mut self.db_pool.get().await?;
-        diesel::update(verified_programs)
-            .filter(program_id.eq(program_address))
-            .set(verified_at.eq(time_now))
-            .execute(conn)
             .await
             .map_err(Into::into)
     }
@@ -202,28 +189,30 @@ impl DbClient {
                     self.set_cache(&program_address, &on_chain_hash).await?;
                     if on_chain_hash == res.on_chain_hash {
                         tracing::info!("On chain hash matches. Returning the cached value.");
-                        return Ok({
+                        Ok({
                             VerificationResponse {
                                 is_verified: true,
-                                on_chain_hash: res.on_chain_hash,
+                                on_chain_hash,
                                 executable_hash: res.executable_hash,
                             }
-                        });
+                        })
+                    } else {
+                        tracing::info!("On chain hash doesn't match. Rebuilding the program.");
+                        Ok(VerificationResponse {
+                            is_verified: false,
+                            on_chain_hash,
+                            executable_hash: res.executable_hash,
+                        })
                     }
+                } else {
+                    Ok({
+                        VerificationResponse {
+                            is_verified: res.on_chain_hash == res.executable_hash,
+                            on_chain_hash: res.on_chain_hash,
+                            executable_hash: res.executable_hash,
+                        }
+                    })
                 }
-
-                let payload_last_build = self.get_build_params(&program_address).await?;
-                tokio::spawn(async move {
-                    reverify(payload_last_build).await;
-                    let _ = self.update_verified_build_time(&program_address).await;
-                });
-                Ok({
-                    VerificationResponse {
-                        is_verified: res.on_chain_hash == res.executable_hash,
-                        on_chain_hash: res.on_chain_hash,
-                        executable_hash: res.executable_hash,
-                    }
-                })
             }
             Err(err) => {
                 if err.to_string() == "Record not found" {
