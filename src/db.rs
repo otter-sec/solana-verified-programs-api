@@ -89,6 +89,26 @@ impl DbClient {
             .map_err(Into::into)
     }
 
+    pub async fn update_onchain_hash(
+        &self,
+        program_address: &str,
+        on_chainhash: &str,
+        isverified: bool,
+    ) -> Result<usize> {
+        use crate::schema::verified_programs::dsl::*;
+        let conn = &mut self.db_pool.get().await?;
+        diesel::update(verified_programs)
+            .filter(program_id.eq(program_address))
+            .set((
+                crate::schema::verified_programs::on_chain_hash.eq(on_chainhash),
+                crate::schema::verified_programs::is_verified.eq(isverified),
+                crate::schema::verified_programs::verified_at.eq(chrono::Utc::now().naive_utc()),
+            ))
+            .execute(conn)
+            .await
+            .map_err(Into::into)
+    }
+
     // Redis cache SET and Value expiring in 60 seconds
     pub async fn set_cache(&self, program_address: &str, value: &str) -> Result<()> {
         let cache_res = self.redis_pool.get();
@@ -166,11 +186,11 @@ impl DbClient {
         let res = self.get_verified_build(&program_address).await;
         match res {
             Ok(res) => {
-                let check_result_in_cache = self
+                let cache_result = self
                     .check_cache(&res.executable_hash, &program_address)
                     .await;
 
-                if let Ok(found) = check_result_in_cache {
+                if let Ok(found) = cache_result {
                     if found {
                         tracing::info!("Cache hit for program: {}", program_address);
                         return Ok({
@@ -189,22 +209,24 @@ impl DbClient {
                     self.set_cache(&program_address, &on_chain_hash).await?;
                     if on_chain_hash == res.on_chain_hash {
                         tracing::info!("On chain hash matches. Returning the cached value.");
-                        Ok({
-                            VerificationResponse {
-                                is_verified: true,
-                                on_chain_hash,
-                                executable_hash: res.executable_hash,
-                            }
-                        })
                     } else {
-                        tracing::info!("On chain hash doesn't match. Rebuilding the program.");
-                        Ok(VerificationResponse {
-                            is_verified: false,
+                        tracing::info!("On chain hash doesn't match.");
+                        self.update_onchain_hash(
+                            &program_address,
+                            &on_chain_hash,
+                            on_chain_hash == res.executable_hash,
+                        )
+                        .await?;
+                    }
+                    Ok({
+                        VerificationResponse {
+                            is_verified: on_chain_hash == res.executable_hash,
                             on_chain_hash,
                             executable_hash: res.executable_hash,
-                        })
-                    }
+                        }
+                    })
                 } else {
+                    tracing::info!("Failed to get On chain hash. Returning the cached value.");
                     Ok({
                         VerificationResponse {
                             is_verified: res.on_chain_hash == res.executable_hash,
