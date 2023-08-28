@@ -93,6 +93,7 @@ impl DbClient {
         &self,
         program_address: &str,
         on_chainhash: &str,
+        isverified: bool,
     ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
         let conn = &mut self.db_pool.get().await?;
@@ -100,7 +101,7 @@ impl DbClient {
             .filter(program_id.eq(program_address))
             .set((
                 crate::schema::verified_programs::on_chain_hash.eq(on_chainhash),
-                crate::schema::verified_programs::is_verified.eq(false),
+                crate::schema::verified_programs::is_verified.eq(isverified),
                 crate::schema::verified_programs::verified_at.eq(chrono::Utc::now().naive_utc()),
             ))
             .execute(conn)
@@ -209,13 +210,17 @@ impl DbClient {
                     if on_chain_hash == res.on_chain_hash {
                         tracing::info!("On chain hash matches. Returning the cached value.");
                     } else {
-                        tracing::info!("On chain hash doesn't match. Rebuilding the program.");
-                        self.update_onchain_hash(&program_address, &on_chain_hash)
-                            .await?;
+                        tracing::info!("On chain hash doesn't match.");
+                        self.update_onchain_hash(
+                            &program_address,
+                            &on_chain_hash,
+                            on_chain_hash == res.executable_hash,
+                        )
+                        .await?;
                     }
                     Ok({
                         VerificationResponse {
-                            is_verified: on_chain_hash == res.on_chain_hash,
+                            is_verified: on_chain_hash == res.executable_hash,
                             on_chain_hash,
                             executable_hash: res.executable_hash,
                         }
