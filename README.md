@@ -1,14 +1,12 @@
 # Solana Verified Programs API
 
-## Usage
+This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellipsis-Labs/solana-verifiable-build/). 
 
-```bash
-docker compose up --build
-```
+## API
 
-## How to use API
+### Verification
 
-### Start a new verification of a program
+Note that the parameters are equivalent to what is used on the Phoenix CLI. 
 
 ```bash
 curl --location 'https://verify.osec.io/verify' \
@@ -24,34 +22,23 @@ curl --location 'https://verify.osec.io/verify' \
 --header 'Content-Type: application/json' \
 --data '{
   "repository": "https://github.com/Squads-Protocol/squads-mpl",
-  "commit_hash": "c95b7673d616c377a349ca424261872dfcf8b19d",
+  "commit_hash": "c95b7673d616c377a349ca424261872dfcf8b19d", # optional
   "program_id": "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu",
   "lib_name": "squads_mpl",
   "bpf_flag": true
 }'
 ```
 
-- Upon submitting a job the endpint will start a new verification of the program and returns a message.
+Upon submitting a job the endpoint will start a new verification of the program and returns the following:
 
-  - If there are no errors the response will be:
+```js
+{
+  "status": "success" // or "error",
+  "message": "Build verification started" // or an error message
+}
+```
 
-  ```json
-  {
-    "status": "success",
-    "message": "Build verification started"
-  }
-  ```
-
-  - If there are errors the response will be:
-
-  ```json
-  {
-    "status":"error",
-    "error":"Error message here"
-  }
-  ```
-
-### Synchronously verify a program
+### Synchronous Verification
 
 ```bash
 curl --location 'https://verify.osec.io/verify_sync' \
@@ -62,52 +49,17 @@ curl --location 'https://verify.osec.io/verify_sync' \
 }'
 ```
 
-```bash
-curl --location 'https://verify.osec.io/verify_sync' \
---header 'Content-Type: application/json' \
---data '{
-  "repository": "https://github.com/Squads-Protocol/squads-mpl",
-  "commit_hash": "c95b7673d616c377a349ca424261872dfcf8b19d",
-  "program_id": "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu",
-  "lib_name": "squads_mpl",
-  "bpf_flag": true
-}'
+Upon submitting a job the endpoint will start a new verification of the program. The response will be:
+
+```js
+{
+  "status": "success", // or "error"
+  "is_verified": true, // or `false` if hashes don't match
+  "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
+  "executable_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
+  "message": "On-chain program verified"
+}
 ```
-
-- Upon submitting a job the endpint will start a new verification of the program and returns status once it finishes the job.
-
-  - When the job is finished the response will be:
-
-  ```json
-  {
-    "status": "success",
-    "is_verified": true,
-    "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
-    "executable_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
-    "message": "On chain program verified"
-  }
-  ```
-
-  - Incase if the hashes doesn't match
-
-  ```json
-  {
-    "status": "success",
-    "is_verified": false,
-    "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c",
-    "executable_hash": "fed5d956fc389b5b09a354340d479b07cfc66dd9f8d0af76a0e8e950c1c58680",
-    "message": "On chain program not verified"
-  }
-  ```
-
-  - If there are any errors the response will be:
-
-  ```json
-  {
-    "status":"error",
-    "error":"Error message here"
-  }
-  ```
 
 ### Get the status of a verification
 
@@ -115,22 +67,17 @@ curl --location 'https://verify.osec.io/verify_sync' \
 curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY'
 ```
 
-- Returns the status of the verification
+The response will be:
 
-  - If the given program is verified the response will be:
+```js
+{
+  "is_verified": true, 
+  "message": "On chain program verified"
+}
+```
 
-  ```json
-  {
-    "is_verified": true,
-    "message": "On chain program verified"
-  }
-  ```
+## Deployment
 
-  - else the response will be:
-
-  ```json
-  {
-    "is_verified": false,
-    "message": "On chain program is not verified"
-  }
-  ```
+```bash
+docker compose up --build
+```
