@@ -1,12 +1,12 @@
 # Solana Verified Programs API
 
-This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellipsis-Labs/solana-verifiable-build/). 
+This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellipsis-Labs/solana-verifiable-build/).
 
 ## API
 
 ### Verification
 
-Note that the parameters are equivalent to what is used on the Phoenix CLI. 
+Note that the parameters are equivalent to what is used on the Phoenix CLI.
 
 ```bash
 curl --location 'https://verify.osec.io/verify' \
@@ -57,7 +57,7 @@ Upon submitting a job the endpoint will start a new verification of the program.
   "is_verified": true, // or `false` if hashes don't match
   "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
   "executable_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
-  "message": "On-chain program verified"
+  "message": "On-chain program verified" // or an error message
 }
 ```
 
@@ -71,10 +71,20 @@ The response will be:
 
 ```js
 {
-  "is_verified": true, 
-  "message": "On chain program verified"
+  "is_verified": true, // or `false` if hashes don't match
+  "message": "On chain program verified" // or an error message
 }
 ```
+
+### Cache
+
+- For the `/status` endpoint, designed for use by explorers, the cache is configured to expire after 1 minute.
+- The program verification cache is configured for a duration of 24 hours. After this period, we compare the on-chain hash, and if it doesn't match our local hash, the verification process is rerun. This ensures that the program remains verified on-chain.
+
+## Usage (For Explorers)
+
+- We recommend that explorers use `/verify` to verify programs. This endpoint is designed to be used asynchronously. It will return a response immediately, and the verification process will run in the background. This endpoint is designed to be used by explorers to submit verification jobs without waiting for the results.
+- The `/status` endpoint is designed to be used by explorers to check the status of a verification job. This endpoint is designed to be used by explorers to check the status of a verification job.
 
 ## Deployment
 
