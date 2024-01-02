@@ -284,12 +284,7 @@ impl DbClient {
             && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
             && build.base_docker_image == payload.base_image
             && build.mount_path == payload.mount_path
-            && build.cargo_args
-                == if payload.cargo_args.is_none() {
-                    Some([].to_vec())
-                } else {
-                    payload.cargo_args.clone()
-                };
+            && build.cargo_args == payload.cargo_args;
         if res {
             tracing::info!(
                 "Build params already exists for this program :{}",
