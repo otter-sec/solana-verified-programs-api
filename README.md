@@ -31,10 +31,22 @@ curl --location 'https://verify.osec.io/verify' \
 
 Upon submitting a job the endpoint will start a new verification of the program and returns the following:
 
-```js
+```json
 {
   "status": "success" // or "error",
   "message": "Build verification started" // or an error message
+}
+```
+
+If the request was duplicate we will return the following response:
+
+```json
+{
+    "is_verified": true, // or `false` if hashes don't match
+    "message": "On chain program verified", // or an error message
+    "on_chain_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
+    "executable_hash": "72da599d9ee14b2a03a23ccfa6f06d53eea4a00825ad2191929cbd78fb69205c", // only returned on success
+    "repo_url": "https://github.com/Squads-Protocol/squads-mpl/commit/c95b7673d616c377a349ca424261872dfcf8b19d" // only returned on success
 }
 ```
 
@@ -54,7 +66,7 @@ curl --location 'https://verify.osec.io/verify_sync' \
 
 Upon submitting a job the endpoint will start a new verification of the program. The response will be:
 
-```js
+```json
 {
   "status": "success", // or "error"
   "is_verified": true, // or `false` if hashes don't match
@@ -72,7 +84,7 @@ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR8
 
 The response will be:
 
-```js
+```json
 {
   "is_verified": true, // or `false` if hashes don't match
   "message": "On chain program verified" // or an error message
