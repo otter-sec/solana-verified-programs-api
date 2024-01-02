@@ -48,6 +48,7 @@ pub struct VerificationResponse {
     pub is_verified: bool,
     pub on_chain_hash: String,
     pub executable_hash: String,
+    pub repo_url: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -76,6 +77,7 @@ pub struct StatusResponse {
     pub message: String,
     pub on_chain_hash: String,
     pub executable_hash: String,
+    pub repo_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

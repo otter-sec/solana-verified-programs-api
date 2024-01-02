@@ -191,6 +191,7 @@ impl DbClient {
                     .await;
 
                 if let Ok(found) = cache_result {
+                    let build_params = self.get_build_params(&program_address).await?;
                     if found {
                         tracing::info!("Cache hit for program: {}", program_address);
                         return Ok({
@@ -198,12 +199,18 @@ impl DbClient {
                                 is_verified: true,
                                 on_chain_hash: res.on_chain_hash,
                                 executable_hash: res.executable_hash,
+                                repo_url: build_params
+                                    .commit_hash
+                                    .map_or(build_params.repository.clone(), |hash| {
+                                        format!("{}/commit/{}", build_params.repository, hash)
+                                    }),
                             }
                         });
                     }
                 }
 
                 let on_chain_hash = get_on_chain_hash(&program_address).await;
+                let build_params = self.get_build_params(&program_address).await?;
 
                 if let Ok(on_chain_hash) = on_chain_hash {
                     self.set_cache(&program_address, &on_chain_hash).await?;
@@ -223,6 +230,11 @@ impl DbClient {
                             is_verified: on_chain_hash == res.executable_hash,
                             on_chain_hash,
                             executable_hash: res.executable_hash,
+                            repo_url: build_params
+                                .commit_hash
+                                .map_or(build_params.repository.clone(), |hash| {
+                                    format!("{}/commit/{}", build_params.repository, hash)
+                                }),
                         }
                     })
                 } else {
@@ -232,6 +244,11 @@ impl DbClient {
                             is_verified: res.on_chain_hash == res.executable_hash,
                             on_chain_hash: res.on_chain_hash,
                             executable_hash: res.executable_hash,
+                            repo_url: build_params
+                                .commit_hash
+                                .map_or(build_params.repository.clone(), |hash| {
+                                    format!("{}/commit/{}", build_params.repository, hash)
+                                }),
                         }
                     })
                 }
@@ -244,6 +261,7 @@ impl DbClient {
                             is_verified: false,
                             on_chain_hash: "".to_string(),
                             executable_hash: "".to_string(),
+                            repo_url: "".to_string(),
                         }
                     });
                 }
@@ -286,6 +304,9 @@ impl DbClient {
                             is_verified: verification_status.is_verified,
                             on_chain_hash: verification_status.on_chain_hash,
                             executable_hash: verification_status.executable_hash,
+                            repo_url: build.commit_hash.map_or(build.repository.clone(), |hash| {
+                                format!("{}/commit/{}", build.repository, hash)
+                            }),
                         }),
                     ))
                 }
