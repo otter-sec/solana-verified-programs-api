@@ -156,6 +156,11 @@ async fn verify_async(
                         },
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
+                        repo_url: verify_build_data
+                            .commit_hash
+                            .map_or(verify_build_data.repository.clone(), |hash| {
+                                format!("{}/commit/{}", verify_build_data.repository, hash)
+                            }),
                     }
                     .into(),
                 ),
@@ -247,6 +252,7 @@ async fn verify_sync(
                         },
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
+                        repo_url: res.repo_url,
                     }
                     .into(),
                 ),
@@ -260,6 +266,11 @@ async fn verify_sync(
                     message: "We have already processed this request".to_string(),
                     on_chain_hash: "".to_string(),
                     executable_hash: "".to_string(),
+                    repo_url: verify_build_data
+                        .commit_hash
+                        .map_or(verify_build_data.repository.clone(), |hash| {
+                            format!("{}/commit/{}", verify_build_data.repository, hash)
+                        }),
                 }
                 .into(),
             ),
@@ -299,6 +310,11 @@ async fn verify_sync(
                         },
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
+                        repo_url: verify_build_data
+                            .commit_hash
+                            .map_or(verify_build_data.repository.clone(), |hash| {
+                                format!("{}/commit/{}", verify_build_data.repository, hash)
+                            }),
                     }
                     .into(),
                 ),
@@ -336,6 +352,7 @@ async fn verify_status(
                 },
                 on_chain_hash: result.on_chain_hash,
                 executable_hash: result.executable_hash,
+                repo_url: result.repo_url,
             }
             .into(),
         ),
