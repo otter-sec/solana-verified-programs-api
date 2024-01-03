@@ -93,7 +93,6 @@ The response will be:
 
 ### Cache
 
-- For the `/status` endpoint, designed for use by explorers, the cache is configured to expire after 1 minute.
 - The program verification cache is configured for a duration of 24 hours. After this period, we compare the on-chain hash, and if it doesn't match our local hash, the verification process is rerun. This ensures that the program remains verified on-chain.
 
 ## Usage
