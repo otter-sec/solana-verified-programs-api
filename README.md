@@ -8,6 +8,7 @@ This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellip
 
 - We recommend that developers use `/verify` to verify programs. This endpoint is designed to be used asynchronously. It will return a response immediately, and the verification process will run in the background. This endpoint is designed to be used by developers to submit verification jobs without waiting for the results.
 - The `/status` endpoint is designed to be used by explorers to check the status of a verification job. This endpoint is designed to be used by explorers to check the status of a verification job.
+- When a program verification occurred more than 24 hours ago, we return the cached result and initiate a new verification job in the background. This ensures the program's continued verification on-chain.
 
 ### Using Ellipsis Labs CLI
 
