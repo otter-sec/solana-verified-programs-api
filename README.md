@@ -4,6 +4,34 @@ This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellip
 
 ## API
 
+### Usage
+
+- We recommend that developers use `/verify` to verify programs. This endpoint is designed to be used asynchronously. It will return a response immediately, and the verification process will run in the background. This endpoint is designed to be used by developers to submit verification jobs without waiting for the results.
+- The `/status` endpoint is designed to be used by explorers to check the status of a verification job. This endpoint is designed to be used by explorers to check the status of a verification job.
+
+### Using Ellipsis Labs CLI
+
+To install the Solana Verify cli, run the following in your shell:
+
+```bash
+# Pulls the latest version from crates.io
+cargo install solana-verify
+```
+
+To verify a program, run the following in your shell:
+
+```bash
+solana-verify verify-from-repo -um --program-id PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY https://github.com/Ellipsis-Labs/phoenix-v1
+```
+
+Final Output:
+
+```bash
+Executable Program Hash from repo: 7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d
+On-chain Program Hash: 7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d
+Program hash matches ✅
+```
+
 ### Verification
 
 Note that the parameters are equivalent to what is used on the Phoenix CLI.
@@ -94,34 +122,6 @@ The response will be:
 ### Cache
 
 - The program verification cache is configured for a duration of 24 hours. After this period, we compare the on-chain hash, and if it doesn't match our local hash, the verification process is rerun. This ensures that the program remains verified on-chain.
-
-## Usage
-
-- We recommend that developers use `/verify` to verify programs. This endpoint is designed to be used asynchronously. It will return a response immediately, and the verification process will run in the background. This endpoint is designed to be used by developers to submit verification jobs without waiting for the results.
-- The `/status` endpoint is designed to be used by explorers to check the status of a verification job. This endpoint is designed to be used by explorers to check the status of a verification job.
-
-## Using Ellipsis Labs CLI
-
-To install the Solana Verify cli, run the following in your shell:
-
-```bash
-# Pulls the latest version from crates.io
-cargo install solana-verify
-```
-
-To verify a program, run the following in your shell:
-
-```bash
-solana-verify verify-from-repo -um --program-id PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY https://github.com/Ellipsis-Labs/phoenix-v1
-```
-
-Final Output:
-
-```bash
-Executable Program Hash from repo: 7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d
-On-chain Program Hash: 7c76ba11f8742d040b1a874d943c2096f1b3a48db14d2a5b411fd5dad5d1bc2d
-Program hash matches ✅
-```
 
 ## Deployment
 
