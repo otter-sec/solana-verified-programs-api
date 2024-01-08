@@ -20,7 +20,8 @@ $ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqL
   "is_verified": true,
   "message": "On chain program verified",
   "on_chain_hash": "6877a5b732b3494b828a324ec846d526d962223959534dbaf4209e0da3b2d6a9",
-  "executable_hash": "6877a5b732b3494b828a324ec846d526d962223959534dbaf4209e0da3b2d6a9"
+  "executable_hash": "6877a5b732b3494b828a324ec846d526d962223959534dbaf4209e0da3b2d6a9",
+  "repo_url": "https://github.com/Ellipsis-Labs/phoenix-v1"
 }
 ```
 
