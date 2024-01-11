@@ -3,7 +3,7 @@
 diesel::table! {
     jobs (id) {
         id -> Varchar,
-        job_status -> VarChar,
+        job_status -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
