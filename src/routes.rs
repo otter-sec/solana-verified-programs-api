@@ -1,8 +1,8 @@
 use crate::builder::verify_build;
 use crate::db::DbClient;
 use crate::models::{
-    ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-    StatusResponse, VerificationStatusParams, VerifyResponse,
+    ApiResponse, ErrorResponse, Job, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams,
+    Status, StatusResponse, VerificationStatusParams, VerifyResponse,
 };
 use axum::{
     error_handling::HandleErrorLayer,
@@ -87,6 +87,13 @@ pub fn create_router(db: DbClient) -> Router {
                 .layer(cors(Method::GET))
                 .layer(CompressionLayer::new().zstd(true)),
         )
+        .route("/job/:job_id", get(get_job_status))
+        .layer(
+            global_rate_limit(10000)
+                .layer(rate_limit_per_ip(1, 100))
+                .layer(cors(Method::GET))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
         .layer(trace_layer)
         .with_state(db)
 }
@@ -123,8 +130,9 @@ async fn verify_async(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let uuid = uuid::Uuid::new_v4().to_string();
     let verify_build_data = SolanaProgramBuild {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: uuid.clone(),
         repository: payload.repository.clone(),
         commit_hash: payload.commit_hash.clone(),
         program_id: payload.program_id.clone(),
@@ -191,13 +199,26 @@ async fn verify_async(
     }
 
     tracing::info!("Inserted into database");
+    // Create a new job and assign a unique id
+    let mut job = Job {
+        id: uuid.clone(),
+        job_status: JobStatus::InProgress.into(),
+        created_at: Utc::now().naive_utc(),
+        updated_at: Utc::now().naive_utc(),
+    };
+    let _ = db.insert_or_update_job(&job).await;
+
     //run task in background
     tokio::spawn(async move {
+        job.updated_at = Utc::now().naive_utc();
         match verify_build(payload).await {
             Ok(res) => {
+                job.job_status = JobStatus::Completed.into();
+                let _ = db.insert_or_update_job(&job).await;
                 let _ = db.insert_or_update_verified_build(&res).await;
             }
             Err(err) => {
+                job.job_status = JobStatus::Failed.into();
                 tracing::error!("Error verifying build: {:?}", err);
                 tracing::error!(
                     "We encountered an unexpected error during the verification process."
@@ -211,6 +232,7 @@ async fn verify_async(
         Json(
             VerifyResponse {
                 status: Status::Success,
+                request_id: uuid,
                 message: "Build verification started".to_string(),
             }
             .into(),
@@ -370,6 +392,49 @@ async fn verify_status(
                 }
                 .into(),
             )
+        }
+    }
+}
+
+// Route handler for GET /jobs/:job_id which checks the status of a job
+async fn get_job_status(State(db): State<DbClient>, Path(job_id): Path<String>) -> Json<Value> {
+    match db.get_job(&job_id).await {
+        Ok(res) => match res.job_status.into() {
+            JobStatus::Completed => {
+                if let Ok(verified_program) = db.get_verification_by_id(&res.id).await {
+                    Json(json!({
+                        "status": "completed",
+                        "message": "Job completed",
+                        "is_verified": verified_program.is_verified,
+                        "on_chain_hash": verified_program.on_chain_hash,
+                        "executable_hash": verified_program.executable_hash,
+                    }))
+                } else {
+                    Json(json!({
+                        "status": "completed",
+                        "message": "Job completed",
+                        "is_verified": false,
+                        "on_chain_hash": "",
+                        "executable_hash": "",
+                        "repo_url": "",
+                    }))
+                }
+            }
+            JobStatus::Failed => Json(json!({
+                "status": "failed",
+                "message": "Job failed"
+            })),
+            JobStatus::InProgress => Json(json!({
+                "status": "in_progress",
+                "message": "Job in progress"
+            })),
+        },
+        Err(err) => {
+            tracing::error!("Error getting data from database: {}", err);
+            Json(json!({
+                "status": "error",
+                "message": "An unexpected database error occurred."
+            }))
         }
     }
 }
