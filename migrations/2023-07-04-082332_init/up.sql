@@ -1,5 +1,5 @@
 -- Your SQL goes here
-CREATE TABLE solana_program_builds (
+CREATE TABLE IF NOT EXISTS solana_program_builds (
     id VARCHAR NOT NULL,
     repository VARCHAR NOT NULL,
     commit_hash VARCHAR,
@@ -14,7 +14,7 @@ CREATE TABLE solana_program_builds (
 );
 
 
-CREATE TABLE verified_programs (
+CREATE TABLE IF NOT EXISTS verified_programs (
     id VARCHAR PRIMARY KEY,
     program_id VARCHAR NOT NULL UNIQUE,
     is_verified BOOLEAN NOT NULL,
@@ -25,5 +25,5 @@ CREATE TABLE verified_programs (
 );
 
 -- Create index on verified_programs.program_id
-CREATE INDEX verified_programs_program_id_idx ON verified_programs (program_id);
-CREATE INDEX solana_program_builds_program_id_idx ON solana_program_builds (program_id);
+CREATE INDEX IF NOT EXISTS verified_programs_program_id_idx ON verified_programs (program_id);
+CREATE INDEX IF NOT EXISTS solana_program_builds_program_id_idx ON solana_program_builds (program_id);

@@ -1,0 +1,10 @@
+-- Jobs table 
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id VARCHAR PRIMARY KEY,
+    job_status VARCHAR NOT NULL DEFAULT 'in_progress',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (id);
