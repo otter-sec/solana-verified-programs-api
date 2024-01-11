@@ -8,7 +8,7 @@ use r2d2_redis::{r2d2, RedisConnectionManager};
 
 use crate::builder::get_on_chain_hash;
 use crate::models::{
-    SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+    Job, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
 
 #[derive(Clone)]
@@ -311,5 +311,40 @@ impl DbClient {
             }
         }
         Ok((res, None))
+    }
+
+    pub async fn insert_or_update_job(&self, payload: &Job) -> Result<usize> {
+        use crate::schema::jobs::dsl::*;
+
+        let conn = &mut self.db_pool.get().await?;
+        diesel::insert_into(jobs)
+            .values(payload)
+            .on_conflict(id)
+            .do_update()
+            .set(payload)
+            .execute(conn)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_job(&self, job_id: &str) -> Result<Job> {
+        use crate::schema::jobs::dsl::*;
+
+        let conn = &mut self.db_pool.get().await?;
+        jobs.find(job_id)
+            .first::<Job>(conn)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn get_verification_by_id(&self, vid: &str) -> Result<VerifiedProgram> {
+        use crate::schema::verified_programs::dsl::*;
+
+        let conn = &mut self.db_pool.get().await?;
+        verified_programs
+            .find(vid)
+            .first::<VerifiedProgram>(conn)
+            .await
+            .map_err(Into::into)
     }
 }
