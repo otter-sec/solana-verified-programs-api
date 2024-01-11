@@ -1,4 +1,4 @@
-use crate::schema::{solana_program_builds, verified_programs};
+use crate::schema::{jobs, solana_program_builds, verified_programs};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,44 @@ pub struct VerifiedProgram {
     pub on_chain_hash: String,
     pub executable_hash: String,
     pub verified_at: NaiveDateTime,
+}
+
+pub enum JobStatus {
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl From<JobStatus> for String {
+    fn from(status: JobStatus) -> Self {
+        match status {
+            JobStatus::InProgress => "in_progress".to_string(),
+            JobStatus::Completed => "completed".to_string(),
+            JobStatus::Failed => "failed".to_string(),
+        }
+    }
+}
+
+impl From<String> for JobStatus {
+    fn from(status: String) -> Self {
+        match status.as_str() {
+            "in_progress" => JobStatus::InProgress,
+            "completed" => JobStatus::Completed,
+            "failed" => JobStatus::Failed,
+            _ => panic!("Invalid job status"),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+)]
+#[diesel(table_name = jobs, primary_key(id))]
+pub struct Job {
+    pub id: String,
+    pub job_status: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,6 +121,7 @@ pub struct StatusResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     pub status: Status,
+    pub request_id: String,
     pub message: String,
 }
 
