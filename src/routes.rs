@@ -183,7 +183,7 @@ async fn verify_async(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "unexpected error occurred".to_string(),
+                    error: "An unexpected database error occurred.".to_string(),
                 }
                 .into(),
             ),
@@ -199,6 +199,9 @@ async fn verify_async(
             }
             Err(err) => {
                 tracing::error!("Error verifying build: {:?}", err);
+                tracing::error!(
+                    "We encountered an unexpected error during the verification process."
+                );
             }
         }
     });
@@ -285,7 +288,7 @@ async fn verify_sync(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "unexpected error occurred".to_string(),
+                    error: "An unexpected database error occurred.".to_string(),
                 }
                 .into(),
             ),
@@ -327,7 +330,9 @@ async fn verify_sync(
                 Json(
                     ErrorResponse {
                         status: Status::Error,
-                        error: "unexpected error occurred".to_string(),
+                        error:
+                            "We encountered an unexpected error during the verification process."
+                                .to_string(),
                     }
                     .into(),
                 ),
@@ -361,7 +366,7 @@ async fn verify_status(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "unexpected error occurred".to_string(),
+                    error: "An unexpected database error occurred.".to_string(),
                 }
                 .into(),
             )
