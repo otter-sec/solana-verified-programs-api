@@ -1,10 +1,15 @@
 -- Jobs table 
 
-CREATE TABLE IF NOT EXISTS jobs (
-    id VARCHAR PRIMARY KEY,
-    job_status VARCHAR NOT NULL DEFAULT 'in_progress',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+ALTER TABLE solana_program_builds ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'in_progress';
 
-CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (id);
+-- Drop foreign key constraint in the dependent table
+ALTER TABLE verified_programs
+DROP CONSTRAINT verified_programs_program_id_fkey;
+
+-- Drop the primary key constraint in the solana_program_builds table
+ALTER TABLE solana_program_builds
+DROP CONSTRAINT solana_program_builds_pkey;
+
+-- Add a new primary key constraint on the program_id column
+ALTER TABLE solana_program_builds
+ADD PRIMARY KEY (id);

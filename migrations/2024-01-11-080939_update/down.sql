@@ -1,3 +1,2 @@
 -- This file should undo anything in `up.sql`
-drop index jobs_status_idx;
-drop table jobs;
+ALTER TABLE solana_program_builds DROP COLUMN status;

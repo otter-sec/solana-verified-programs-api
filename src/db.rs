@@ -8,7 +8,7 @@ use r2d2_redis::{r2d2, RedisConnectionManager};
 
 use crate::builder::get_on_chain_hash;
 use crate::models::{
-    Job, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+    SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
 
 #[derive(Clone)]
@@ -36,15 +36,12 @@ impl DbClient {
         }
     }
 
-    pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<usize> {
+    pub async fn insert_build_params(&self, payload: &SolanaProgramBuild) -> Result<usize> {
         use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(solana_program_builds)
             .values(payload)
-            .on_conflict(program_id)
-            .do_update()
-            .set(payload)
             .execute(conn)
             .await
             .map_err(Into::into)
@@ -313,37 +310,26 @@ impl DbClient {
         Ok((res, None))
     }
 
-    pub async fn insert_or_update_job(&self, payload: &Job) -> Result<usize> {
-        use crate::schema::jobs::dsl::*;
+    // Get solana_program_builds status by id
+    pub async fn get_job(&self, uid: &str) -> Result<SolanaProgramBuild> {
+        use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
-        diesel::insert_into(jobs)
-            .values(payload)
-            .on_conflict(id)
-            .do_update()
-            .set(payload)
+        solana_program_builds
+            .filter(id.eq(uid))
+            .first::<SolanaProgramBuild>(conn)
+            .await
+            .map_err(Into::into)
+    }
+
+    // Update solana_program_builds by id and set status
+    pub async fn update_build_status(&self, uid: &str, job_status: String) -> Result<usize> {
+        use crate::schema::solana_program_builds::dsl::*;
+        let conn = &mut self.db_pool.get().await?;
+        diesel::update(solana_program_builds)
+            .filter(id.eq(uid))
+            .set(crate::schema::solana_program_builds::status.eq(job_status))
             .execute(conn)
-            .await
-            .map_err(Into::into)
-    }
-
-    pub async fn get_job(&self, job_id: &str) -> Result<Job> {
-        use crate::schema::jobs::dsl::*;
-
-        let conn = &mut self.db_pool.get().await?;
-        jobs.find(job_id)
-            .first::<Job>(conn)
-            .await
-            .map_err(Into::into)
-    }
-
-    pub async fn get_verification_by_id(&self, vid: &str) -> Result<VerifiedProgram> {
-        use crate::schema::verified_programs::dsl::*;
-
-        let conn = &mut self.db_pool.get().await?;
-        verified_programs
-            .find(vid)
-            .first::<VerifiedProgram>(conn)
             .await
             .map_err(Into::into)
     }
