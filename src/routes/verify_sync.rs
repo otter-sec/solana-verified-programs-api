@@ -78,7 +78,7 @@ pub(crate) async fn verify_sync(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "An unexpected database error occurred.".to_string(),
+                    error: "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.".to_string(),
                 }
                 .into(),
             ),
@@ -88,7 +88,7 @@ pub(crate) async fn verify_sync(
     tracing::info!("Inserted into database");
 
     // run task and wait for it to finish
-    match verify_build(payload).await {
+    match verify_build(payload, &verify_build_data.id).await {
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
             let _ = db
@@ -117,6 +117,9 @@ pub(crate) async fn verify_sync(
             )
         }
         Err(err) => {
+            let _ = db
+                .update_build_status(&verify_build_data.id, JobStatus::Failed.into())
+                .await;
             tracing::error!("Error verifying build: {:?}", err);
             (
                 StatusCode::OK,

@@ -24,7 +24,10 @@ diesel::table! {
         on_chain_hash -> Varchar,
         executable_hash -> Varchar,
         verified_at -> Timestamp,
+        solana_build_id -> Varchar,
     }
 }
+
+diesel::joinable!(verified_programs -> solana_program_builds (solana_build_id));
 
 diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);

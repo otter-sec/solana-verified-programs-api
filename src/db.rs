@@ -69,7 +69,7 @@ impl DbClient {
 
         let conn = &mut self.db_pool.get().await?;
         solana_program_builds
-            .find(program_address)
+            .filter(crate::schema::solana_program_builds::program_id.eq(program_address))
             .first::<SolanaProgramBuild>(conn)
             .await
             .map_err(Into::into)
@@ -267,47 +267,66 @@ impl DbClient {
         }
     }
 
+    pub async fn is_build_params_exists_already(
+        &self,
+        payload: &SolanaProgramBuildParams,
+    ) -> Result<Option<SolanaProgramBuild>> {
+        if let Ok(build) = self.get_build_params(&payload.program_id).await {
+            tracing::info!("DB {:?}", build);
+            tracing::info!("Payload {:?}", payload);
+
+            let params_exist = build.repository == payload.repository
+                && build.commit_hash == payload.commit_hash
+                && build.lib_name == payload.lib_name
+                && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
+                && build.base_docker_image == payload.base_image
+                && build.mount_path == payload.mount_path
+                && build.cargo_args == payload.cargo_args;
+
+            if params_exist {
+                tracing::info!(
+                    "Build params already exist for this program: {}",
+                    payload.program_id
+                );
+                return Ok(Some(build));
+            }
+        } else {
+            tracing::error!(
+                "Error retrieving build params for program: {}",
+                payload.program_id
+            );
+        }
+
+        Ok(None)
+    }
+
     pub async fn check_is_build_params_exists_already(
         &self,
         payload: &SolanaProgramBuildParams,
     ) -> Result<(bool, Option<VerificationResponse>)> {
-        let build = self.get_build_params(&payload.program_id).await?;
-        tracing::info!("DB {:?}", build);
-        tracing::info!("Payload {:?}", payload);
-
-        let res = build.repository == payload.repository
-            && build.commit_hash == payload.commit_hash
-            && build.lib_name == payload.lib_name
-            && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
-            && build.base_docker_image == payload.base_image
-            && build.mount_path == payload.mount_path
-            && build.cargo_args == payload.cargo_args;
-        if res {
+        if let Some(build) = self.is_build_params_exists_already(payload).await? {
             tracing::info!(
                 "Build params already exists for this program :{}",
                 payload.program_id
             );
-            let verification_status = self.get_verified_build(&payload.program_id).await;
-            match verification_status {
-                Ok(verification_status) => {
-                    return Ok((
-                        true,
-                        Some(VerificationResponse {
-                            is_verified: verification_status.is_verified,
-                            on_chain_hash: verification_status.on_chain_hash,
-                            executable_hash: verification_status.executable_hash,
-                            repo_url: build.commit_hash.map_or(build.repository.clone(), |hash| {
-                                format!("{}/commit/{}", build.repository, hash)
-                            }),
+            if let Ok(verification_status) = self.get_verified_build(&payload.program_id).await {
+                Ok((
+                    true,
+                    Some(VerificationResponse {
+                        is_verified: verification_status.is_verified,
+                        on_chain_hash: verification_status.on_chain_hash,
+                        executable_hash: verification_status.executable_hash,
+                        repo_url: build.commit_hash.map_or(build.repository.clone(), |hash| {
+                            format!("{}/commit/{}", build.repository, hash)
                         }),
-                    ))
-                }
-                Err(_) => {
-                    return Ok((true, None));
-                }
+                    }),
+                ))
+            } else {
+                Ok((true, None))
             }
+        } else {
+            Ok((false, None))
         }
-        Ok((res, None))
     }
 
     // Get solana_program_builds status by id

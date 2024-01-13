@@ -30,11 +30,16 @@ pub struct VerifiedProgram {
     pub on_chain_hash: String,
     pub executable_hash: String,
     pub verified_at: NaiveDateTime,
+    pub solana_build_id: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum JobStatus {
+    #[serde(rename = "in_progress")]
     InProgress,
+    #[serde(rename = "completed")]
     Completed,
+    #[serde(rename = "failed")]
     Failed,
 }
 

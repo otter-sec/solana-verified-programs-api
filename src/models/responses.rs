@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::JobStatus;
+
 // Types for API responses
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationResponse {
@@ -33,7 +35,7 @@ pub struct StatusResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
-    pub status: Status,
+    pub status: JobStatus,
     pub request_id: String,
     pub message: String,
 }
