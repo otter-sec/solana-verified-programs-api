@@ -26,48 +26,73 @@ pub(crate) async fn verify_sync(
     };
 
     // First check if the program is already verified
-    let is_exists = db
-        .check_is_build_params_exists_already(&payload)
-        .await
-        .unwrap_or((false, None));
+    let is_duplicate = db.check_for_dupliate(&payload).await;
 
-    if is_exists.0 {
-        if let Some(res) = is_exists.1 {
-            return (
-                StatusCode::CONFLICT,
-                Json(
-                    StatusResponse {
-                        is_verified: res.is_verified,
-                        message: if res.is_verified {
-                            "On chain program verified".to_string()
-                        } else {
-                            "On chain program not verified".to_string()
-                        },
-                        on_chain_hash: res.on_chain_hash,
-                        executable_hash: res.executable_hash,
-                        repo_url: res.repo_url,
-                    }
-                    .into(),
-                ),
-            );
+    if let Ok(res) = is_duplicate {
+        match res.status.into() {
+            JobStatus::Completed => {
+                let verified_build = db.get_verified_build(&res.program_id).await.unwrap();
+                return (
+                    StatusCode::CONFLICT,
+                    Json(
+                        StatusResponse {
+                            is_verified: verified_build.is_verified,
+                            message: if verified_build.is_verified {
+                                "On chain program verified".to_string()
+                            } else {
+                                "On chain program not verified".to_string()
+                            },
+                            on_chain_hash: verified_build.on_chain_hash,
+                            executable_hash: verified_build.executable_hash,
+                            repo_url: verify_build_data
+                                .commit_hash
+                                .map_or(verify_build_data.repository.clone(), |hash| {
+                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                }),
+                        }
+                        .into(),
+                    ),
+                );
+            }
+            JobStatus::InProgress => {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(
+                        StatusResponse {
+                            is_verified: false,
+                            message: "Build verification already in progress".to_string(),
+                            on_chain_hash: "".to_string(),
+                            executable_hash: "".to_string(),
+                            repo_url: verify_build_data
+                                .commit_hash
+                                .map_or(verify_build_data.repository.clone(), |hash| {
+                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                }),
+                        }
+                        .into(),
+                    ),
+                );
+            }
+            JobStatus::Failed => {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(
+                        StatusResponse {
+                            is_verified: false,
+                            message:  "The previous request has already been processed, but unfortunately, the verification process has failed.".to_string(),
+                            on_chain_hash: "".to_string(),
+                            executable_hash: "".to_string(),
+                            repo_url: verify_build_data
+                                .commit_hash
+                                .map_or(verify_build_data.repository.clone(), |hash| {
+                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                }),
+                        }
+                        .into(),
+                    ),
+                );
+            }
         }
-        return (
-            StatusCode::CONFLICT,
-            Json(
-                StatusResponse {
-                    is_verified: false,
-                    message: "We have already processed this request".to_string(),
-                    on_chain_hash: "".to_string(),
-                    executable_hash: "".to_string(),
-                    repo_url: verify_build_data
-                        .commit_hash
-                        .map_or(verify_build_data.repository.clone(), |hash| {
-                            format!("{}/commit/{}", verify_build_data.repository, hash)
-                        }),
-                }
-                .into(),
-            ),
-        );
     }
 
     // insert into database

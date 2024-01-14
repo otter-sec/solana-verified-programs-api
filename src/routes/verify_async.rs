@@ -2,7 +2,7 @@ use crate::builder::verify_build;
 use crate::db::DbClient;
 use crate::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-    StatusResponse, VerifyResponse,
+    VerifyResponse,
 };
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::Utc;
@@ -28,53 +28,40 @@ pub(crate) async fn verify_async(
     };
 
     // Check if the build was already processed
-    let is_duplicate = db
-        .is_build_params_exists_already(&payload)
-        .await
-        .unwrap_or(None);
+    let is_duplicate = db.check_for_dupliate(&payload).await;
 
-    if let Some(respose) = is_duplicate {
-        match respose.status.as_str() {
-            "completed" => {
+    if let Ok(respose) = is_duplicate {
+        match respose.status.into() {
+            JobStatus::Completed => {
                 // Get the verified build from the database
                 let verified_build = db.get_verified_build(&respose.program_id).await.unwrap();
                 return (
                     StatusCode::OK,
                     Json(
-                        StatusResponse {
-                            is_verified: verified_build.is_verified,
-                            message: if verified_build.is_verified {
-                                "On chain program verified".to_string()
-                            } else {
-                                "On chain program not verified".to_string()
-                            },
-                            on_chain_hash: verified_build.on_chain_hash,
-                            executable_hash: verified_build.executable_hash,
-                            repo_url: verify_build_data
-                                .commit_hash
-                                .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
-                                }),
+                        VerifyResponse {
+                            status: JobStatus::Completed,
+                            request_id: verified_build.solana_build_id,
+                            message: "Verification already completed.".to_string(),
                         }
                         .into(),
                     ),
                 );
             }
-            "in_progess" => {
+            JobStatus::InProgress => {
                 // Return ID to user to check status
                 return (
                     StatusCode::OK,
                     Json(
                         VerifyResponse {
                             status: JobStatus::InProgress,
-                            request_id: uuid,
+                            request_id: respose.id,
                             message: "Build verification already in progress".to_string(),
                         }
                         .into(),
                     ),
                 );
             }
-            "failed" => {
+            JobStatus::Failed => {
                 // Return error to user
                 return (
                     StatusCode::CONFLICT,
@@ -86,9 +73,6 @@ pub(crate) async fn verify_async(
                         .into(),
                     ),
                 );
-            }
-            _ => {
-                // nop
             }
         }
     }
