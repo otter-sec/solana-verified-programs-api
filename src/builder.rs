@@ -33,7 +33,10 @@ fn extract_hash(output: &str, prefix: &str) -> Option<String> {
 ///
 /// The function `verify_build` returns a `Result` with the success case containing a `VerifiedProgram`
 /// struct and the error case containing an `ApiError`.
-pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedProgram> {
+pub async fn verify_build(
+    payload: SolanaProgramBuildParams,
+    build_id: &str,
+) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
 
     // Original R limit
@@ -119,6 +122,7 @@ pub async fn verify_build(payload: SolanaProgramBuildParams) -> Result<VerifiedP
         on_chain_hash: onchain_hash,
         executable_hash: build_hash,
         verified_at: chrono::Utc::now().naive_utc(),
+        solana_build_id: build_id.to_string(),
     };
 
     // Reset R limit

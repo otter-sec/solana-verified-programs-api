@@ -36,15 +36,12 @@ impl DbClient {
         }
     }
 
-    pub async fn insert_or_update_build(&self, payload: &SolanaProgramBuild) -> Result<usize> {
+    pub async fn insert_build_params(&self, payload: &SolanaProgramBuild) -> Result<usize> {
         use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(solana_program_builds)
             .values(payload)
-            .on_conflict(program_id)
-            .do_update()
-            .set(payload)
             .execute(conn)
             .await
             .map_err(Into::into)
@@ -67,12 +64,61 @@ impl DbClient {
             .map_err(Into::into)
     }
 
+    pub async fn check_for_dupliate(
+        &self,
+        payload: &SolanaProgramBuildParams,
+    ) -> Result<SolanaProgramBuild> {
+        use crate::schema::solana_program_builds::dsl::*;
+
+        let conn = &mut self.db_pool.get().await?;
+
+        let mut query = solana_program_builds.into_boxed();
+
+        query = query.filter(program_id.eq(payload.program_id.to_owned()));
+        query = query.filter(repository.eq(payload.repository.to_owned()));
+
+        // commit_hash is optional
+        if let Some(hash) = &payload.commit_hash {
+            query = query.filter(commit_hash.eq(hash));
+        }
+
+        // lib_name is optional
+        if let Some(lib) = &payload.lib_name {
+            query = query.filter(lib_name.eq(lib));
+        }
+
+        // bpf_flag is optional
+        if let Some(bpf) = &payload.bpf_flag {
+            query = query.filter(bpf_flag.eq(bpf));
+        }
+
+        // base_docker_image is optional
+        if let Some(base) = &payload.base_image {
+            query = query.filter(base_docker_image.eq(base));
+        }
+
+        // mount_path is optional
+        if let Some(mount) = &payload.mount_path {
+            query = query.filter(mount_path.eq(mount));
+        }
+
+        // cargo_args is optional
+        if let Some(args) = payload.cargo_args.clone() {
+            query = query.filter(cargo_args.eq(args));
+        }
+
+        query
+            .first::<SolanaProgramBuild>(conn)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn get_build_params(&self, program_address: &str) -> Result<SolanaProgramBuild> {
         use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
         solana_program_builds
-            .find(program_address)
+            .filter(crate::schema::solana_program_builds::program_id.eq(program_address))
             .first::<SolanaProgramBuild>(conn)
             .await
             .map_err(Into::into)
@@ -270,46 +316,27 @@ impl DbClient {
         }
     }
 
-    pub async fn check_is_build_params_exists_already(
-        &self,
-        payload: &SolanaProgramBuildParams,
-    ) -> Result<(bool, Option<VerificationResponse>)> {
-        let build = self.get_build_params(&payload.program_id).await?;
-        tracing::info!("DB {:?}", build);
-        tracing::info!("Payload {:?}", payload);
+    // Get solana_program_builds status by id
+    pub async fn get_job(&self, uid: &str) -> Result<SolanaProgramBuild> {
+        use crate::schema::solana_program_builds::dsl::*;
 
-        let res = build.repository == payload.repository
-            && build.commit_hash == payload.commit_hash
-            && build.lib_name == payload.lib_name
-            && build.bpf_flag == payload.bpf_flag.unwrap_or(false)
-            && build.base_docker_image == payload.base_image
-            && build.mount_path == payload.mount_path
-            && build.cargo_args == payload.cargo_args;
-        if res {
-            tracing::info!(
-                "Build params already exists for this program :{}",
-                payload.program_id
-            );
-            let verification_status = self.get_verified_build(&payload.program_id).await;
-            match verification_status {
-                Ok(verification_status) => {
-                    return Ok((
-                        true,
-                        Some(VerificationResponse {
-                            is_verified: verification_status.is_verified,
-                            on_chain_hash: verification_status.on_chain_hash,
-                            executable_hash: verification_status.executable_hash,
-                            repo_url: build.commit_hash.map_or(build.repository.clone(), |hash| {
-                                format!("{}/commit/{}", build.repository, hash)
-                            }),
-                        }),
-                    ))
-                }
-                Err(_) => {
-                    return Ok((true, None));
-                }
-            }
-        }
-        Ok((res, None))
+        let conn = &mut self.db_pool.get().await?;
+        solana_program_builds
+            .filter(id.eq(uid))
+            .first::<SolanaProgramBuild>(conn)
+            .await
+            .map_err(Into::into)
+    }
+
+    // Update solana_program_builds by id and set status
+    pub async fn update_build_status(&self, uid: &str, job_status: String) -> Result<usize> {
+        use crate::schema::solana_program_builds::dsl::*;
+        let conn = &mut self.db_pool.get().await?;
+        diesel::update(solana_program_builds)
+            .filter(id.eq(uid))
+            .set(crate::schema::solana_program_builds::status.eq(job_status))
+            .execute(conn)
+            .await
+            .map_err(Into::into)
     }
 }
