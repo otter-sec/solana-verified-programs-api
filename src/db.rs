@@ -228,7 +228,20 @@ impl DbClient {
         }
     }
 
-    /// The function `check_is_program_verified_within_24hrs` checks if a program is verified within the last 24 hours
+    /// Create a URL for the repository of the program
+    /// Arguments:
+    /// * `res`: The `res` parameter is a `SolanaProgramBuild` struct that contains the repository
+    /// and the commit hash of the program.
+    /// Returns: A string that represents the URL of the repository.
+    ///
+    pub async fn get_repo_url(&self, build_params: &SolanaProgramBuild) -> String {
+        build_params.commit_hash.as_ref().map_or_else(
+            || build_params.repository.clone(),
+            |hash| format!("{}/commit/{}", build_params.repository, hash),
+        )
+    }
+
+    /// The function `is_verified_within_24hrs` checks if a program is verified within the last 24 hours
     /// and rebuilds and verifies it if it is not.
     ///
     /// Arguments:
@@ -237,8 +250,8 @@ impl DbClient {
     /// program. It is used to query the database and check if the program is verified.
     ///
     /// Returns: Whether the program is verified or not.
-    pub async fn check_is_program_verified_within_24hrs(
-        self,
+    pub async fn is_verified_within_24hrs(
+        &self,
         program_address: String,
     ) -> Result<VerificationResponse> {
         let res = self.get_verified_build(&program_address).await;
@@ -257,11 +270,7 @@ impl DbClient {
                                 is_verified: true,
                                 on_chain_hash: res.on_chain_hash,
                                 executable_hash: res.executable_hash,
-                                repo_url: build_params
-                                    .commit_hash
-                                    .map_or(build_params.repository.clone(), |hash| {
-                                        format!("{}/commit/{}", build_params.repository, hash)
-                                    }),
+                                repo_url: self.get_repo_url(&build_params).await,
                             }
                         });
                     }
@@ -288,11 +297,7 @@ impl DbClient {
                             is_verified: on_chain_hash == res.executable_hash,
                             on_chain_hash,
                             executable_hash: res.executable_hash,
-                            repo_url: build_params
-                                .commit_hash
-                                .map_or(build_params.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", build_params.repository, hash)
-                                }),
+                            repo_url: self.get_repo_url(&build_params).await,
                         }
                     })
                 } else {
@@ -302,11 +307,7 @@ impl DbClient {
                             is_verified: res.on_chain_hash == res.executable_hash,
                             on_chain_hash: res.on_chain_hash,
                             executable_hash: res.executable_hash,
-                            repo_url: build_params
-                                .commit_hash
-                                .map_or(build_params.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", build_params.repository, hash)
-                                }),
+                            repo_url: self.get_repo_url(&build_params).await,
                         }
                     })
                 }
