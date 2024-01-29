@@ -1,15 +1,16 @@
-use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::RunQueryDsl;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
-use r2d2_redis::redis::Commands;
+use r2d2_redis::redis::{Commands, FromRedisValue, Value};
 use r2d2_redis::{r2d2, RedisConnectionManager};
 
 use crate::builder::get_on_chain_hash;
+use crate::errors::ApiError;
 use crate::models::{
     SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
+use crate::Result;
 
 #[derive(Clone)]
 pub struct DbClient {
@@ -162,31 +163,42 @@ impl DbClient {
             Ok(conn) => conn,
             Err(err) => {
                 tracing::error!("Redis connection error: {}", err);
-                return Err(err.into());
+                return Err(ApiError::from(err));
             }
         };
-        let _: () = redis_conn.set_ex(program_address, value, 60).unwrap();
+        redis_conn
+            .set_ex(program_address, value, 60)
+            .map_err(|err| {
+                tracing::error!("Redis SET failed: {}", err);
+                ApiError::from(err)
+            })?;
         tracing::info!("Cache set for program: {}", program_address);
         Ok(())
     }
 
     // Redis cache GET program_hash and return the value
     pub async fn get_cache(&self, program_address: &str) -> Result<String> {
-        let cache_res = self.redis_pool.get();
-        let mut redis_conn = match cache_res {
-            Ok(conn) => conn,
-            Err(err) => {
-                tracing::error!("Redis connection error: {}", err);
-                return Err(err.into());
-            }
-        };
-        let res = redis_conn.get(program_address);
-        match res {
-            Ok(res) => Ok(res),
-            Err(err) => {
-                tracing::error!("Redis connection error: {}", err);
-                Err(err.into())
-            }
+        let cache_res = self.redis_pool.get().map_err(|err| {
+            tracing::error!("Redis connection error: {}", err);
+            ApiError::from(err)
+        })?;
+
+        let mut redis_conn = cache_res;
+
+        let value: Value = redis_conn.get(program_address).map_err(|err| {
+            tracing::error!("Redis connection error: {}", err);
+            ApiError::from(err)
+        })?;
+
+        match value {
+            Value::Nil => Err(ApiError::Custom(format!(
+                "Record not found for program: {}",
+                program_address
+            ))),
+            _ => FromRedisValue::from_redis_value(&value).map_err(|err| {
+                tracing::error!("Redis Value error: {}", err);
+                ApiError::from(err)
+            }),
         }
     }
 
