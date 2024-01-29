@@ -2,3 +2,4 @@
 .env
 nginx/
 nginx.conf
+redis.conf
