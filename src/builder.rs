@@ -1,12 +1,25 @@
 use tokio::process::Command;
 
 use crate::errors::ApiError;
-use crate::models::{SolanaProgramBuildParams, VerifiedProgram};
+use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 use crate::Result;
 use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 
 fn get_last_line(output: &str) -> Option<String> {
     output.lines().last().map(ToOwned::to_owned)
+}
+
+/// Create a URL for the repository of the program
+/// Arguments:
+/// * `res`: The `res` parameter is a `SolanaProgramBuild` struct that contains the repository
+/// and the commit hash of the program.
+/// Returns: A string that represents the URL of the repository.
+///
+pub fn get_repo_url(build_params: &SolanaProgramBuild) -> String {
+    build_params.commit_hash.as_ref().map_or_else(
+        || build_params.repository.clone(),
+        |hash| format!("{}/commit/{}", build_params.repository, hash),
+    )
 }
 
 fn extract_hash(output: &str, prefix: &str) -> Option<String> {

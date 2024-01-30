@@ -5,10 +5,10 @@ use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
 use r2d2_redis::redis::{Commands, FromRedisValue, Value};
 use r2d2_redis::{r2d2, RedisConnectionManager};
 
-use crate::builder::get_on_chain_hash;
+use crate::builder::{self, get_on_chain_hash};
 use crate::errors::ApiError;
 use crate::models::{
-    SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
 use crate::Result;
 
@@ -228,21 +228,10 @@ impl DbClient {
         }
     }
 
-    /// Create a URL for the repository of the program
-    /// Arguments:
-    /// * `res`: The `res` parameter is a `SolanaProgramBuild` struct that contains the repository
-    /// and the commit hash of the program.
-    /// Returns: A string that represents the URL of the repository.
-    ///
-    pub async fn get_repo_url(&self, build_params: &SolanaProgramBuild) -> String {
-        build_params.commit_hash.as_ref().map_or_else(
-            || build_params.repository.clone(),
-            |hash| format!("{}/commit/{}", build_params.repository, hash),
-        )
-    }
-
-    /// The function `is_verified_within_24hrs` checks if a program is verified within the last 24 hours
-    /// and rebuilds and verifies it if it is not.
+    /// The function `check_is_verified` checks if a program is verified or not.
+    /// It first checks onchain hash from chache and build hash from the database and compares them.
+    /// If they match, it returns true. If they don't match, it updates the onchain hash
+    /// in the database and starts a new build if onchain hash in db is also different from what we got
     ///
     /// Arguments:
     ///
@@ -250,10 +239,7 @@ impl DbClient {
     /// program. It is used to query the database and check if the program is verified.
     ///
     /// Returns: Whether the program is verified or not.
-    pub async fn is_verified_within_24hrs(
-        &self,
-        program_address: String,
-    ) -> Result<VerificationResponse> {
+    pub async fn check_is_verified(self, program_address: String) -> Result<VerificationResponse> {
         let res = self.get_verified_build(&program_address).await;
         match res {
             Ok(res) => {
@@ -261,23 +247,23 @@ impl DbClient {
                     .check_cache(&res.executable_hash, &program_address)
                     .await;
 
-                if let Ok(found) = cache_result {
-                    let build_params = self.get_build_params(&program_address).await?;
-                    if found {
-                        tracing::info!("Cache hit for program: {}", program_address);
+                let build_params = self.get_build_params(&program_address).await?;
+
+                if let Ok(matched) = cache_result {
+                    if matched {
+                        tracing::info!("Cache mached for program: {}", program_address);
                         return Ok({
                             VerificationResponse {
                                 is_verified: true,
                                 on_chain_hash: res.on_chain_hash,
                                 executable_hash: res.executable_hash,
-                                repo_url: self.get_repo_url(&build_params).await,
+                                repo_url: builder::get_repo_url(&build_params),
                             }
                         });
                     }
                 }
 
                 let on_chain_hash = get_on_chain_hash(&program_address).await;
-                let build_params = self.get_build_params(&program_address).await?;
 
                 if let Ok(on_chain_hash) = on_chain_hash {
                     self.set_cache(&program_address, &on_chain_hash).await?;
@@ -291,13 +277,14 @@ impl DbClient {
                             on_chain_hash == res.executable_hash,
                         )
                         .await?;
+                        self.reverify_program(build_params.clone());
                     }
                     Ok({
                         VerificationResponse {
                             is_verified: on_chain_hash == res.executable_hash,
                             on_chain_hash,
                             executable_hash: res.executable_hash,
-                            repo_url: self.get_repo_url(&build_params).await,
+                            repo_url: builder::get_repo_url(&build_params),
                         }
                     })
                 } else {
@@ -307,7 +294,7 @@ impl DbClient {
                             is_verified: res.on_chain_hash == res.executable_hash,
                             on_chain_hash: res.on_chain_hash,
                             executable_hash: res.executable_hash,
-                            repo_url: self.get_repo_url(&build_params).await,
+                            repo_url: builder::get_repo_url(&build_params),
                         }
                     })
                 }
@@ -351,5 +338,41 @@ impl DbClient {
             .execute(conn)
             .await
             .map_err(Into::into)
+    }
+
+    pub fn reverify_program(self, build_params: SolanaProgramBuild) {
+        let payload = SolanaProgramBuildParams {
+            program_id: build_params.program_id,
+            repository: build_params.repository,
+            commit_hash: build_params.commit_hash,
+            lib_name: build_params.lib_name,
+            base_image: build_params.base_docker_image,
+            mount_path: build_params.mount_path,
+            bpf_flag: Some(build_params.bpf_flag),
+            cargo_args: build_params.cargo_args,
+        };
+
+        let build_id = build_params.id;
+
+        //run task in background
+        tokio::spawn(async move {
+            match builder::verify_build(payload, &build_id).await {
+                Ok(res) => {
+                    let _ = self.insert_or_update_verified_build(&res).await;
+                    let _ = self
+                        .update_build_status(&build_id, JobStatus::Completed.into())
+                        .await;
+                }
+                Err(err) => {
+                    let _ = self
+                        .update_build_status(&build_id, JobStatus::Failed.into())
+                        .await;
+                    tracing::error!("Error verifying build: {:?}", err);
+                    tracing::error!(
+                        "We encountered an unexpected error during the verification process."
+                    );
+                }
+            }
+        });
     }
 }

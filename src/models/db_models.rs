@@ -3,7 +3,9 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset)]
+#[derive(
+    Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+)]
 #[diesel(table_name = solana_program_builds, primary_key(id))]
 pub struct SolanaProgramBuild {
     pub id: String,
