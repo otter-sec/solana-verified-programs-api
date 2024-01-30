@@ -202,12 +202,12 @@ impl DbClient {
         }
     }
 
-    pub async fn check_cache(&self, build_hash: &str, program_address: &str) -> Result<bool> {
+    pub async fn check_cache(&self, hash: &str, program_address: &str) -> Result<bool> {
         // Try to get the program from the cache and check if the hash matches
         let cache_res = self.get_cache(program_address).await;
         match cache_res {
             Ok(res) => {
-                if res == build_hash {
+                if res == hash {
                     tracing::info!(
                         "Cache hit for program: {} And hash matches",
                         program_address
