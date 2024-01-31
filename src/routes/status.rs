@@ -8,7 +8,7 @@ pub(crate) async fn verify_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    match db.check_is_program_verified_within_24hrs(address).await {
+    match db.check_is_verified(address).await {
         Ok(result) => Json(
             StatusResponse {
                 is_verified: result.is_verified,

@@ -5,19 +5,22 @@ services:
     image: postgres:latest
     env_file: .env
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - /pgdata:/var/lib/postgresql/data
       - ./migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/init.sql
 
   redis:
     image: redis:6.2-alpine
+    env_file: .env
     restart: always
     container_name: redisserver
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
-      - redis-data:/data
+      - "~/data/redis/data:/data"
+      - "./redis.conf:/conf/redis.conf"
+    command: sh -c 'redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
 
   api:
     build:
@@ -46,6 +49,3 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
       - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
-
-volumes:
-  redis-data:

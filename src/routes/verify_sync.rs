@@ -74,23 +74,8 @@ pub(crate) async fn verify_sync(
                 );
             }
             JobStatus::Failed => {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(
-                        StatusResponse {
-                            is_verified: false,
-                            message:  "The previous request has already been processed, but unfortunately, the verification process has failed.".to_string(),
-                            on_chain_hash: "".to_string(),
-                            executable_hash: "".to_string(),
-                            repo_url: verify_build_data
-                                .commit_hash
-                                .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
-                                }),
-                        }
-                        .into(),
-                    ),
-                );
+                // Retry build
+                tracing::info!("Previous build failed for this program. Initiating new build");
             }
         }
     }

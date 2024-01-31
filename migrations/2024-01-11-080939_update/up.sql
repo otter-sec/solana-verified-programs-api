@@ -3,7 +3,7 @@
 ALTER TABLE solana_program_builds ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'in_progress';
 
 -- For 1:1 mapping between solana_program_builds and verified_programs
-ALTER TABLE verified_programs ADD COLUMN solana_build_id VARCHAR NOT NULL;
+ALTER TABLE verified_programs ADD COLUMN solana_build_id VARCHAR NOT NULL DEFAULT 'null';
 
 -- Update the solana_build_id column in verified_programs based on the corresponding id from solana_program_builds
 UPDATE verified_programs SET solana_build_id = solana_program_builds.id

@@ -22,6 +22,9 @@ pub enum ApiError {
     Redis(#[from] r2d2_redis::r2d2::Error),
 
     #[error(transparent)]
+    RedisError(#[from] redis::RedisError),
+
+    #[error(transparent)]
     RedisPool(#[from] r2d2_redis::redis::RedisError),
 
     #[error(transparent)]

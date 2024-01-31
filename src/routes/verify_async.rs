@@ -62,17 +62,8 @@ pub(crate) async fn verify_async(
                 );
             }
             JobStatus::Failed => {
-                // Return error to user
-                return (
-                    StatusCode::CONFLICT,
-                    Json(
-                        ErrorResponse {
-                            status: Status::Error,
-                            error: "The previous request has already been processed, but unfortunately, the verification process has failed.".to_string(),
-                        }
-                        .into(),
-                    ),
-                );
+                // Retry build
+                tracing::info!("Previous build failed for this program. Initiating new build");
             }
         }
     }
