@@ -19,9 +19,10 @@ $ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqL
 {
   "is_verified": true,
   "message": "On chain program verified",
-  "on_chain_hash": "6877a5b732b3494b828a324ec846d526d962223959534dbaf4209e0da3b2d6a9",
-  "executable_hash": "6877a5b732b3494b828a324ec846d526d962223959534dbaf4209e0da3b2d6a9",
-  "repo_url": "https://github.com/Ellipsis-Labs/phoenix-v1"
+  "on_chain_hash": "5bdb733d10c170fbe08912d258bca0bd15dc52ae4919b7db162f44fa0608516b",
+  "executable_hash": "5bdb733d10c170fbe08912d258bca0bd15dc52ae4919b7db162f44fa0608516b",
+  "last_verified_at": "2024-02-06T11:36:03.547955",
+  "repo_url": "https://github.com/Squads-Protocol/v4/commit/3742e5521a3e833f24a4c6bc024dd1aa5385d010"
 }
 ```
 
