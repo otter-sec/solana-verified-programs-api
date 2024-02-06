@@ -49,6 +49,7 @@ pub(crate) async fn verify_sync(
                                 .map_or(verify_build_data.repository.clone(), |hash| {
                                     format!("{}/commit/{}", verify_build_data.repository, hash)
                                 }),
+                            last_verified_at: Some(verified_build.verified_at),
                         }
                         .into(),
                     ),
@@ -68,6 +69,7 @@ pub(crate) async fn verify_sync(
                                 .map_or(verify_build_data.repository.clone(), |hash| {
                                     format!("{}/commit/{}", verify_build_data.repository, hash)
                                 }),
+                            last_verified_at: None,
                         }
                         .into(),
                     ),
@@ -116,6 +118,7 @@ pub(crate) async fn verify_sync(
                         },
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
+                        last_verified_at: Some(res.verified_at),
                         repo_url: verify_build_data
                             .commit_hash
                             .map_or(verify_build_data.repository.clone(), |hash| {

@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 use super::JobStatus;
@@ -9,6 +10,7 @@ pub struct VerificationResponse {
     pub on_chain_hash: String,
     pub executable_hash: String,
     pub repo_url: String,
+    pub last_verified_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +32,7 @@ pub struct StatusResponse {
     pub message: String,
     pub on_chain_hash: String,
     pub executable_hash: String,
+    pub last_verified_at: Option<NaiveDateTime>,
     pub repo_url: String,
 }
 
