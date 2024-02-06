@@ -344,6 +344,19 @@ impl DbClient {
             .map_err(Into::into)
     }
 
+    // get all verified programs from verified_programs table
+    pub async fn get_verified_programs(&self) -> Result<Vec<VerifiedProgram>> {
+        use crate::schema::verified_programs::dsl::*;
+
+        let conn = &mut self.db_pool.get().await?;
+        // get all verified programs where is_verified is true
+        verified_programs
+            .filter(is_verified.eq(true))
+            .load::<VerifiedProgram>(conn)
+            .await
+            .map_err(Into::into)
+    }
+
     pub fn reverify_program(self, build_params: SolanaProgramBuild) {
         let payload = SolanaProgramBuildParams {
             program_id: build_params.program_id,

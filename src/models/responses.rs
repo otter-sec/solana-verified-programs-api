@@ -90,3 +90,9 @@ pub struct JobVerificationResponse {
     pub executable_hash: String,
     pub repo_url: String,
 }
+
+// Responses for the /verified_programs endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifiedProgramListResponse {
+    pub verified_programs: Vec<String>,
+}
