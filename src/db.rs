@@ -258,6 +258,7 @@ impl DbClient {
                                 on_chain_hash: res.on_chain_hash,
                                 executable_hash: res.executable_hash,
                                 repo_url: builder::get_repo_url(&build_params),
+                                last_verified_at: Some(res.verified_at),
                             }
                         });
                     }
@@ -285,6 +286,7 @@ impl DbClient {
                             on_chain_hash,
                             executable_hash: res.executable_hash,
                             repo_url: builder::get_repo_url(&build_params),
+                            last_verified_at: Some(res.verified_at),
                         }
                     })
                 } else {
@@ -295,6 +297,7 @@ impl DbClient {
                             on_chain_hash: res.on_chain_hash,
                             executable_hash: res.executable_hash,
                             repo_url: builder::get_repo_url(&build_params),
+                            last_verified_at: Some(res.verified_at),
                         }
                     })
                 }
@@ -308,6 +311,7 @@ impl DbClient {
                             on_chain_hash: "".to_string(),
                             executable_hash: "".to_string(),
                             repo_url: "".to_string(),
+                            last_verified_at: None,
                         }
                     });
                 }

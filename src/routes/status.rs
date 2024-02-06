@@ -18,6 +18,7 @@ pub(crate) async fn verify_status(
                     "On chain program not verified".to_string()
                 },
                 on_chain_hash: result.on_chain_hash,
+                last_verified_at: result.last_verified_at,
                 executable_hash: result.executable_hash,
                 repo_url: result.repo_url,
             }
