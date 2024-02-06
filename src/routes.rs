@@ -1,11 +1,12 @@
 mod job;
 mod status;
+mod verified_programs;
 mod verify_async;
 mod verify_sync;
 use crate::db::DbClient;
 use crate::routes::{
-    job::get_job_status, status::verify_status, verify_async::verify_async,
-    verify_sync::verify_sync,
+    job::get_job_status, status::verify_status, verified_programs::get_verified_programs_list,
+    verify_async::verify_async, verify_sync::verify_sync,
 };
 use axum::{
     error_handling::HandleErrorLayer,
@@ -89,6 +90,13 @@ pub fn create_router(db: DbClient) -> Router {
                 .layer(CompressionLayer::new().zstd(true)),
         )
         .route("/job/:job_id", get(get_job_status))
+        .layer(
+            global_rate_limit(10000)
+                .layer(rate_limit_per_ip(1, 100))
+                .layer(cors(Method::GET))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
+        .route("/verified-programs", get(get_verified_programs_list))
         .layer(
             global_rate_limit(10000)
                 .layer(rate_limit_per_ip(1, 100))
