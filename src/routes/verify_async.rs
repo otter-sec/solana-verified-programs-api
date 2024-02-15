@@ -1,11 +1,11 @@
 use crate::builder::verify_build;
 use crate::db::DbClient;
+use crate::errors::ErrorMessages;
 use crate::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     VerifyResponse,
 };
 use axum::{extract::State, http::StatusCode, Json};
-use chrono::Utc;
 
 // Route handler for POST /verify which creates a new process to verify the program
 pub(crate) async fn verify_async(
@@ -13,19 +13,7 @@ pub(crate) async fn verify_async(
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
     let uuid = uuid::Uuid::new_v4().to_string();
-    let verify_build_data = SolanaProgramBuild {
-        id: uuid.clone(),
-        repository: payload.repository.clone(),
-        commit_hash: payload.commit_hash.clone(),
-        program_id: payload.program_id.clone(),
-        lib_name: payload.lib_name.clone(),
-        bpf_flag: payload.bpf_flag.unwrap_or(false),
-        created_at: Utc::now().naive_utc(),
-        base_docker_image: payload.base_image.clone(),
-        mount_path: payload.mount_path.clone(),
-        cargo_args: payload.cargo_args.clone(),
-        status: JobStatus::InProgress.into(),
-    };
+    let verify_build_data = SolanaProgramBuild::from(&payload);
 
     // Check if the build was already processed
     let is_duplicate = db.check_for_dupliate(&payload).await;
@@ -76,7 +64,7 @@ pub(crate) async fn verify_async(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.".to_string(),
+                    error: ErrorMessages::DB.to_string(),
                 }
                 .into(),
             ),
@@ -99,9 +87,7 @@ pub(crate) async fn verify_async(
                     .update_build_status(&verify_build_data.id, JobStatus::Failed.into())
                     .await;
                 tracing::error!("Error verifying build: {:?}", err);
-                tracing::error!(
-                    "We encountered an unexpected error during the verification process."
-                );
+                tracing::error!("{:?}", ErrorMessages::Unexpected.to_string());
             }
         }
     });

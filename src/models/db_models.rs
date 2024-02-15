@@ -1,7 +1,9 @@
 use crate::schema::{solana_program_builds, verified_programs};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use super::SolanaProgramBuildParams;
 
 #[derive(
     Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
@@ -19,6 +21,25 @@ pub struct SolanaProgramBuild {
     pub bpf_flag: bool,
     pub created_at: NaiveDateTime,
     pub status: String,
+}
+
+impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
+    fn from(params: &'a SolanaProgramBuildParams) -> Self {
+        let uuid = uuid::Uuid::new_v4().to_string();
+        SolanaProgramBuild {
+            id: uuid.clone(),
+            repository: params.repository.clone(),
+            commit_hash: params.commit_hash.clone(),
+            program_id: params.program_id.clone(),
+            lib_name: params.lib_name.clone(),
+            bpf_flag: params.bpf_flag.unwrap_or(false),
+            created_at: Utc::now().naive_utc(),
+            base_docker_image: params.base_image.clone(),
+            mount_path: params.mount_path.clone(),
+            cargo_args: params.cargo_args.clone(),
+            status: JobStatus::InProgress.into(),
+        }
+    }
 }
 
 #[derive(
