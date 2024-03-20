@@ -1,4 +1,4 @@
-use std::string::FromUtf8Error;
+use std::{fmt, string::FromUtf8Error};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -29,4 +29,19 @@ pub enum ApiError {
 
     #[error(transparent)]
     DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError),
+}
+
+pub enum ErrorMessages {
+    Unexpected,
+    DB,
+}
+
+impl fmt::Display for ErrorMessages {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            ErrorMessages::Unexpected => "We encountered an unexpected error during the verification process.",
+            ErrorMessages::DB => "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.",
+        };
+        write!(f, "{}", message)
+    }
 }

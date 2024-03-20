@@ -1,29 +1,17 @@
 use crate::builder::verify_build;
 use crate::db::DbClient;
+use crate::errors::ErrorMessages;
 use crate::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     StatusResponse,
 };
 use axum::{extract::State, http::StatusCode, Json};
-use chrono::Utc;
 
 pub(crate) async fn verify_sync(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let verify_build_data = SolanaProgramBuild {
-        id: uuid::Uuid::new_v4().to_string(),
-        repository: payload.repository.clone(),
-        commit_hash: payload.commit_hash.clone(),
-        program_id: payload.program_id.clone(),
-        lib_name: payload.lib_name.clone(),
-        bpf_flag: payload.bpf_flag.unwrap_or(false),
-        created_at: Utc::now().naive_utc(),
-        base_docker_image: payload.base_image.clone(),
-        mount_path: payload.mount_path.clone(),
-        cargo_args: payload.cargo_args.clone(),
-        status: JobStatus::InProgress.into(),
-    };
+    let verify_build_data = SolanaProgramBuild::from(&payload);
 
     // First check if the program is already verified
     let is_duplicate = db.check_for_dupliate(&payload).await;
@@ -90,7 +78,7 @@ pub(crate) async fn verify_sync(
             Json(
                 ErrorResponse {
                     status: Status::Error,
-                    error: "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.".to_string(),
+                    error: ErrorMessages::DB.to_string(),
                 }
                 .into(),
             ),
@@ -139,9 +127,7 @@ pub(crate) async fn verify_sync(
                 Json(
                     ErrorResponse {
                         status: Status::Error,
-                        error:
-                            "We encountered an unexpected error during the verification process."
-                                .to_string(),
+                        error: ErrorMessages::Unexpected.to_string(),
                     }
                     .into(),
                 ),

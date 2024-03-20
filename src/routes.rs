@@ -126,8 +126,21 @@ fn index() -> Json<Value> {
                         "base_image": "(Optional) Base docker image to use for building the program.",
                         "mount_path": "(Optional) Mount path for the repository.",
                         "cargo_args": "(Optional) Cargo args to pass to the build command. It should be Vector of strings."
+                    },
+                },
+                {
+                    "path": "/status/:address",
+                    "method": "GET",
+                    "description": "Check the verification status of a program by its address",
+                    "params": {
+                        "address": "Address of the mainnet program to check the verification status"
                     }
                 },
+                {
+                    "path": "/verified-programs",
+                    "method": "GET",
+                    "description": "Get the list of verified programs"
+                }
             ]
         })
     );
