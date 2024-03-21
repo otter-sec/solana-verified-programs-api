@@ -1,0 +1,26 @@
+[package]
+name = "verified_programs_api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.6.18"
+libc = "0.2"
+redis = "0.23.2"
+r2d2_redis = "0.14.0"
+uuid = { version = "1.4.0", features = ["v4", "fast-rng"] }
+
+tower = { version = "0.4", features = ["full"] }
+tower_governor = { version = "0.0.4" }
+tower-http = { version = "0.4", features = ["full"] }
+
+thiserror = { version = "1.0.44"}
+chrono = { version = "0.4.35", features = ["serde"] }
+diesel = { version = "2.1.0", features = ["postgres", "chrono"] }
+diesel-async = { version = "0.3.1", features = ["postgres", "deadpool"] }
+dotenv = { version = "0.15"}
+serde = { version = "1.0.166", features = ["derive"] }
+serde_json = { version = "1.0.99"}
+tokio = { version = "1.29.1", features = ["full"] }
+tracing = { version = "0.1.37"}
+tracing-subscriber = { version = "0.3.17", features = ["json"] }

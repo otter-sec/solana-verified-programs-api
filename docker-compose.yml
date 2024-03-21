@@ -1,31 +1,31 @@
 version: '3'
 services:
-
   db:
-    image: postgres:latest
+    image: postgres:13.3
+    platform: linux/amd64
     env_file: .env
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - /pgdata:/var/lib/postgresql/data
+      - ./backupdata:/var/lib/postgresql/data
       - ./migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/init.sql
 
   redis:
-    image: redis:6.2-alpine
+    image: redis
     env_file: .env
     restart: always
     container_name: redisserver
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - "/redisdata/:/data"
-      - "./redis.conf:/conf/redis.conf"
-    command: sh -c 'redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
+      - ./redisdata/:/data
+      - ./redis.conf:/conf/redis.conf
+    command: sh -c 'chmod +x /conf/redis.conf && redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
 
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./api/Dockerfile
     ports:
       - "3000:3000"
     env_file: .env
@@ -36,16 +36,24 @@ services:
       - db
       - redis
 
-  nginx:
-    image: nginx:latest
-    ports:
-      - "80:80"
-      - "443:443"
+  # nginx:
+  #   image: nginx:latest
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   depends_on:
+  #     - api
+  #   links:
+  #     - api
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #     - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
+  #     - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+
+  crawler:
+    build:
+      context: .
+      dockerfile: ./crawler/Dockerfile
+    env_file: .env
     depends_on:
-      - api
-    links:
-      - api
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
-      - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+      - db
