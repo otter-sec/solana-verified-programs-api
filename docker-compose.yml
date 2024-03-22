@@ -20,7 +20,7 @@ services:
     volumes:
       - ./redisdata/:/data
       - ./redis.conf:/conf/redis.conf
-    command: sh -c 'chmod +x /conf/redis.conf && redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
+    command: sh -c 'redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
 
   api:
     build:
