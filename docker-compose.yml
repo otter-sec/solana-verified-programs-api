@@ -39,19 +39,19 @@ services:
       - db
       - redis
 
-  # nginx:
-  #   image: nginx:latest
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   depends_on:
-  #     - api
-  #   links:
-  #     - api
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf
-  #     - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
-  #     - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    links:
+      - api
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
+      - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
 
   crawler:
     build:
