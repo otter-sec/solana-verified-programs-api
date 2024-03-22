@@ -4,11 +4,14 @@ services:
     image: postgres:13.3
     platform: linux/amd64
     env_file: .env
+    restart: always
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - ./backupdata:/var/lib/postgresql/data
-      - ./migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./api/migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/initdb1.sql
+      - ./api/migrations/2024-01-11-080939_update/up.sql:/docker-entrypoint-initdb.d/initdb2.sql
+      - ./crawler/migrations/2024-03-11-035137_mainnet_programs/up.sql:/docker-entrypoint-initdb.d/initdb3.sql
 
   redis:
     image: redis

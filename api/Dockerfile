@@ -4,7 +4,6 @@ WORKDIR /solana_verified_program_api
 # Copy the entire project directory to the Docker image
 COPY api ./api
 COPY schema.rs .
-COPY diesel.toml .
 COPY .env .
 
 WORKDIR /solana_verified_program_api/api
