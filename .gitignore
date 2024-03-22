@@ -4,3 +4,5 @@ nginx/
 nginx.conf
 redis.conf
 /backupdata
+*/Cargo.lock
+redisdata
