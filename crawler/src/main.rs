@@ -8,10 +8,7 @@ mod db;
 mod errors;
 mod github;
 mod helper;
-
-mod schema {
-    include!("../../schema.rs");
-}
+mod schema;
 
 const RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 

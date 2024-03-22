@@ -2,7 +2,6 @@ FROM --platform=linux/amd64 rust:1.74 as crawler_build
 WORKDIR /solana_verified_program_api
 
 COPY crawler ./crawler
-COPY schema.rs .
 COPY .env .
 
 WORKDIR /solana_verified_program_api/crawler

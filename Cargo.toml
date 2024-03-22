@@ -1,4 +1,0 @@
-[workspace]
-members = ["crawler", "api"]
-
-[workspace.dependencies]

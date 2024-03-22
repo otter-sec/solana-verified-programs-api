@@ -50,7 +50,8 @@ pub async fn get_program_security_text(
         .get_account(program_data_address)
         .map_err(|_| CrawlerErrors::ProgramClosed(pubkey.to_string()))?;
 
-    let offset = UpgradeableLoaderState::size_of_programdata_metadata();
+    let offset = UpgradeableLoaderState::programdata_data_offset()
+        .map_err(CrawlerErrors::FailedToGetProgramDataOffset)?;
 
     // Get ProgramData Slot from the account
     if let Ok(UpgradeableLoaderState::ProgramData {
