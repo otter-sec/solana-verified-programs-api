@@ -1,0 +1,10 @@
+cargo:rerun-if-env-changed=PQ_LIB_STATIC
+cargo:rerun-if-env-changed=TARGET
+cargo:rerun-if-env-changed="PQ_LIB_DIR_AARCH64_APPLE_DARWIN"
+"PQ_LIB_DIR_AARCH64_APPLE_DARWIN" = Err(NotPresent)
+cargo:rerun-if-env-changed="PQ_LIB_DIR"
+"PQ_LIB_DIR" = Err(NotPresent)
+cargo:rerun-if-env-changed=PG_CONFIG_AARCH64_APPLE_DARWIN
+cargo:rustc-link-search=native=/opt/homebrew/opt/libpq/lib
+cargo:rerun-if-env-changed=PQ_LIB_STATIC_AARCH64_APPLE_DARWIN
+cargo:rustc-link-lib=pq

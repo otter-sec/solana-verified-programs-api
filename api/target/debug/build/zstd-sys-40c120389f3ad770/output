@@ -1,0 +1,182 @@
+cargo:rerun-if-env-changed=ZSTD_SYS_USE_PKG_CONFIG
+TARGET = Some("aarch64-apple-darwin")
+OPT_LEVEL = Some("0")
+HOST = Some("aarch64-apple-darwin")
+cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
+CC_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CC_aarch64_apple_darwin
+CC_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+DEBUG = Some("true")
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:rerun-if-env-changed=CFLAGS_aarch64-apple-darwin
+CFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CFLAGS_aarch64_apple_darwin
+CFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
+CC_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CC_aarch64_apple_darwin
+CC_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:rerun-if-env-changed=CFLAGS_aarch64-apple-darwin
+CFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CFLAGS_aarch64_apple_darwin
+CFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
+CC_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CC_aarch64_apple_darwin
+CC_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:rerun-if-env-changed=CFLAGS_aarch64-apple-darwin
+CFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CFLAGS_aarch64_apple_darwin
+CFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=CC_aarch64-apple-darwin
+CC_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CC_aarch64_apple_darwin
+CC_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:rerun-if-env-changed=CFLAGS_aarch64-apple-darwin
+CFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CFLAGS_aarch64_apple_darwin
+CFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' from command line tools installation
+cargo:warning=xcrun: error: unable to lookup item 'PlatformVersion' in SDK '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+exit status: 0
+cargo:rerun-if-env-changed=AR_aarch64-apple-darwin
+AR_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=AR_aarch64_apple_darwin
+AR_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_AR
+HOST_AR = None
+cargo:rerun-if-env-changed=AR
+AR = None
+cargo:rerun-if-env-changed=ARFLAGS_aarch64-apple-darwin
+ARFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=ARFLAGS_aarch64_apple_darwin
+ARFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_ARFLAGS
+HOST_ARFLAGS = None
+cargo:rerun-if-env-changed=ARFLAGS
+ARFLAGS = None
+cargo:rustc-link-lib=static=zstd
+cargo:rustc-link-search=native=/Users/0x4ka5h/Documents/intern/osec/development/solana_verified_programs_api/api/target/debug/build/zstd-sys-40c120389f3ad770/out
+cargo:root=/Users/0x4ka5h/Documents/intern/osec/development/solana_verified_programs_api/api/target/debug/build/zstd-sys-40c120389f3ad770/out
+cargo:include=/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/zstd-sys-2.0.9+zstd.1.5.5/zstd/lib

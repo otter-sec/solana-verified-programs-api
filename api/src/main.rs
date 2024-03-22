@@ -11,10 +11,7 @@ mod db;
 mod errors;
 mod models;
 mod routes;
-
-mod schema {
-    include!("../../schema.rs");
-}
+mod schema;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 

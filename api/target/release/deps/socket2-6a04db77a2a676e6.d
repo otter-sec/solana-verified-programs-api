@@ -1,0 +1,11 @@
+/Users/0x4ka5h/Documents/intern/osec/development/solana_verified_programs_api/api/target/release/deps/libsocket2-6a04db77a2a676e6.rmeta: /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/lib.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockaddr.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/socket.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockref.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sys/unix.rs
+
+/Users/0x4ka5h/Documents/intern/osec/development/solana_verified_programs_api/api/target/release/deps/libsocket2-6a04db77a2a676e6.rlib: /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/lib.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockaddr.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/socket.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockref.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sys/unix.rs
+
+/Users/0x4ka5h/Documents/intern/osec/development/solana_verified_programs_api/api/target/release/deps/socket2-6a04db77a2a676e6.d: /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/lib.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockaddr.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/socket.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockref.rs /Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sys/unix.rs
+
+/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/lib.rs:
+/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockaddr.rs:
+/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/socket.rs:
+/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sockref.rs:
+/Users/0x4ka5h/.cargo/registry/src/index.crates.io-6f17d22bba15001f/socket2-0.5.6/src/sys/unix.rs:
