@@ -1,17 +1,20 @@
 version: '3'
 services:
-
   db:
-    image: postgres:latest
+    image: postgres:13.3
+    platform: linux/amd64
     env_file: .env
+    restart: always
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - /pgdata:/var/lib/postgresql/data
-      - ./migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./api/migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/initdb1.sql
+      - ./api/migrations/2024-01-11-080939_update/up.sql:/docker-entrypoint-initdb.d/initdb2.sql
+      - ./crawler/migrations/2024-03-11-035137_mainnet_programs/up.sql:/docker-entrypoint-initdb.d/initdb3.sql
 
   redis:
-    image: redis:6.2-alpine
+    image: redis
     env_file: .env
     restart: always
     container_name: redisserver
@@ -25,7 +28,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./api/Dockerfile
     ports:
       - "3000:3000"
     env_file: .env
@@ -49,3 +52,11 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
       - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+
+  crawler:
+    build:
+      context: .
+      dockerfile: ./crawler/Dockerfile
+    env_file: .env
+    depends_on:
+      - db

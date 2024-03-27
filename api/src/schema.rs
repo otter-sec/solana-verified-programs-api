@@ -1,5 +1,3 @@
-// @generated automatically by Diesel CLI.
-
 diesel::table! {
     solana_program_builds (id) {
         id -> Varchar,

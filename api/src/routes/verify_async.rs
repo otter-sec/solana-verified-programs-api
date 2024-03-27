@@ -12,8 +12,8 @@ pub(crate) async fn verify_async(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let uuid = uuid::Uuid::new_v4().to_string();
     let verify_build_data = SolanaProgramBuild::from(&payload);
+    let uuid = verify_build_data.id.clone();
 
     // Check if the build was already processed
     let is_duplicate = db.check_for_dupliate(&payload).await;
