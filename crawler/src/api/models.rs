@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct BuildCommandArgs {
     pub repo: String,
     pub program_id: String,
-    pub command: String,
+    pub command: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

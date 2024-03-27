@@ -111,7 +111,8 @@ pub fn extract_build_params(input: &BuildCommandArgs) -> SolanaProgramBuildParam
     let mut cargo_args = Vec::new();
     let mut is_cargo_args = false;
 
-    let mut tokens = input.command.split_whitespace().peekable();
+    // Use iterator on Vec<&str> to get the next token
+    let mut tokens = input.command.iter();
 
     while let Some(token) = tokens.next() {
         if is_cargo_args {
@@ -119,7 +120,7 @@ pub fn extract_build_params(input: &BuildCommandArgs) -> SolanaProgramBuildParam
             continue;
         }
 
-        match token {
+        match token.as_str() {
             "solana-verify" | "verify-from-repo" => {} // Ignore command and repo
             "--commit-hash" => {
                 params.commit_hash = Some(tokens.next().unwrap().to_string());
@@ -171,14 +172,14 @@ pub async fn start_verification(source_code: &str) -> Result<()> {
     let json_params = github_client.get_verification_json().await?;
 
     for (key, arr) in json_params {
-        let params = if let Value::Array(arr) = arr.clone() {
+        let params = if let Value::Array(arr) = arr {
             arr.iter()
-                .map(|v| v.as_str().unwrap_or_default())
-                .collect::<Vec<&str>>()
-                .join(" ")
+                .map(|v| v.as_str().unwrap_or_default().to_owned())
+                .collect::<Vec<String>>()
         } else {
-            "".to_string()
+            Vec::new()
         };
+
         let params = BuildCommandArgs {
             repo: source_code.to_string(),
             program_id: key.to_string(),
@@ -201,13 +202,12 @@ mod tests {
         let json_params = client.get_verification_json().await.unwrap();
 
         for (key, arr) in json_params {
-            let params = if let Value::Array(arr) = arr.clone() {
+            let params = if let Value::Array(arr) = arr {
                 arr.iter()
-                    .map(|v| v.as_str().unwrap_or_default())
-                    .collect::<Vec<&str>>()
-                    .join(" ")
+                    .map(|v| v.as_str().unwrap_or_default().to_owned())
+                    .collect::<Vec<String>>()
             } else {
-                "".to_string()
+                Vec::new()
             };
             let params = BuildCommandArgs {
                 repo: github_repo.to_string(),
