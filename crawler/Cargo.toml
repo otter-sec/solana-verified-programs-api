@@ -3,27 +3,26 @@
 name = "crawler"
 version = "0.1.0"
 edition = "2021"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-diesel = { version = "2.1.0", features = ["postgres", "chrono"] }
-diesel-async = { version = "0.3.1", features = ["postgres", "deadpool"] }
-reqwest = { version = "0.11.24", features = ["blocking", "json"] }
-serde = { version = "1.0.166", features = ["derive"] }
-serde_json = "1.0.99"
-tokio = { version = "1.29.1", features = ["full"] }
-dotenv = "0.15"
-tracing = "0.1.37"
-tracing-subscriber = "0.3.17"
 
 anyhow = "1.0.80"
 bincode = "1.3.3"
+chrono = { version = "0.4.35", features = ["serde"] }
 crossbeam-channel = "0.5.11"
+diesel = { version = "2.1.0", features = ["postgres", "chrono"] }
+diesel-async = { version = "0.3.1", features = ["postgres", "deadpool"] }
+dotenv = "0.15"
+reqwest = { version = "0.11.24", features = ["blocking", "json"] }
+serde = { version = "1.0.166", features = ["derive"] }
+serde_json = "1.0.99"
 solana-account-decoder = "1.12.0"
 solana-client = "1.12.0"
 solana-sdk = "1.12.0"
-chrono = { version = "0.4.35", features = ["serde"] }
 
-solana-security-txt = {version = "1.1.1", features = ["parser"] }
+solana-security-txt = { version = "1.1.1", features = ["parser"] }
 thiserror = { version = "1.0.30" }
+tokio = { version = "1.29.1", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
