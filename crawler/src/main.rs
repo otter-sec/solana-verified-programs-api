@@ -43,33 +43,22 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use solana_sdk::pubkey::Pubkey;
-    // use std::str::FromStr;
-
-    // #[test]
-    // fn test_get_program_security_text() {
-    //     let pubkey = Pubkey::from_str("CSwAp3hdedZJBmhWMjv8BJ7anTLMQ2hBqKdnXV5bB3Nz").unwrap();
-    //     let result = helper::get_program_security_text(&pubkey);
-
-    //     assert!(result.is_ok());
-
-    //     let source_link = result.unwrap().source_code.unwrap();
-    //     assert_eq!(source_link, "https://github.com/rally-dfs/canonical-swap");
-    // }
-
-    // #[test]
-    // fn test_get_program_security_text_invalid() {
-    //     let pubkey = Pubkey::from_str("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").unwrap();
-    //     let result = helper::get_program_security_text(&pubkey);
-    //     assert!(result.is_err());
-    // }
+    use crate::api::models::BuildCommandArgs;
+    use crate::helper::extract_build_params;
+    use serde_json::Value;
 
     #[tokio::test]
     async fn test_build_program() {
         let args = api::models::BuildCommandArgs {
             repo: "https://github.com/Squads-Protocol/squads-mpl".to_string(),
             program_id: "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu".to_string(),
-            command: "--commit-hash c95b7673d616c377a349ca424261872dfcf8b19d -um --library-name squads_mpl --bpf ".to_string(),
+            command: vec![
+                "--commit-hash".to_string(),
+                "c95b7673d616c377a349ca424261872dfcf8b19d".to_string(),
+                "--library-name".to_string(),
+                "squads_mpl".to_string(),
+                "--bpf".to_string(),
+            ],
         };
         let build_params = helper::extract_build_params(&args);
 
@@ -82,5 +71,37 @@ mod tests {
         helper::start_verification("https://github.com/Ellipsis-Labs/phoenix-v1/")
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_json_verification() {
+        let json_str = r#"{
+        "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH": [
+            "--commit-hash",
+            "8d2cd726afdc800f89c841ff3cf1968980719df0",
+            "--library-name",
+            "drift"
+        ]
+    }"#;
+        let json: Value = serde_json::from_str(json_str).unwrap();
+        let map = json.as_object().unwrap();
+        for (key, arr) in map {
+            println!("{:?}", key);
+            let params = if let Value::Array(arr) = arr {
+                arr.iter()
+                    .map(|v| v.as_str().unwrap_or_default().to_owned())
+                    .collect::<Vec<String>>()
+            } else {
+                Vec::new()
+            };
+            let params = BuildCommandArgs {
+                repo: "https://github.com/drift-labs/protocol-v2/".to_string(),
+                program_id: key.to_string(),
+                command: params,
+            };
+
+            let build_params = extract_build_params(&params);
+            assert!(build_params.commit_hash.is_some());
+        }
     }
 }
