@@ -15,10 +15,10 @@ use crate::db::client::DbClient;
 use crate::errors;
 
 // Crawl the mainnet programs and write them to a file
-pub async fn crawl_mainnet_programs(db: &DbClient) {
+pub async fn crawl_mainnet_programs(db: &DbClient, rpc_url: &str) {
     let timeout = Duration::from_secs(3600);
 
-    let client = RpcClient::new_with_timeout(crate::RPC_URL, timeout);
+    let client = RpcClient::new_with_timeout(rpc_url, timeout);
 
     // Only bpf_loader_upgradeable programs have support for security.txt
     let pubkey = Pubkey::from_str("BPFLoaderUpgradeab1e11111111111111111111111").unwrap();
@@ -49,9 +49,13 @@ pub async fn crawl_mainnet_programs(db: &DbClient) {
         }) = account.1.state()
         {
             tracing::info!("Fetching : {:?}", programdata_address);
-            let result =
-                crate::helper::get_program_security_text(&account.0, &programdata_address, db)
-                    .await;
+            let result = crate::helper::get_program_security_text(
+                &account.0,
+                &programdata_address,
+                db,
+                rpc_url,
+            )
+            .await;
             // Check if security text is available
             if let Ok(security_txt) = result {
                 // Check if source code is available

@@ -10,11 +10,11 @@ mod github;
 mod helper;
 mod schema;
 
-const RPC_URL: &str = "https://api.mainnet-beta.solana.com";
-
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+    let rpc_url =
+        env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db_client = db::client::DbClient::new(&database_url);
 
@@ -34,7 +34,7 @@ async fn main() {
         .unwrap();
 
     // Crawl the mainnet programs and write github source links to a file
-    crate::crawler::crawl_mainnet_programs(&db_client).await;
+    crate::crawler::crawl_mainnet_programs(&db_client, &rpc_url).await;
 
     // Verify the programs
     let _ = helper::verify_programs(helper::OUTPUT_FILENAME).await;

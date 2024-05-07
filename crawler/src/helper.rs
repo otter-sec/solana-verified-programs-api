@@ -38,8 +38,9 @@ pub async fn get_program_security_text(
     pubkey: &Pubkey,
     program_data_address: &Pubkey,
     db: &DbClient,
+    rpc_url: &str,
 ) -> Result<SecurityTxt> {
-    let client = RpcClient::new(crate::RPC_URL);
+    let client = RpcClient::new(rpc_url);
 
     // Insert the program into the database
     let program = db
