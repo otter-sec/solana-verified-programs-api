@@ -59,8 +59,8 @@ pub async fn verify_build(
         rlim_cur: 0,
         rlim_max: 0,
     };
-    // 1 GB memory limit
-    let max_ram_usage_bytes: c_ulong = 1024 * 1024 * 1024;
+    // 2 GB memory limit
+    let max_ram_usage_bytes: c_ulong = 2 * 1024 * 1024 * 1024;
     unsafe {
         getrlimit(RLIMIT_AS, &mut original_rlimit);
         setrlimit(
