@@ -1,4 +1,4 @@
-use crate::builder::{self, get_on_chain_hash};
+use crate::services::{get_on_chain_hash, get_repo_url, verification};
 use crate::db::models::{VerificationResponse, SolanaProgramBuild, SolanaProgramBuildParams, JobStatus, VerifiedProgram};
 use crate::Result;
 use super::DbClient;
@@ -23,7 +23,7 @@ impl DbClient {
                             is_verified: true,
                             on_chain_hash: res.on_chain_hash,
                             executable_hash: res.executable_hash,
-                            repo_url: builder::get_repo_url(&build_params),
+                            repo_url: get_repo_url(&build_params),
                             last_verified_at: Some(res.verified_at),
                         });
                     }
@@ -49,7 +49,7 @@ impl DbClient {
                         is_verified: on_chain_hash == res.executable_hash,
                         on_chain_hash,
                         executable_hash: res.executable_hash,
-                        repo_url: builder::get_repo_url(&build_params),
+                        repo_url: get_repo_url(&build_params),
                         last_verified_at: Some(res.verified_at),
                     })
                 } else {
@@ -58,7 +58,7 @@ impl DbClient {
                         is_verified: res.on_chain_hash == res.executable_hash,
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
-                        repo_url: builder::get_repo_url(&build_params),
+                        repo_url: get_repo_url(&build_params),
                         last_verified_at: Some(res.verified_at),
                     })
                 }
@@ -143,7 +143,7 @@ impl DbClient {
 
         //run task in background
         tokio::spawn(async move {
-            match builder::verify_build(payload, &build_id).await {
+            match verification::verify_build(payload, &build_id).await {
                 Ok(res) => {
                     let _ = self.insert_or_update_verified_build(&res).await;
                     let _ = self

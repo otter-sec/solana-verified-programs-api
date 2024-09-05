@@ -1,15 +1,14 @@
 use dotenv::dotenv;
-use routes::create_router;
 use std::env;
 use std::net::SocketAddr;
 
 extern crate diesel;
 extern crate tracing;
 
-mod builder;
+mod services;
 mod db;
 mod errors;
-mod routes;
+mod api;
 mod schema;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
@@ -22,7 +21,7 @@ async fn main() {
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL not set in .env file");
 
     let db_client = db::DbClient::new(&database_url, &redis_url);
-    let app = create_router(db_client);
+    let app = api::initialize_router(db_client);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::info!("Listening on {}", addr);

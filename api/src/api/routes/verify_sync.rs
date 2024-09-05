@@ -1,4 +1,4 @@
-use crate::builder::verify_build;
+use crate::services::verification::verify_build;
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
 use crate::db::models::{
