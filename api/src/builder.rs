@@ -3,7 +3,7 @@ use std::env;
 use tokio::process::Command;
 
 use crate::errors::ApiError;
-use crate::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
+use crate::db::models::{SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
 use crate::Result;
 use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 

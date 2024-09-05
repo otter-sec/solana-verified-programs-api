@@ -9,7 +9,6 @@ extern crate tracing;
 mod builder;
 mod db;
 mod errors;
-mod models;
 mod routes;
 mod schema;
 

@@ -1,5 +1,5 @@
 use crate::db::DbClient;
-use crate::models::{ApiResponse, ErrorResponse, Status, StatusResponse, VerificationStatusParams};
+use crate::db::models::{ApiResponse, ErrorResponse, Status, StatusResponse, VerificationStatusParams};
 use axum::extract::{Path, State};
 use axum::Json;
 

@@ -1,7 +1,7 @@
 use crate::builder::verify_build;
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
-use crate::models::{
+use crate::db::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     VerifyResponse,
 };
@@ -16,7 +16,7 @@ pub(crate) async fn verify_async(
     let uuid = verify_build_data.id.clone();
 
     // Check if the build was already processed
-    let is_duplicate = db.check_for_dupliate(&payload).await;
+    let is_duplicate = db.check_for_duplicate(&payload).await;
 
     if let Ok(respose) = is_duplicate {
         match respose.status.into() {

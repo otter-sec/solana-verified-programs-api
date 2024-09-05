@@ -1,5 +1,5 @@
 use crate::db::DbClient;
-use crate::models::{JobStatus, JobVerificationResponse};
+use crate::db::models::{JobStatus, JobVerificationResponse};
 use axum::extract::{Path, State};
 use axum::Json;
 
