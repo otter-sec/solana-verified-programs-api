@@ -1,7 +1,7 @@
 use crate::db::DbClient;
-use super::routes::{
-    job::get_job_status, status::verify_status, verified_programs::get_verified_programs_list,
-    verify_async::verify_async, verify_sync::verify_sync,
+use super::handlers::{
+    get_job_status, get_verification_status, get_verified_programs_list,
+    process_async_verification, process_sync_verification,
 };
 use axum::{
     error_handling::HandleErrorLayer,
@@ -70,15 +70,15 @@ pub fn initialize_router(db: DbClient) -> Router {
 
     Router::new()
         .route("/", get(|| async { index() }))
-        .route("/verify", post(verify_async))
-        .route("/verify_sync", post(verify_sync))
+        .route("/verify", post(process_async_verification))
+        .route("/verify_sync", post(process_sync_verification))
         .layer(
             global_rate_limit(1)
                 .layer(rate_limit_per_ip(30, 1))
                 .layer(cors(Method::POST))
                 .layer(CompressionLayer::new().zstd(true)),
         )
-        .route("/status/:address", get(verify_status))
+        .route("/status/:address", get(get_verification_status))
         .layer(
             global_rate_limit(10000)
                 .layer(rate_limit_per_ip(1, 100))

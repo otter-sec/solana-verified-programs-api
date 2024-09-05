@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 
 //  Route handler for GET /status/:address which checks if the program is verified or not
-pub(crate) async fn verify_status(
+pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {

@@ -7,7 +7,7 @@ use crate::db::models::{
 };
 use axum::{extract::State, http::StatusCode, Json};
 
-pub(crate) async fn verify_sync(
+pub(crate) async fn process_sync_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {

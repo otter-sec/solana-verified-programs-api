@@ -8,7 +8,7 @@ use crate::db::models::{
 use axum::{extract::State, http::StatusCode, Json};
 
 // Route handler for POST /verify which creates a new process to verify the program
-pub(crate) async fn verify_async(
+pub(crate) async fn process_async_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
