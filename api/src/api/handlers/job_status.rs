@@ -20,7 +20,7 @@ pub(crate) async fn get_job_status(
                         on_chain_hash: verified_build.on_chain_hash,
                         executable_hash: verified_build.executable_hash,
                         repo_url: res.commit_hash.map_or(res.repository.clone(), |hash| {
-                            format!("{}/commit/{}", res.repository, hash)
+                            format!("{}/tree/{}", res.repository, hash)
                         }),
                     }),
                     Err(err) => {

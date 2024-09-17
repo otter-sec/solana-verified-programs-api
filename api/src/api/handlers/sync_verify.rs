@@ -35,7 +35,7 @@ pub(crate) async fn process_sync_verification(
                             repo_url: verify_build_data
                                 .commit_hash
                                 .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                    format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: Some(verified_build.verified_at),
                         }
@@ -55,7 +55,7 @@ pub(crate) async fn process_sync_verification(
                             repo_url: verify_build_data
                                 .commit_hash
                                 .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                    format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: None,
                         }
@@ -110,7 +110,7 @@ pub(crate) async fn process_sync_verification(
                         repo_url: verify_build_data
                             .commit_hash
                             .map_or(verify_build_data.repository.clone(), |hash| {
-                                format!("{}/commit/{}", verify_build_data.repository, hash)
+                                format!("{}/tree/{}", verify_build_data.repository, hash)
                             }),
                     }
                     .into(),
