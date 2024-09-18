@@ -1,10 +1,10 @@
-use crate::services::verification::verify_build;
-use crate::db::DbClient;
-use crate::errors::ErrorMessages;
 use crate::db::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     VerifyResponse,
 };
+use crate::db::DbClient;
+use crate::errors::ErrorMessages;
+use crate::services::verification::verify_build;
 use axum::{extract::State, http::StatusCode, Json};
 
 // Route handler for POST /verify which creates a new process to verify the program

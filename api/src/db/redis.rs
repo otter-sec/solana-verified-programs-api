@@ -1,8 +1,7 @@
-
-use r2d2_redis::redis::{Commands, FromRedisValue, Value};
+use super::DbClient;
 use crate::errors::ApiError;
 use crate::Result;
-use super::DbClient;
+use r2d2_redis::redis::{Commands, FromRedisValue, Value};
 
 impl DbClient {
     pub async fn set_cache(&self, program_address: &str, value: &str) -> Result<()> {

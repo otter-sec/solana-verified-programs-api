@@ -1,10 +1,11 @@
-// src/services/chain.rs
+// src/services/onchain/program_hash_retriver.rs
 
-use std::env;
-use tokio::process::Command;
 use crate::errors::ApiError;
 use crate::services::misc::get_last_line;
 use crate::Result;
+use std::env;
+use tokio::process::Command;
+
 
 pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let rpc_url =
@@ -31,3 +32,4 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     })?;
     Ok(hash)
 }
+

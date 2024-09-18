@@ -3,4 +3,4 @@ pub mod onchain;
 pub mod verification;
 
 pub use misc::get_repo_url;
-pub use onchain::get_on_chain_hash;
+pub use onchain::program_hash_retriver::get_on_chain_hash;

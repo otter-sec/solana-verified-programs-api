@@ -1,10 +1,10 @@
-use crate::services::verification::verify_build;
-use crate::db::DbClient;
-use crate::errors::ErrorMessages;
 use crate::db::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     StatusResponse,
 };
+use crate::db::DbClient;
+use crate::errors::ErrorMessages;
+use crate::services::verification::verify_build;
 use axum::{extract::State, http::StatusCode, Json};
 
 pub(crate) async fn process_sync_verification(

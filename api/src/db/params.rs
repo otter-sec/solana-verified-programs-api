@@ -1,8 +1,8 @@
+use super::DbClient;
+use crate::db::models::{SolanaProgramBuild, SolanaProgramBuildParams};
+use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
-use crate::db::models::{SolanaProgramBuild, SolanaProgramBuildParams};
-use super::DbClient;
-use crate::Result;
 
 impl DbClient {
     pub async fn insert_build_params(&self, payload: &SolanaProgramBuild) -> Result<usize> {

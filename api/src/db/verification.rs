@@ -1,7 +1,9 @@
-use crate::services::{get_on_chain_hash, get_repo_url, verification};
-use crate::db::models::{VerificationResponse, SolanaProgramBuild, SolanaProgramBuildParams, JobStatus, VerifiedProgram};
-use crate::Result;
 use super::DbClient;
+use crate::db::models::{
+    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+};
+use crate::services::{get_on_chain_hash, get_repo_url, verification};
+use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 

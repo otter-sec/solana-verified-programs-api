@@ -5,11 +5,11 @@ use std::net::SocketAddr;
 extern crate diesel;
 extern crate tracing;
 
-mod services;
+mod api;
 mod db;
 mod errors;
-mod api;
 mod schema;
+mod services;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 

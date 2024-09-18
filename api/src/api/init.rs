@@ -1,8 +1,8 @@
-use crate::db::DbClient;
 use super::handlers::{
     get_job_status, get_verification_status, get_verified_programs_list,
     process_async_verification, process_sync_verification,
 };
+use crate::db::DbClient;
 use axum::{
     error_handling::HandleErrorLayer,
     http::{Method, StatusCode},
@@ -22,7 +22,6 @@ use tower_http::{
 use tracing::Level;
 
 use super::index::index;
-
 
 pub fn initialize_router(db: DbClient) -> Router {
     let error_handler = || {
