@@ -2,7 +2,7 @@ use super::DbClient;
 use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
 };
-use crate::services::{get_on_chain_hash, get_repo_url, verification};
+use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
@@ -45,7 +45,11 @@ impl DbClient {
                             on_chain_hash == res.executable_hash,
                         )
                         .await?;
-                        self.reverify_program(build_params.clone());
+                        // run re-verification task in background
+                        let params_cloned = build_params.clone();
+                        tokio::spawn(async move {
+                            self.reverify_program(params_cloned).await;
+                        });
                     }
                     Ok(VerificationResponse {
                         is_verified: on_chain_hash == res.executable_hash,
@@ -129,8 +133,8 @@ impl DbClient {
             .map_err(Into::into)
     }
 
-    pub fn reverify_program(self, build_params: SolanaProgramBuild) {
-        let payload = SolanaProgramBuildParams {
+    pub async fn reverify_program(self, build_params: SolanaProgramBuild) {
+        let mut payload = SolanaProgramBuildParams {
             program_id: build_params.program_id,
             repository: build_params.repository,
             commit_hash: build_params.commit_hash,
@@ -141,6 +145,23 @@ impl DbClient {
             cargo_args: build_params.cargo_args,
         };
 
+        let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
+
+        // Todo: Handle both cases accordingly
+        if let Ok(params_from_onchain) = params_from_onchain {
+            // Compare the build params from on-chain and the build params from the database
+            let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
+            if otter_params != payload {
+                tracing::info!("Build params from on-chain and database don't match. Re-verifying the build using onchain Metadata.");
+                payload = otter_params;
+            } else {
+                tracing::info!(
+                    "Build params from on-chain and database match. Re-verifying the build"
+                );
+            }
+        }
+
+        // id of the build from the database
         let build_id = build_params.id;
 
         //run task in background

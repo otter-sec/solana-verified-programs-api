@@ -6,7 +6,6 @@ use crate::Result;
 use std::env;
 use tokio::process::Command;
 
-
 pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let rpc_url =
         env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
@@ -32,4 +31,3 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     })?;
     Ok(hash)
 }
-
