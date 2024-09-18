@@ -27,6 +27,7 @@ impl DbClient {
                             executable_hash: res.executable_hash,
                             repo_url: get_repo_url(&build_params),
                             last_verified_at: Some(res.verified_at),
+                            commit: build_params.commit_hash.unwrap_or_default(),
                         });
                     }
                 }
@@ -57,6 +58,7 @@ impl DbClient {
                         executable_hash: res.executable_hash,
                         repo_url: get_repo_url(&build_params),
                         last_verified_at: Some(res.verified_at),
+                        commit: build_params.commit_hash.unwrap_or_default(),
                     })
                 } else {
                     tracing::info!("Failed to get On chain hash. Returning the cached value.");
@@ -66,6 +68,7 @@ impl DbClient {
                         executable_hash: res.executable_hash,
                         repo_url: get_repo_url(&build_params),
                         last_verified_at: Some(res.verified_at),
+                        commit: build_params.commit_hash.unwrap_or_default(),
                     })
                 }
             }
@@ -78,6 +81,7 @@ impl DbClient {
                         executable_hash: "".to_string(),
                         repo_url: "".to_string(),
                         last_verified_at: None,
+                        commit: "".to_string(),
                     });
                 }
                 Err(err)

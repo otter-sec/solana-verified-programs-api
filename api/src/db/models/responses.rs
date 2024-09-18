@@ -10,6 +10,7 @@ pub struct VerificationResponse {
     pub on_chain_hash: String,
     pub executable_hash: String,
     pub repo_url: String,
+    pub commit: String,
     pub last_verified_at: Option<NaiveDateTime>,
 }
 
