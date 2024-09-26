@@ -54,6 +54,7 @@ impl DbClient {
         }
 
         query
+            .order(created_at.desc())
             .first::<SolanaProgramBuild>(conn)
             .await
             .map_err(Into::into)
@@ -64,6 +65,7 @@ impl DbClient {
 
         let conn = &mut self.db_pool.get().await?;
         solana_program_builds
+            .order(created_at.desc())
             .filter(crate::schema::solana_program_builds::program_id.eq(program_address))
             .first::<SolanaProgramBuild>(conn)
             .await
