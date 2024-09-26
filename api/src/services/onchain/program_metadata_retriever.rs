@@ -1,11 +1,10 @@
-use crate::{errors::ApiError, Result};
+use crate::{errors::ApiError, Result, CONFIG};
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_sdk::pubkey::Pubkey;
-use std::env;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Params {
@@ -111,8 +110,7 @@ impl OtterBuildParams {
 }
 
 pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParams> {
-    let rpc_url =
-        env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+    let rpc_url = CONFIG.rpc_url.clone();
 
     let client = Client::new();
 

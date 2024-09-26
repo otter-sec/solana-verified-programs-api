@@ -2,13 +2,11 @@
 
 use crate::errors::ApiError;
 use crate::services::misc::get_last_line;
-use crate::Result;
-use std::env;
+use crate::{Result, CONFIG};
 use tokio::process::Command;
 
 pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
-    let rpc_url =
-        env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+    let rpc_url = CONFIG.rpc_url.clone();
     let mut cmd = Command::new("solana-verify");
     cmd.arg("get-program-hash").arg(program_id);
     cmd.arg("--url").arg(rpc_url);
@@ -30,4 +28,19 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
         ApiError::Custom("Failed to build and get output from program".to_string())
     })?;
     Ok(hash)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_on_chain_hash() {
+        let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
+        let data = get_on_chain_hash(program_id).await;
+        assert!(data.is_ok());
+        let hash = data.unwrap();
+        assert!(hash == "5b7bdb569e84ec8010bc68806ab865d8b3d57f3c141f5eeb8e10477720390f4d");
+    }
 }
