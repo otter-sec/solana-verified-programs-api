@@ -23,7 +23,7 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
             bpf_flag: Some(otter.is_bpf()),
             base_image: otter.get_base_image(),
             mount_path: otter.get_mount_path(),
-            cargo_args: Some(otter.get_cargo_args()),
+            cargo_args: otter.get_cargo_args(),
         }
     }
 }

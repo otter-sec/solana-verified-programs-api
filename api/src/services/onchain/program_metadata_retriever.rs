@@ -100,12 +100,12 @@ impl OtterBuildParams {
         None
     }
 
-    pub fn get_cargo_args(&self) -> Vec<String> {
+    pub fn get_cargo_args(&self) -> Option<Vec<String>> {
         let cargo_args = self.args.iter().position(|arg| arg == "--");
         if let Some(index) = cargo_args {
-            return self.args[index + 1..].to_vec();
+            return Some(self.args[index + 1..].to_vec());
         }
-        vec![]
+        None
     }
 }
 
