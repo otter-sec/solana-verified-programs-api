@@ -1,6 +1,6 @@
 use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
-use crate::services::misc::{extract_hash, get_last_line};
+use crate::services::misc::extract_hash;
 use crate::Result;
 use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 use tokio::process::Command;
@@ -72,10 +72,6 @@ pub async fn verify_build(
     let build_hash =
         extract_hash(&result, "Executable Program Hash from repo:").unwrap_or_default();
 
-    let last_line = get_last_line(&result).ok_or_else(|| {
-        ApiError::Build("Failed to build and get output from program".to_string())
-    })?;
-
     tracing::info!(
         "{} build hash {} On chain hash {}",
         payload.program_id,
@@ -86,7 +82,7 @@ pub async fn verify_build(
     let verified_build = VerifiedProgram {
         id: uuid::Uuid::new_v4().to_string(),
         program_id: payload.program_id,
-        is_verified: last_line.contains("Program hash matches"),
+        is_verified: onchain_hash == build_hash,
         on_chain_hash: onchain_hash,
         executable_hash: build_hash,
         verified_at: chrono::Utc::now().naive_utc(),
