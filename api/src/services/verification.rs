@@ -1,10 +1,10 @@
-use std::process::Stdio;
-use tokio::io::AsyncWriteExt;
 use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
 use crate::services::misc::extract_hash;
 use crate::Result;
 use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
+use std::process::Stdio;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 pub async fn verify_build(
@@ -30,7 +30,7 @@ pub async fn verify_build(
     }
 
     let mut cmd = Command::new("solana-verify");
-    
+
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -69,7 +69,9 @@ pub async fn verify_build(
 
     tracing::info!("Running command: {:?}", cmd);
 
-    let mut child = cmd.spawn().expect("Failed to successfully run solana-verify command");
+    let mut child = cmd
+        .spawn()
+        .expect("Failed to successfully run solana-verify command");
 
     // Get the stdin handle
     if let Some(mut stdin) = child.stdin.take() {

@@ -6,11 +6,11 @@ extern crate diesel;
 extern crate tracing;
 
 mod api;
+mod config;
 mod db;
 mod errors;
 mod schema;
 mod services;
-mod config;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 
@@ -25,8 +25,6 @@ pub fn load_config() -> Config {
     dotenv().ok();
     envy::from_env::<Config>().expect("Failed to load configuration")
 }
-
-
 
 #[tokio::main]
 async fn main() {

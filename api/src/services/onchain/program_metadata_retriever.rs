@@ -156,9 +156,13 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
         if let Some(entry) = result.into_iter().next() {
             let data = base64::prelude::BASE64_STANDARD
                 .decode(entry.account.data.0)
-                .map_err(|e| ApiError::Custom(format!("Failed to decode data to base64 from mainnet {e}")))?;
+                .map_err(|e| {
+                    ApiError::Custom(format!("Failed to decode data to base64 from mainnet {e}"))
+                })?;
             let anchor_account: OtterBuildParams = BorshDeserialize::try_from_slice(&data[8..])
-                .map_err(|e| ApiError::Custom(format!("Failed to decode data to Struct from mainnet {e}")))?;
+                .map_err(|e| {
+                    ApiError::Custom(format!("Failed to decode data to Struct from mainnet {e}"))
+                })?;
             tracing::info!("Anchor Account: {:?}", anchor_account);
             return Ok(anchor_account);
         }
@@ -207,7 +211,7 @@ mod tests {
     }
 
     #[tokio::test]
-     async fn test_params_squads() {
+    async fn test_params_squads() {
         let program_id = "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu";
         let data = get_otter_verify_params(program_id).await;
         println!("{:?}", data);

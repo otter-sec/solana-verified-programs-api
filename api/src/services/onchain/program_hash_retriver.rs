@@ -30,7 +30,6 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     Ok(hash)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
