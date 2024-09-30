@@ -163,6 +163,9 @@ impl DbClient {
                     "Build params from on-chain and database match. Re-verifying the build"
                 );
             }
+        } else if let Err(err) = params_from_onchain {
+            tracing::error!("Error getting on-chain params: {:?}", err);
+            tracing::error!("Re-verifying the build using the build params from the database.");
         }
 
         // id of the build from the database
