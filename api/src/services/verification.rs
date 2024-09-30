@@ -1,3 +1,5 @@
+use std::process::Stdio;
+use tokio::io::AsyncWriteExt;
 use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
 use crate::services::misc::extract_hash;
@@ -28,6 +30,11 @@ pub async fn verify_build(
     }
 
     let mut cmd = Command::new("solana-verify");
+    
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
     cmd.arg("verify-from-repo").arg("-um");
 
     if let Some(commit) = payload.commit_hash {
@@ -62,7 +69,19 @@ pub async fn verify_build(
 
     tracing::info!("Running command: {:?}", cmd);
 
-    let output = cmd.output().await?;
+    let mut child = cmd.spawn().expect("Failed to successfully run solana-verify command");
+
+    // Get the stdin handle
+    if let Some(mut stdin) = child.stdin.take() {
+        // Send 'n' to the process
+        stdin.write_all(b"n\n").await?;
+    }
+
+    let output = child.wait_with_output().await.map_err(|e| {
+        tracing::error!("Error running command: {:?}", e);
+        ApiError::Build("Error running command".to_string())
+    })?;
+
     let result = String::from_utf8(output.stdout)?;
     if !output.status.success() {
         return Err(ApiError::Build(result));
