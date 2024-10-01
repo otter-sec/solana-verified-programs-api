@@ -67,9 +67,11 @@ pub struct OtterBuildParams {
     bump: u8,
 }
 
+const OTTER_VERIFY_PROGRAMID: &str = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
+
 impl OtterBuildParams {
     pub fn is_bpf(&self) -> bool {
-        self.args.iter().any(|arg| arg == "bpf")
+        self.args.iter().any(|arg| arg == "--bpf")
     }
 
     // get mount-path i.e arg after mount-path
@@ -130,7 +132,7 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
         id: 1,
         method: "getProgramAccounts".to_string(),
         params: vec![
-            json!(program_id),
+            json!(OTTER_VERIFY_PROGRAMID),
             serde_json::to_value(params)
                 .map_err(|e| ApiError::Custom(format!("Failed to serialize params {e}")))?,
         ],
