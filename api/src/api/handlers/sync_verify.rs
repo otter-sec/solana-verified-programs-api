@@ -34,10 +34,12 @@ pub(crate) async fn process_sync_verification(
                             executable_hash: verified_build.executable_hash,
                             repo_url: verify_build_data
                                 .commit_hash
+                                .as_ref()
                                 .map_or(verify_build_data.repository.clone(), |hash| {
                                     format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: Some(verified_build.verified_at),
+                            commit: verify_build_data.commit_hash.unwrap_or_default(),
                         }
                         .into(),
                     ),
@@ -54,10 +56,12 @@ pub(crate) async fn process_sync_verification(
                             executable_hash: "".to_string(),
                             repo_url: verify_build_data
                                 .commit_hash
+                                .as_ref()
                                 .map_or(verify_build_data.repository.clone(), |hash| {
                                     format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: None,
+                            commit: verify_build_data.commit_hash.unwrap_or_default(),
                         }
                         .into(),
                     ),
@@ -109,9 +113,11 @@ pub(crate) async fn process_sync_verification(
                         last_verified_at: Some(res.verified_at),
                         repo_url: verify_build_data
                             .commit_hash
+                            .as_ref()
                             .map_or(verify_build_data.repository.clone(), |hash| {
                                 format!("{}/tree/{}", verify_build_data.repository, hash)
                             }),
+                        commit: verify_build_data.commit_hash.unwrap_or_default(),
                     }
                     .into(),
                 ),

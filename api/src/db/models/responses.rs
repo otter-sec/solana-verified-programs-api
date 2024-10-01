@@ -35,6 +35,7 @@ pub struct StatusResponse {
     pub executable_hash: String,
     pub last_verified_at: Option<NaiveDateTime>,
     pub repo_url: String,
+    pub commit: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
