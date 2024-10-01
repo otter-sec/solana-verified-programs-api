@@ -165,7 +165,6 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
                 .map_err(|e| {
                     ApiError::Custom(format!("Failed to decode data to Struct from mainnet {e}"))
                 })?;
-            tracing::info!("Anchor Account: {:?}", anchor_account);
             return Ok(anchor_account);
         }
         Err(ApiError::Custom(
@@ -201,7 +200,6 @@ mod tests {
         let data = get_otter_verify_params(program_id).await;
         assert!(data.is_ok());
         let params = data.unwrap();
-        println!("{:?}", params);
         let solana_build_params = SolanaProgramBuildParams::from(params);
         assert!(solana_build_params.program_id == "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
         assert!(solana_build_params.base_image.is_none());
@@ -216,10 +214,8 @@ mod tests {
     async fn test_params_squads() {
         let program_id = "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu";
         let data = get_otter_verify_params(program_id).await;
-        println!("{:?}", data);
         assert!(data.is_ok());
         let params = data.unwrap();
-        println!("{:?}", params);
         let solana_build_params = SolanaProgramBuildParams::from(params);
         assert!(solana_build_params.program_id == "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu");
         assert!(solana_build_params.base_image.is_none());
