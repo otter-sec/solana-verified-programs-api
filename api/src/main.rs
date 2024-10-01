@@ -1,29 +1,39 @@
+use config::Config;
 use dotenv::dotenv;
-use routes::create_router;
-use std::env;
 use std::net::SocketAddr;
 
 extern crate diesel;
 extern crate tracing;
 
-mod builder;
+mod api;
+mod config;
 mod db;
 mod errors;
-mod models;
-mod routes;
 mod schema;
+mod services;
 
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    pub static ref CONFIG: Config = load_config();
+}
+
+pub fn load_config() -> Config {
+    dotenv().ok();
+    envy::from_env::<Config>().expect("Failed to load configuration")
+}
+
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
     tracing_subscriber::fmt::init();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set in .env file");
-    let redis_url = env::var("REDIS_URL").expect("REDIS_URL not set in .env file");
+    let database_url = CONFIG.database_url.clone();
+    let redis_url = CONFIG.redis_url.clone();
 
     let db_client = db::DbClient::new(&database_url, &redis_url);
-    let app = create_router(db_client);
+    let app = api::initialize_router(db_client);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::info!("Listening on {}", addr);

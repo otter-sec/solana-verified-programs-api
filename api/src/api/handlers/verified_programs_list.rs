@@ -1,5 +1,5 @@
+use crate::db::models::VerifiedProgramListResponse;
 use crate::db::DbClient;
-use crate::models::VerifiedProgramListResponse;
 use axum::{extract::State, http::StatusCode, Json};
 
 pub(crate) async fn get_verified_programs_list(

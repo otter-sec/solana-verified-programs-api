@@ -86,7 +86,6 @@ mod tests {
         let json: Value = serde_json::from_str(json_str).unwrap();
         let map = json.as_object().unwrap();
         for (key, arr) in map {
-            println!("{:?}", key);
             let params = if let Value::Array(arr) = arr {
                 arr.iter()
                     .map(|v| v.as_str().unwrap_or_default().to_owned())

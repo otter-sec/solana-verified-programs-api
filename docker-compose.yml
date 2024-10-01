@@ -1,7 +1,7 @@
 version: '3'
 services:
   db:
-    image: postgres:13.3
+    image: postgres:15
     platform: linux/amd64
     env_file: .env
     restart: always
@@ -29,8 +29,6 @@ services:
     build:
       context: .
       dockerfile: ./api/Dockerfile
-    ports:
-      - "3000:3000"
     env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

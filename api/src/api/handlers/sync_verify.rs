@@ -1,20 +1,20 @@
-use crate::builder::verify_build;
-use crate::db::DbClient;
-use crate::errors::ErrorMessages;
-use crate::models::{
+use crate::db::models::{
     ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
     StatusResponse,
 };
+use crate::db::DbClient;
+use crate::errors::ErrorMessages;
+use crate::services::verification::verify_build;
 use axum::{extract::State, http::StatusCode, Json};
 
-pub(crate) async fn verify_sync(
+pub(crate) async fn process_sync_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
     let verify_build_data = SolanaProgramBuild::from(&payload);
 
     // First check if the program is already verified
-    let is_duplicate = db.check_for_dupliate(&payload).await;
+    let is_duplicate = db.check_for_duplicate(&payload).await;
 
     if let Ok(res) = is_duplicate {
         match res.status.into() {
@@ -35,7 +35,7 @@ pub(crate) async fn verify_sync(
                             repo_url: verify_build_data
                                 .commit_hash
                                 .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                    format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: Some(verified_build.verified_at),
                         }
@@ -55,7 +55,7 @@ pub(crate) async fn verify_sync(
                             repo_url: verify_build_data
                                 .commit_hash
                                 .map_or(verify_build_data.repository.clone(), |hash| {
-                                    format!("{}/commit/{}", verify_build_data.repository, hash)
+                                    format!("{}/tree/{}", verify_build_data.repository, hash)
                                 }),
                             last_verified_at: None,
                         }
@@ -110,7 +110,7 @@ pub(crate) async fn verify_sync(
                         repo_url: verify_build_data
                             .commit_hash
                             .map_or(verify_build_data.repository.clone(), |hash| {
-                                format!("{}/commit/{}", verify_build_data.repository, hash)
+                                format!("{}/tree/{}", verify_build_data.repository, hash)
                             }),
                     }
                     .into(),
