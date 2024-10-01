@@ -23,6 +23,7 @@ pub(crate) async fn get_verification_status(
                 last_verified_at: result.last_verified_at,
                 executable_hash: result.executable_hash,
                 repo_url: result.repo_url,
+                commit: result.commit,
             }
             .into(),
         ),
