@@ -90,7 +90,7 @@ pub fn initialize_router(db: DbClient) -> Router {
                 .layer(cors(Method::GET))
                 .layer(CompressionLayer::new().zstd(true)),
         )
-        .route("/unverify", get(handle_unverify))
+        .route("/unverify", post(handle_unverify))
         .layer(
             global_rate_limit(10000)
                 .layer(rate_limit_per_ip(1, 100))

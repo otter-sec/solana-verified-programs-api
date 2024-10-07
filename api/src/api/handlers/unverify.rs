@@ -33,18 +33,16 @@ pub async fn handle_unverify(
                                 if let Ok(executable_hash) = executable_hash {
                                     if let Ok(onchain_hash) = onchain_hash {
                                         if onchain_hash != executable_hash.on_chain_hash {
+                                            tracing::info!("Program ID: {} has been upgraded", program_id);
                                             let _ = db.unverify_program(&program_id, &onchain_hash).await;
                                             tracing::info!("Program ID: {} has been unverified", program_id);
                                         } else {
-                                            tracing::info!("Program ID: {} is not verified", program_id);
+                                            tracing::info!("Program ID: {} is not upgraded", program_id);
                                         }
                                     }
                                 } else {
                                     tracing::info!("Program ID: {} is not verified", program_id);
                                 }
-
-                                
-                                tracing::info!("Program ID: {} has been upgraded", program_id);
                             }
                         }
                         (StatusCode::OK, "Unverify request received")
