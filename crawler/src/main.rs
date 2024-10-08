@@ -9,6 +9,7 @@ mod errors;
 mod github;
 mod helper;
 mod schema;
+mod security_txt;
 
 #[tokio::main]
 async fn main() {

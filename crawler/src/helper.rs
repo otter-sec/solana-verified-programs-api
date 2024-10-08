@@ -4,7 +4,6 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     account_utils::StateMut, bpf_loader_upgradeable::UpgradeableLoaderState, pubkey::Pubkey,
 };
-use solana_security_txt::SecurityTxt;
 use std::{fs::OpenOptions, io::Write};
 
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
     },
     db::client::DbClient,
     errors::CrawlerErrors,
-    github::GithubClient,
+    github::GithubClient, security_txt::{self, parser::SecurityTxt},
 };
 
 // Constants
@@ -51,8 +50,7 @@ pub async fn get_program_security_text(
         .get_account(program_data_address)
         .map_err(|_| CrawlerErrors::ProgramClosed(pubkey.to_string()))?;
 
-    let offset = UpgradeableLoaderState::programdata_data_offset()
-        .map_err(CrawlerErrors::FailedToGetProgramDataOffset)?;
+    let offset = UpgradeableLoaderState::size_of_programdata_metadata();
 
     // Get ProgramData Slot from the account
     if let Ok(UpgradeableLoaderState::ProgramData {
@@ -79,7 +77,7 @@ pub async fn get_program_security_text(
 
     let program_data = &program_data_account.data[offset..];
 
-    let security_txt = solana_security_txt::find_and_parse(program_data)
+    let security_txt = security_txt::parser::find_and_parse(program_data)
         .map_err(CrawlerErrors::SecurityTextNotFound)?;
 
     Ok(security_txt)

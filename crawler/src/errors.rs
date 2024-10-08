@@ -1,7 +1,6 @@
-use crate::db::{client::DbClient, misc::update_program_status_and_security_txt_status};
+use crate::{db::{client::DbClient, misc::update_program_status_and_security_txt_status}, security_txt::parser::SecurityTxtError};
 use solana_client::client_error::ClientError;
 use solana_sdk::{instruction::InstructionError, pubkey::Pubkey};
-use solana_security_txt::SecurityTxtError;
 use thiserror::Error;
 
 // CrawlerErrors
