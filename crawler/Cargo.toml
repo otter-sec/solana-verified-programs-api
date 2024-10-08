@@ -15,12 +15,12 @@ diesel-async = { version = "0.5.0", features = ["postgres", "deadpool"] }
 dotenv = "0.15"
 reqwest = { version = "0.12.4", features = ["blocking", "json"] }
 serde = { version = "1.0.210", features = ["derive"] }
-serde_json = "1.0.99"
-solana-account-decoder = "1.13.7"
-solana-client = "1.13.7"
-solana-sdk = "1.13.7"
-solana-security-txt = { version = "1.1.1", features = ["parser"] }
+serde_json = "1.0.128"
+solana-account-decoder = "2.0.13"
+solana-client = "2.0.13"
+solana-sdk = "2.0.13"
 thiserror = { version = "1.0.30" }
 tokio = { version = "1.40.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.17"
+twoway = "0.2.2"
