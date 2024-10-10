@@ -1,4 +1,4 @@
-use crate::schema::{solana_program_builds, verified_programs};
+use crate::schema::{solana_program_builds, verified_programs, build_logs};
 use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -85,4 +85,24 @@ impl From<String> for JobStatus {
             _ => panic!("Invalid job status"),
         }
     }
+}
+
+
+#[derive(
+    Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+)]
+#[diesel(table_name = build_logs, primary_key(program_address))]
+pub struct BuildLogs {
+    pub program_address: String,
+    pub file_name: String,
+    pub created_at: NaiveDateTime,
+}
+
+#[allow(dead_code)]
+#[derive(Queryable, Clone, Debug)]
+pub struct BuildLogsResult {
+    pub id: String,
+    pub program_address: String,
+    pub file_name: String,
+    pub created_at: NaiveDateTime,
 }
