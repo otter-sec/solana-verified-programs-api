@@ -1,3 +1,14 @@
+// @generated automatically by Diesel CLI.
+
+diesel::table! {
+    build_logs (id) {
+        id -> Uuid,
+        program_address -> Varchar,
+        file_name -> Varchar,
+        created_at -> Timestamp,
+    }
+}
+
 diesel::table! {
     solana_program_builds (id) {
         id -> Varchar,
@@ -7,9 +18,10 @@ diesel::table! {
         lib_name -> Nullable<Varchar>,
         base_docker_image -> Nullable<Varchar>,
         mount_path -> Nullable<Varchar>,
-        cargo_args -> Nullable<Array<Text>>,
+        cargo_args -> Nullable<Array<Nullable<Text>>>,
         bpf_flag -> Bool,
         created_at -> Timestamp,
+        #[max_length = 20]
         status -> Varchar,
     }
 }
@@ -28,4 +40,8 @@ diesel::table! {
 
 diesel::joinable!(verified_programs -> solana_program_builds (solana_build_id));
 
-diesel::allow_tables_to_appear_in_same_query!(solana_program_builds, verified_programs,);
+diesel::allow_tables_to_appear_in_same_query!(
+    build_logs,
+    solana_program_builds,
+    verified_programs,
+);
