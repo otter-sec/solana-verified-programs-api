@@ -1,8 +1,8 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    build_logs (id) {
-        id -> Uuid,
+    build_logs (program_address) {
+        id -> Varchar,
         program_address -> Varchar,
         file_name -> Varchar,
         created_at -> Timestamp,

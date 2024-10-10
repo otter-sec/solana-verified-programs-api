@@ -1,10 +1,10 @@
 -- Your SQL goes here
 
 CREATE TABLE build_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id VARCHAR NOT NULL,
     program_address VARCHAR NOT NULL,
     file_name VARCHAR NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT now()
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    PRIMARY KEY (program_address)
 );
 
-CREATE INDEX idx_program_address ON build_logs(program_address);
