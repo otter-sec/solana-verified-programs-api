@@ -18,7 +18,7 @@ diesel::table! {
         lib_name -> Nullable<Varchar>,
         base_docker_image -> Nullable<Varchar>,
         mount_path -> Nullable<Varchar>,
-        cargo_args -> Nullable<Array<Nullable<Text>>>,
+        cargo_args -> Nullable<Array<Text>>,
         bpf_flag -> Bool,
         created_at -> Timestamp,
         #[max_length = 20]
