@@ -86,7 +86,7 @@ pub async fn verify_build(
 
     let result = String::from_utf8(output.stdout).unwrap_or_default();
     if !output.status.success() {
-        crate::services::logging::write_logs(
+        let _ = crate::services::logging::write_logs(
             &String::from_utf8(output.stderr).unwrap_or_default(),
             &result,
             build_id,
