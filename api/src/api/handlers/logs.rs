@@ -15,16 +15,12 @@ pub(crate) async fn get_build_logs(
             tracing::error!("Error getting data from database: {}", err);
             return Json(json!({
                 "program_address": address,
-                "error": "Unexpected error while getting logs",
+                "error": "We could not find the logs for this program"
             }));
         }
     };
 
     let logs = read_logs(&file_id);
 
-
-    Json(json!({
-        "program_address": address,
-        "logs": logs,
-    }))
+    Json(logs)
 }
