@@ -28,6 +28,12 @@ pub fn read_logs(file_name:&str) -> Value {
     // Read the contents of the file with name as filename_out.log
     let std_out = std::fs::read_to_string(format!("{}_out.log", file_name)).unwrap_or_default();
 
+    if std_err.is_empty() && std_out.is_empty() {
+        return json!({
+            "error": "We could not find the logs for this program"
+        });
+    }
+
     // Return the logs as a JSON object
     json!({
         "std_err": std_err,
