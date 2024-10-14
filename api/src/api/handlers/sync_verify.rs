@@ -6,6 +6,7 @@ use crate::db::DbClient;
 use crate::errors::ErrorMessages;
 use crate::services::verification::verify_build;
 use axum::{extract::State, http::StatusCode, Json};
+use uuid::Uuid;
 
 pub(crate) async fn process_sync_verification(
     State(db): State<DbClient>,
@@ -91,8 +92,10 @@ pub(crate) async fn process_sync_verification(
 
     tracing::info!("Inserted into database");
 
+
+    let random_file_id = Uuid::new_v4().to_string();
     // run task and wait for it to finish
-    match verify_build(payload, &verify_build_data.id).await {
+    match verify_build(payload, &verify_build_data.id, &random_file_id).await {
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
             let _ = db

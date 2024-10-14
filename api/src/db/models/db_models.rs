@@ -91,7 +91,7 @@ impl From<String> for JobStatus {
 #[derive(
     Clone, Debug, Serialize, Deserialize, Insertable, Queryable, AsChangeset,
 )]
-#[diesel(table_name = build_logs, primary_key(program_address))]
+#[diesel(table_name = build_logs, primary_key(id))]
 pub struct BuildLogs {
     pub id: String,
     pub program_address: String,

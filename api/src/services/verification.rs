@@ -10,6 +10,7 @@ use tokio::process::Command;
 pub async fn verify_build(
     payload: SolanaProgramBuildParams,
     build_id: &str,
+    random_file_id: &str,
 ) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
 
@@ -89,7 +90,7 @@ pub async fn verify_build(
         let _ = crate::services::logging::write_logs(
             &String::from_utf8(output.stderr).unwrap_or_default(),
             &result,
-            build_id,
+            random_file_id,
         );
         return Err(ApiError::Build(result));
     }
