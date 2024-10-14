@@ -21,11 +21,11 @@ impl DbClient {
             .map_err(Into::into)
     }
 
-    pub async fn get_logs_info(&self, program_addr: &str) -> Result<BuildLogs> {
+    pub async fn get_logs_info(&self, build_id: &str) -> Result<BuildLogs> {
         use crate::schema::build_logs::dsl::*;
         let conn = &mut self.db_pool.get().await?;
         build_logs
-            .filter(program_address.eq(program_addr))
+            .filter(id.eq(build_id))
             .order(created_at.desc())
             .first::<BuildLogs>(conn)
             .await
