@@ -88,7 +88,7 @@ pub(crate) async fn process_async_verification(
                 let _ = db
                     .update_build_status(&verify_build_data.id, JobStatus::Failed.into())
                     .await;
-                let _ = db.insert_logs_info(&verify_build_data.id, &verify_build_data.program_id, &random_file_id).await;
+                let _ = db.insert_logs_info(&random_file_id, &verify_build_data.program_id, &verify_build_data.id).await;
 
                 tracing::error!("Error verifying build: {:?}", err);
                 tracing::error!("{:?}", ErrorMessages::Unexpected.to_string());
