@@ -3135,7 +3135,6 @@ dependencies = [
  "dotenv",
  "envy",
  "lazy_static",
- "libc",
  "r2d2_redis",
  "redis 0.23.3",
  "reqwest",

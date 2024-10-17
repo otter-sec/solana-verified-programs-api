@@ -2,7 +2,6 @@ use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
 use crate::services::misc::extract_hash;
 use crate::Result;
-use libc::{c_ulong, getrlimit, rlimit, setrlimit, RLIMIT_AS};
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -13,22 +12,6 @@ pub async fn verify_build(
     random_file_id: &str,
 ) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
-
-    let mut original_rlimit = rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    let max_ram_usage_bytes: c_ulong = 2 * 1024 * 1024 * 1024;
-    unsafe {
-        getrlimit(RLIMIT_AS, &mut original_rlimit);
-        setrlimit(
-            libc::RLIMIT_AS,
-            &libc::rlimit {
-                rlim_cur: max_ram_usage_bytes,
-                rlim_max: max_ram_usage_bytes,
-            },
-        );
-    }
 
     let mut cmd = Command::new("solana-verify");
 
@@ -115,10 +98,6 @@ pub async fn verify_build(
         verified_at: chrono::Utc::now().naive_utc(),
         solana_build_id: build_id.to_string(),
     };
-
-    unsafe {
-        setrlimit(RLIMIT_AS, &original_rlimit);
-    }
 
     Ok(verified_build)
 }
