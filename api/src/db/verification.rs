@@ -173,7 +173,8 @@ impl DbClient {
 
         //run task in background
         tokio::spawn(async move {
-            match verification::verify_build(payload, &build_id).await {
+            let random_file_id = uuid::Uuid::new_v4().to_string();
+            match verification::verify_build(payload, &build_id, &random_file_id).await {
                 Ok(res) => {
                     let _ = self.insert_or_update_verified_build(&res).await;
                     let _ = self
