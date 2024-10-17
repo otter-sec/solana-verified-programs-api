@@ -14,7 +14,6 @@ pub(crate) async fn get_build_logs(
         Err(err) => {
             tracing::error!("Error getting data from database: {}", err);
             return Json(json!({
-                "program_address": address,
                 "error": "We could not find the logs for this program"
             }));
         }
