@@ -65,6 +65,11 @@ pub async fn verify_build(
 
     let output = child.wait_with_output().await.map_err(|e| {
         tracing::error!("Error running command: {:?}", e);
+        let _ = crate::services::logging::write_logs(
+            &e.to_string(),
+            "Error running command",
+            random_file_id,
+        );
         ApiError::Build("Error running command".to_string())
     })?;
 
