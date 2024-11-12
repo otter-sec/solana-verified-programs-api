@@ -194,7 +194,11 @@ impl DbClient {
         });
     }
 
-    pub async fn unverify_program(&self, program_address: &str, on_chainhash: &str) -> Result<usize> {
+    pub async fn unverify_program(
+        &self,
+        program_address: &str,
+        on_chainhash: &str,
+    ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
         let conn = &mut self.db_pool.get().await?;
         diesel::update(verified_programs)

@@ -4,9 +4,13 @@ use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 
-
 impl DbClient {
-    pub async fn insert_logs_info(&self, file_id: &str, program_addr: &str, build_id: &str) -> Result<usize> {
+    pub async fn insert_logs_info(
+        &self,
+        file_id: &str,
+        program_addr: &str,
+        build_id: &str,
+    ) -> Result<usize> {
         use crate::schema::build_logs::dsl::*;
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(build_logs)

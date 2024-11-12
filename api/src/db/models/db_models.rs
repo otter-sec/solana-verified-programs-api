@@ -1,4 +1,4 @@
-use crate::schema::{solana_program_builds, verified_programs, build_logs};
+use crate::schema::{build_logs, solana_program_builds, verified_programs};
 use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -87,10 +87,7 @@ impl From<String> for JobStatus {
     }
 }
 
-
-#[derive(
-    Clone, Debug, Serialize, Deserialize, Insertable, Queryable, AsChangeset,
-)]
+#[derive(Clone, Debug, Serialize, Deserialize, Insertable, Queryable, AsChangeset)]
 #[diesel(table_name = build_logs, primary_key(id))]
 pub struct BuildLogs {
     pub id: String,

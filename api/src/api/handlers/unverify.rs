@@ -11,9 +11,10 @@ pub async fn handle_unverify(
     headers: HeaderMap,
     Json(payload): Json<Vec<Value>>, // Accept the structured payload
 ) -> (StatusCode, &'static str) {
-
     // Check if the request is coming from the correct source
-    let auth_header = headers.get("AUTHORIZATION").and_then(|value| value.to_str().ok());
+    let auth_header = headers
+        .get("AUTHORIZATION")
+        .and_then(|value| value.to_str().ok());
 
     match auth_header {
         Some(header_value) => {
@@ -26,18 +27,29 @@ pub async fn handle_unverify(
                         for ix in instruction.instructions {
                             if ix.data == "5Sxr3" {
                                 let program_id = ix.accounts[1].clone();
-                                // get on-chain program hash 
+                                // get on-chain program hash
                                 let onchain_hash = get_on_chain_hash(&program_id).await;
                                 let executable_hash = db.get_verified_build(&program_id).await;
 
                                 if let Ok(executable_hash) = executable_hash {
                                     if let Ok(onchain_hash) = onchain_hash {
                                         if onchain_hash != executable_hash.on_chain_hash {
-                                            tracing::info!("Program ID: {} has been upgraded", program_id);
-                                            let _ = db.unverify_program(&program_id, &onchain_hash).await;
-                                            tracing::info!("Program ID: {} has been unverified", program_id);
+                                            tracing::info!(
+                                                "Program ID: {} has been upgraded",
+                                                program_id
+                                            );
+                                            let _ = db
+                                                .unverify_program(&program_id, &onchain_hash)
+                                                .await;
+                                            tracing::info!(
+                                                "Program ID: {} has been unverified",
+                                                program_id
+                                            );
                                         } else {
-                                            tracing::info!("Program ID: {} is not upgraded", program_id);
+                                            tracing::info!(
+                                                "Program ID: {} is not upgraded",
+                                                program_id
+                                            );
                                         }
                                     }
                                 } else {
@@ -53,10 +65,7 @@ pub async fn handle_unverify(
                     }
                 }
             } else {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    "Invalid authorization header",
-                )
+                (StatusCode::UNAUTHORIZED, "Invalid authorization header")
             }
         }
         None => (
