@@ -1,7 +1,7 @@
 use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
 use crate::services::misc::extract_hash;
-use crate::Result;
+use crate::{Result, CONFIG};
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -19,7 +19,9 @@ pub async fn verify_build(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    cmd.arg("verify-from-repo").arg("-um");
+    cmd.arg("verify-from-repo");
+
+    cmd.arg("--url").arg(&CONFIG.rpc_url);
 
     if let Some(commit) = payload.commit_hash {
         cmd.arg("--commit-hash").arg(commit);
