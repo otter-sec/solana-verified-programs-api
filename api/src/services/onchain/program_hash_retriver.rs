@@ -23,7 +23,9 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
                             if let Some(hash) = get_last_line(&result) {
                                 return Ok(hash);
                             } else {
-                                return Err(ApiError::Custom("Failed to build and get output from program".to_string()));
+                                return Err(ApiError::Custom(
+                                    "Failed to build and get output from program".to_string(),
+                                ));
                             }
                         }
                         Err(_) => {
@@ -39,7 +41,10 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
                 }
             }
             Err(_) => {
-                tracing::error!("Attempt {}/3: Failed to run process get-program-hash", attempt);
+                tracing::error!(
+                    "Attempt {}/3: Failed to run process get-program-hash",
+                    attempt
+                );
             }
         }
 

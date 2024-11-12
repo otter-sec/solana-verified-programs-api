@@ -1,9 +1,9 @@
-use std::fs::OpenOptions;
-use std::io::Write;
 use crate::Result;
 use serde_json::{json, Value};
+use std::fs::OpenOptions;
+use std::io::Write;
 
-pub fn write_logs(std_err:&str, std_out:&str, file_name:&str) -> Result<()>{
+pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
     // Create a file with name as filename_err.log and write the std_err log to the file
     let mut err_file = OpenOptions::new()
         .write(true)
@@ -21,12 +21,14 @@ pub fn write_logs(std_err:&str, std_out:&str, file_name:&str) -> Result<()>{
     Ok(())
 }
 
-pub fn read_logs(file_name:&str) -> Value {
+pub fn read_logs(file_name: &str) -> Value {
     // Read the contents of the file with name as filename_err.log
-    let std_err = std::fs::read_to_string(format!("/logs/{}_err.log", file_name)).unwrap_or_default();
+    let std_err =
+        std::fs::read_to_string(format!("/logs/{}_err.log", file_name)).unwrap_or_default();
 
     // Read the contents of the file with name as filename_out.log
-    let std_out = std::fs::read_to_string(format!("/logs/{}_out.log", file_name)).unwrap_or_default();
+    let std_out =
+        std::fs::read_to_string(format!("/logs/{}_out.log", file_name)).unwrap_or_default();
 
     if std_err.is_empty() && std_out.is_empty() {
         return json!({

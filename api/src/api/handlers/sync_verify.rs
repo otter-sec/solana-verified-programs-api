@@ -92,7 +92,6 @@ pub(crate) async fn process_sync_verification(
 
     tracing::info!("Inserted into database");
 
-
     let random_file_id = Uuid::new_v4().to_string();
     // run task and wait for it to finish
     match verify_build(payload, &verify_build_data.id, &random_file_id).await {
