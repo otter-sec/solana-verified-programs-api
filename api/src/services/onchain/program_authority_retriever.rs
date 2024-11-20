@@ -51,6 +51,9 @@ mod tests {
         let result = get_program_authority(&program_id).await;
         assert!(result.is_ok());
         let authority = result.unwrap();
-        assert_eq!(authority, Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU".to_string()));
+        assert_eq!(
+            authority,
+            Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU".to_string())
+        );
     }
 }
