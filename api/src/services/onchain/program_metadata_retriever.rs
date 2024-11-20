@@ -2,8 +2,16 @@ use std::str::FromStr;
 
 use crate::{errors::ApiError, Result, CONFIG};
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_account_decoder::UiAccountEncoding;
+use solana_client::{
+    nonblocking::rpc_client::RpcClient,
+    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
+    rpc_filter::{Memcmp, RpcFilterType},
+};
+use solana_sdk::{
+    commitment_config::{CommitmentConfig, CommitmentLevel},
+    pubkey::Pubkey,
+};
 
 use super::get_program_authority;
 
@@ -81,10 +89,46 @@ pub async fn get_otter_pda(
         &program_id_pubkey.to_bytes(),
     ];
     let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
-    println!("PDA Account: {}", pda_account);
     let account_data = client.get_account_data(&pda_account).await?;
     let otter_build_params = OtterBuildParams::try_from_slice(&account_data[8..])?;
     Ok(otter_build_params)
+}
+
+pub async fn get_all_pdas_availabe(
+    client: &RpcClient,
+    program_id_pubkey: &Pubkey,
+) -> Result<OtterBuildParams> {
+    let filter = vec![RpcFilterType::Memcmp(Memcmp::new_base58_encoded(
+        8,
+        &program_id_pubkey.to_bytes(),
+    ))];
+
+    let config = RpcProgramAccountsConfig {
+        filters: Some(filter),
+        account_config: RpcAccountInfoConfig {
+            encoding: Some(UiAccountEncoding::Base64),
+            data_slice: None,
+            commitment: Some(CommitmentConfig {
+                commitment: CommitmentLevel::Confirmed,
+            }),
+            min_context_slot: None,
+        },
+        with_context: None,
+        sort_results: Some(true),
+    };
+
+    let accounts = client
+        .get_program_accounts_with_config(&OTTER_VERIFY_PROGRAMID, config)
+        .await?;
+
+    for account in accounts {
+        let otter_build_params = OtterBuildParams::try_from_slice(&account.1.data[8..]);
+        if let Ok(otter_build_params) = otter_build_params {
+            return Ok(otter_build_params);
+        }
+    }
+
+    Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
 }
 
 pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParams> {
@@ -108,6 +152,11 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
         if let Ok(otter_build_params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
             return Ok(otter_build_params);
         }
+    }
+
+    // Fallback: get PDA accounts fro the given program id
+    if let Ok(otter_build_params) = get_all_pdas_availabe(&client, &program_id_pubkey).await {
+        return Ok(otter_build_params);
     }
 
     Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
