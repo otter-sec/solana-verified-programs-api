@@ -12,6 +12,15 @@ pub enum ApiError {
     #[error("Unexpected Error: {0}")]
     Custom(String),
 
+    #[error(transparent)]
+    ClientError(#[from] solana_client::client_error::ClientError),
+
+    #[error(transparent)]
+    ParseAccountError(#[from] solana_account_decoder::parse_account_data::ParseAccountError),
+
+    #[error(transparent)]
+    ParsePubkeyError(#[from] solana_sdk::pubkey::ParsePubkeyError),
+
     #[error("Failed parsing utf8 string: {0}")]
     Utf8(#[from] FromUtf8Error),
 

@@ -1,59 +1,21 @@
+use std::str::FromStr;
+
 use crate::{errors::ApiError, Result, CONFIG};
-use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Params {
-    encoding: String,
-    filters: Vec<Filter>,
-}
+#[cfg(feature = "use-external-pdas")]
+use {
+    solana_account_decoder::UiAccountEncoding,
+    solana_client::{
+        rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
+        rpc_filter::{Memcmp, RpcFilterType},
+    },
+    solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel},
+};
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Filter {
-    memcmp: Memcmp,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Memcmp {
-    offset: u64,
-    bytes: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct RpcRequest {
-    jsonrpc: String,
-    id: u64,
-    method: String,
-    params: Vec<serde_json::Value>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Account {
-    data: (String, String),
-    executable: bool,
-    lamports: u64,
-    owner: String,
-    #[serde(rename = "rentEpoch")]
-    rent_epoch: u64,
-    space: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct ResultEntry {
-    account: Account,
-    pubkey: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct RpcResponse {
-    jsonrpc: String,
-    id: u64,
-    result: Option<Vec<ResultEntry>>,
-}
+use super::get_program_authority;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct OtterBuildParams {
@@ -67,7 +29,13 @@ pub struct OtterBuildParams {
     bump: u8,
 }
 
-const OTTER_VERIFY_PROGRAMID: &str = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
+const OTTER_VERIFY_PROGRAMID: Pubkey =
+    solana_sdk::pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
+
+const SIGNER_KEYS: [Pubkey; 2] = [
+    solana_sdk::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU"),
+    solana_sdk::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
+];
 
 impl OtterBuildParams {
     pub fn is_bpf(&self) -> bool {
@@ -112,70 +80,90 @@ impl OtterBuildParams {
     }
 }
 
+pub async fn get_otter_pda(
+    client: &RpcClient,
+    signer: &Pubkey,
+    program_id_pubkey: &Pubkey,
+) -> Result<OtterBuildParams> {
+    let seeds: &[&[u8]] = &[
+        b"otter_verify",
+        &signer.to_bytes(),
+        &program_id_pubkey.to_bytes(),
+    ];
+    let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
+    let account_data = client.get_account_data(&pda_account).await?;
+    let otter_build_params = OtterBuildParams::try_from_slice(&account_data[8..])?;
+    Ok(otter_build_params)
+}
+
+#[cfg(feature = "use-external-pdas")]
+pub async fn get_all_pdas_availabe(
+    client: &RpcClient,
+    program_id_pubkey: &Pubkey,
+) -> Result<OtterBuildParams> {
+    let filter = vec![RpcFilterType::Memcmp(Memcmp::new_base58_encoded(
+        8,
+        &program_id_pubkey.to_bytes(),
+    ))];
+
+    let config = RpcProgramAccountsConfig {
+        filters: Some(filter),
+        account_config: RpcAccountInfoConfig {
+            encoding: Some(UiAccountEncoding::Base64),
+            data_slice: None,
+            commitment: Some(CommitmentConfig {
+                commitment: CommitmentLevel::Confirmed,
+            }),
+            min_context_slot: None,
+        },
+        with_context: None,
+        sort_results: Some(true),
+    };
+
+    let accounts = client
+        .get_program_accounts_with_config(&OTTER_VERIFY_PROGRAMID, config)
+        .await?;
+
+    for account in accounts {
+        let otter_build_params = OtterBuildParams::try_from_slice(&account.1.data[8..]);
+        if let Ok(otter_build_params) = otter_build_params {
+            return Ok(otter_build_params);
+        }
+    }
+
+    Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
+}
+
 pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParams> {
     let rpc_url = CONFIG.rpc_url.clone();
+    let client = RpcClient::new(rpc_url.clone());
+    let program_id_pubkey = Pubkey::from_str(program_id)?;
 
-    let client = Client::new();
+    // Try the first PDA based on authority
+    if let Some(authority) = get_program_authority(&program_id_pubkey).await? {
+        let authority_pubkey = Pubkey::from_str(&authority)?;
 
-    let params = Params {
-        encoding: "base64".to_string(),
-        filters: vec![Filter {
-            memcmp: Memcmp {
-                offset: 8,
-                bytes: program_id.to_string(),
-            },
-        }],
-    };
-
-    let request = RpcRequest {
-        jsonrpc: "2.0".to_string(),
-        id: 1,
-        method: "getProgramAccounts".to_string(),
-        params: vec![
-            json!(OTTER_VERIFY_PROGRAMID),
-            serde_json::to_value(params)
-                .map_err(|e| ApiError::Custom(format!("Failed to serialize params {e}")))?,
-        ],
-    };
-
-    let response = client
-        .post(rpc_url)
-        .json(&request)
-        .send()
-        .await
-        .map_err(|_| {
-            ApiError::Custom(
-                "Failed to send request to get Otter Verify params from mainnet".to_string(),
-            )
-        })?;
-
-    let response_json: RpcResponse = response
-        .json()
-        .await
-        .map_err(|_| ApiError::Custom("Failed to parse response from mainnet".to_string()))?;
-
-    if let Some(result) = response_json.result {
-        if let Some(entry) = result.into_iter().next() {
-            let data = base64::prelude::BASE64_STANDARD
-                .decode(entry.account.data.0)
-                .map_err(|e| {
-                    ApiError::Custom(format!("Failed to decode data to base64 from mainnet {e}"))
-                })?;
-            let anchor_account: OtterBuildParams = BorshDeserialize::try_from_slice(&data[8..])
-                .map_err(|e| {
-                    ApiError::Custom(format!("Failed to decode data to Struct from mainnet {e}"))
-                })?;
-            return Ok(anchor_account);
+        if let Ok(otter_build_params) =
+            get_otter_pda(&client, &authority_pubkey, &program_id_pubkey).await
+        {
+            return Ok(otter_build_params);
         }
-        Err(ApiError::Custom(
-            "Failed to find Otter Verify params".to_string(),
-        ))
-    } else {
-        tracing::info!("No results found");
-        Err(ApiError::Custom(
-            "Failed to find Otter Verify params".to_string(),
-        ))
     }
+
+    // Fallback: PDA based on whitelisted pubkeys
+    for signer in SIGNER_KEYS.iter() {
+        if let Ok(otter_build_params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
+            return Ok(otter_build_params);
+        }
+    }
+
+    // Fallback: get PDA accounts fro the given program id
+    #[cfg(feature = "use-external-pdas")]
+    if let Ok(otter_build_params) = get_all_pdas_availabe(&client, &program_id_pubkey).await {
+        return Ok(otter_build_params);
+    }
+
+    Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
 }
 
 #[cfg(test)]
@@ -202,12 +190,12 @@ mod tests {
         let params = data.unwrap();
         let solana_build_params = SolanaProgramBuildParams::from(params);
         assert!(solana_build_params.program_id == "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
-        assert!(solana_build_params.base_image.is_none());
+        assert!(solana_build_params.base_image.is_some());
         assert!(solana_build_params.mount_path.is_none());
         assert!(solana_build_params.lib_name.is_some());
         assert!(solana_build_params.lib_name.unwrap() == "otter_verify");
         assert!(!solana_build_params.bpf_flag.unwrap());
-        assert!(solana_build_params.cargo_args.unwrap().is_empty());
+        assert!(solana_build_params.cargo_args.is_none());
     }
 
     #[tokio::test]

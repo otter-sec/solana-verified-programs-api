@@ -9,6 +9,7 @@ mod api;
 mod config;
 mod db;
 mod errors;
+#[rustfmt::skip]
 mod schema;
 mod services;
 
