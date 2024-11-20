@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::{Result, CONFIG};
+use crate::{errors::ApiError, Result, CONFIG};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -21,8 +21,11 @@ pub struct OtterBuildParams {
 
 const OTTER_VERIFY_PROGRAMID: Pubkey =
     solana_sdk::pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
-const OTTER_SIGNER_PUBKEY: Pubkey =
-    solana_sdk::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU");
+
+const SIGNER_KEYS: [Pubkey; 2] = [
+    solana_sdk::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU"),
+    solana_sdk::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
+];
 
 impl OtterBuildParams {
     pub fn is_bpf(&self) -> bool {
@@ -78,6 +81,7 @@ pub async fn get_otter_pda(
         &program_id_pubkey.to_bytes(),
     ];
     let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
+    println!("PDA Account: {}", pda_account);
     let account_data = client.get_account_data(&pda_account).await?;
     let otter_build_params = OtterBuildParams::try_from_slice(&account_data[8..])?;
     Ok(otter_build_params)
@@ -99,8 +103,14 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
         }
     }
 
-    // Fallback: PDA based on Osec pubkey 
-    get_otter_pda(&client, &OTTER_SIGNER_PUBKEY, &program_id_pubkey).await
+    // Fallback: PDA based on whitelisted pubkeys
+    for signer in SIGNER_KEYS.iter() {
+        if let Ok(otter_build_params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
+            return Ok(otter_build_params);
+        }
+    }
+
+    Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
 }
 
 #[cfg(test)]
