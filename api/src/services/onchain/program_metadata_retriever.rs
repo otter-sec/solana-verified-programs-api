@@ -2,15 +2,17 @@ use std::str::FromStr;
 
 use crate::{errors::ApiError, Result, CONFIG};
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_account_decoder::UiAccountEncoding;
-use solana_client::{
-    nonblocking::rpc_client::RpcClient,
-    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
-    rpc_filter::{Memcmp, RpcFilterType},
-};
-use solana_sdk::{
-    commitment_config::{CommitmentConfig, CommitmentLevel},
-    pubkey::Pubkey,
+use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
+
+#[cfg(feature = "use-external-pdas")]
+use {
+    solana_account_decoder::UiAccountEncoding,
+    solana_client::{
+        rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
+        rpc_filter::{Memcmp, RpcFilterType},
+    },
+    solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel},
 };
 
 use super::get_program_authority;
@@ -94,6 +96,7 @@ pub async fn get_otter_pda(
     Ok(otter_build_params)
 }
 
+#[cfg(feature = "use-external-pdas")]
 pub async fn get_all_pdas_availabe(
     client: &RpcClient,
     program_id_pubkey: &Pubkey,
@@ -155,6 +158,7 @@ pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParam
     }
 
     // Fallback: get PDA accounts fro the given program id
+    #[cfg(feature = "use-external-pdas")]
     if let Ok(otter_build_params) = get_all_pdas_availabe(&client, &program_id_pubkey).await {
         return Ok(otter_build_params);
     }

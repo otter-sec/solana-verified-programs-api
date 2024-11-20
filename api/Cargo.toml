@@ -3,6 +3,10 @@ name = "verified_programs_api"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+use-external-pdas = []
+
 [dependencies]
 axum = "0.6.18"
 borsh = "1.5.1"
