@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 rust:1.78 as api_build
+FROM --platform=linux/amd64 rust:1.79 as api_build
 
 WORKDIR /solana_verified_program_api
 

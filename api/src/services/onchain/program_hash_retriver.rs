@@ -1,9 +1,12 @@
 // src/services/onchain/program_hash_retriver.rs
 
+use std::time::Duration;
+
 use crate::errors::ApiError;
 use crate::services::misc::get_last_line;
 use crate::{Result, CONFIG};
 use tokio::process::Command;
+use tokio::time::sleep;
 
 pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let rpc_url = CONFIG.rpc_url.clone();
@@ -11,23 +14,46 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     cmd.arg("get-program-hash").arg(program_id);
     cmd.arg("--url").arg(rpc_url);
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|_| ApiError::Custom("Failed to run process get-program-hash".to_string()))?;
+    for attempt in 1..=3 {
+        match cmd.output().await {
+            Ok(output) => {
+                if output.status.success() {
+                    match String::from_utf8(output.stdout) {
+                        Ok(result) => {
+                            if let Some(hash) = get_last_line(&result) {
+                                return Ok(hash);
+                            } else {
+                                return Err(ApiError::Custom(
+                                    "Failed to build and get output from program".to_string(),
+                                ));
+                            }
+                        }
+                        Err(_) => {
+                            tracing::error!("Attempt {}/3: Failed to parse output", attempt);
+                        }
+                    }
+                } else {
+                    tracing::error!(
+                        "Attempt {}/3: Failed to get on-chain hash: {}",
+                        attempt,
+                        String::from_utf8(output.stderr.clone()).unwrap_or_default()
+                    );
+                }
+            }
+            Err(_) => {
+                tracing::error!(
+                    "Attempt {}/3: Failed to run process get-program-hash",
+                    attempt
+                );
+            }
+        }
 
-    if !output.status.success() {
-        tracing::error!(
-            "Failed to get on-chain hash {}",
-            String::from_utf8(output.stderr)?
-        );
-        return Err(ApiError::Custom("Failed to get on-chain hash".to_string()));
+        if attempt < 3 {
+            sleep(Duration::from_secs(5)).await;
+        }
     }
-    let result = String::from_utf8(output.stdout)?;
-    let hash = get_last_line(&result).ok_or_else(|| {
-        ApiError::Custom("Failed to build and get output from program".to_string())
-    })?;
-    Ok(hash)
+
+    Err(ApiError::Custom("Failed to get on-chain hash".to_string()))
 }
 
 #[cfg(test)]

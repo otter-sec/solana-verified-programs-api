@@ -3,9 +3,12 @@ name = "verified_programs_api"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+use-external-pdas = []
+
 [dependencies]
 axum = "0.6.18"
-base64 = "0.22.1"
 borsh = "1.5.1"
 chrono = { version = "0.4.35", features = ["serde"] }
 diesel = { version = "2.2.4", features = ["postgres", "chrono"] }
@@ -15,9 +18,10 @@ envy = "0.4.2"
 lazy_static = "1.4"
 r2d2_redis = "0.14.0"
 redis = "0.23.2"
-reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0.166", features = ["derive"] }
 serde_json = { version = "1.0.99" }
+solana-account-decoder = { version = "2.0.13" }
+solana-client = "2.0.13"
 solana-sdk = { version = "2.0.13" }
 thiserror = { version = "1.0.44" }
 tokio = { version = "1.29.1", features = ["full"] }

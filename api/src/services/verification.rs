@@ -1,6 +1,8 @@
 use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
 use crate::errors::ApiError;
 use crate::services::misc::extract_hash;
+
+use crate::services::onchain;
 use crate::{Result, CONFIG};
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
@@ -12,6 +14,15 @@ pub async fn verify_build(
     random_file_id: &str,
 ) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
+
+    let mut payload = payload;
+
+    // Use on-chain metadata if available 
+    let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
+
+    if let Ok(params_from_onchain) = params_from_onchain {
+        payload = SolanaProgramBuildParams::from(params_from_onchain);
+    }
 
     let mut cmd = Command::new("solana-verify");
 
