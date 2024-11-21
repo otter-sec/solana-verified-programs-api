@@ -44,6 +44,8 @@ pub(crate) async fn get_verified_programs_status(
     let mut programs_status = Vec::new();
 
     for program in verified_programs {
+        // db.clone() in this case is essentially free
+        // No performance penalty for using it in loops or async operations
         match db.clone().check_is_verified(program.program_id.clone()).await {
             Ok(result) => {
                 programs_status.push(VerifiedProgramStatusResponse {
