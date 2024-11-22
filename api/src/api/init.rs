@@ -1,6 +1,5 @@
 use super::handlers::{
-    get_build_logs, get_job_status, get_verification_status, get_verified_programs_list,
-    handle_unverify, process_async_verification, process_sync_verification,
+    get_build_logs, get_job_status, get_verification_status, get_verified_programs_list, get_verified_programs_status, handle_unverify, process_async_verification, process_sync_verification
 };
 use crate::db::DbClient;
 use axum::{
@@ -106,6 +105,16 @@ pub fn initialize_router(db: DbClient) -> Router {
                 .layer(CompressionLayer::new().zstd(true)),
         )
         .route("/verified-programs", get(get_verified_programs_list))
+        .layer(
+            global_rate_limit(10000)
+                .layer(rate_limit_per_ip(1, 100))
+                .layer(cors(Method::GET))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
+        .route(
+            "/verified-programs-status",
+            get(get_verified_programs_status),
+        )
         .layer(
             global_rate_limit(10000)
                 .layer(rate_limit_per_ip(1, 100))
