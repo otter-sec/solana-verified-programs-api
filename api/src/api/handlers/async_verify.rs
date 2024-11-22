@@ -73,6 +73,7 @@ pub(crate) async fn process_async_verification(
 
     tracing::info!("Inserted into database");
 
+    let req_id = uuid.clone();
     //run task in background
     tokio::spawn(async move {
         let _ = check_and_process_verification(payload, &uuid, &db).await;
@@ -83,7 +84,7 @@ pub(crate) async fn process_async_verification(
         Json(
             VerifyResponse {
                 status: JobStatus::InProgress,
-                request_id: "".to_string(),
+                request_id: req_id,
                 message: "Build verification started".to_string(),
             }
             .into(),

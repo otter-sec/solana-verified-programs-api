@@ -25,6 +25,7 @@ pub async fn check_and_process_verification(
     let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
 
     if let Ok(params_from_onchain) = params_from_onchain {
+        tracing::info!("{:?} using Otter params", params_from_onchain);
         payload = SolanaProgramBuildParams::from(params_from_onchain);
         db.update_uuid(&uid).await?;
         db.update_build_status(build_id, JobStatus::Completed.into())
