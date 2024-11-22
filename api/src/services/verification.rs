@@ -27,13 +27,14 @@ pub async fn check_and_process_verification(
     if let Ok(params_from_onchain) = params_from_onchain {
         tracing::info!("{:?} using Otter params", params_from_onchain);
         payload = SolanaProgramBuildParams::from(params_from_onchain);
-        db.update_uuid(&uid).await?;
+
+        // Updated the build status to completed for recieved build params and update the uuid to a new one
         db.update_build_status(build_id, JobStatus::Completed.into())
             .await?;
-        // insert new parmas and update uid before verifying
+        db.update_uuid(build_id).await?;
+        
         let mut new_build = SolanaProgramBuild::from(&payload);
         new_build.id = uid.clone();
-        
         // check if the params was already processed
         let is_duplicate = db.check_for_duplicate(&payload).await;
         if let Ok(respose) = is_duplicate {
@@ -66,16 +67,16 @@ pub async fn check_and_process_verification(
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
             let _ = db
-                .update_build_status(build_id, JobStatus::Completed.into())
+                .update_build_status(&uid, JobStatus::Completed.into())
                 .await;
             Ok(res)
         }
         Err(err) => {
             let _ = db
-                .update_build_status(build_id, JobStatus::Failed.into())
+                .update_build_status(&uid, JobStatus::Failed.into())
                 .await;
             let _ = db
-                .insert_logs_info(&random_file_id, &program_id, build_id)
+                .insert_logs_info(&random_file_id, &program_id, &uid)
                 .await;
 
             tracing::error!("Error verifying build: {:?}", err);
