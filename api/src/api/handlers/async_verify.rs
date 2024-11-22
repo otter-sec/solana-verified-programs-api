@@ -4,9 +4,8 @@ use crate::db::models::{
 };
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
-use crate::services::verification::verify_build;
+use crate::services::verification::check_and_process_verification;
 use axum::{extract::State, http::StatusCode, Json};
-use uuid::Uuid;
 
 // Route handler for POST /verify which creates a new process to verify the program
 pub(crate) async fn process_async_verification(
@@ -76,30 +75,7 @@ pub(crate) async fn process_async_verification(
 
     //run task in background
     tokio::spawn(async move {
-        let random_file_id = Uuid::new_v4().to_string();
-        match verify_build(payload, &verify_build_data.id, &random_file_id).await {
-            Ok(res) => {
-                let _ = db.insert_or_update_verified_build(&res).await;
-                let _ = db
-                    .update_build_status(&verify_build_data.id, JobStatus::Completed.into())
-                    .await;
-            }
-            Err(err) => {
-                let _ = db
-                    .update_build_status(&verify_build_data.id, JobStatus::Failed.into())
-                    .await;
-                let _ = db
-                    .insert_logs_info(
-                        &random_file_id,
-                        &verify_build_data.program_id,
-                        &verify_build_data.id,
-                    )
-                    .await;
-
-                tracing::error!("Error verifying build: {:?}", err);
-                tracing::error!("{:?}", ErrorMessages::Unexpected.to_string());
-            }
-        }
+        let _ = check_and_process_verification(payload, &uuid, &db).await;
     });
 
     (
@@ -107,7 +83,7 @@ pub(crate) async fn process_async_verification(
         Json(
             VerifyResponse {
                 status: JobStatus::InProgress,
-                request_id: uuid,
+                request_id: "".to_string(),
                 message: "Build verification started".to_string(),
             }
             .into(),

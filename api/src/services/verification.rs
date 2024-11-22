@@ -1,11 +1,88 @@
-use crate::db::models::{SolanaProgramBuildParams, VerifiedProgram};
+use crate::db::models::{JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerifiedProgram};
+use crate::db::DbClient;
 use crate::errors::ApiError;
+use crate::errors::ErrorMessages;
 use crate::services::misc::extract_hash;
 use crate::services::onchain;
 use crate::{Result, CONFIG};
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+use uuid::Uuid;
+
+pub async fn check_and_process_verification(
+    verify_build_data: SolanaProgramBuildParams,
+    build_id: &str,
+    db: &DbClient,
+) -> Result<VerifiedProgram> {
+    let random_file_id = Uuid::new_v4().to_string();
+    let program_id = verify_build_data.program_id.clone();
+    let uid = build_id.to_string();
+
+    let mut payload = verify_build_data;
+
+    // Use on-chain metadata if available
+    let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
+
+    if let Ok(params_from_onchain) = params_from_onchain {
+        payload = SolanaProgramBuildParams::from(params_from_onchain);
+        db.update_uuid(&uid).await?;
+        db.update_build_status(build_id, JobStatus::Completed.into())
+            .await?;
+        // insert new parmas and update uid before verifying
+        let mut new_build = SolanaProgramBuild::from(&payload);
+        new_build.id = uid.clone();
+        
+        // check if the params was already processed
+        let is_duplicate = db.check_for_duplicate(&payload).await;
+        if let Ok(respose) = is_duplicate {
+            match respose.status.into() {
+                JobStatus::Completed => {
+                    let verified_build = db.get_verified_build(&respose.program_id).await.unwrap();
+                    return Ok(verified_build);
+                }
+                JobStatus::InProgress => {
+                    return Ok(VerifiedProgram {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        program_id: payload.program_id,
+                        is_verified: false,
+                        on_chain_hash: "".to_string(),
+                        executable_hash: "".to_string(),
+                        verified_at: chrono::Utc::now().naive_utc(),
+                        solana_build_id: respose.id,
+                    });
+                }
+                JobStatus::Failed => {
+                    tracing::info!("Previous build failed for this program. Initiating new build");
+                }
+            }
+        } else {
+            let _ = db.insert_build_params(&new_build).await;
+        }
+    }
+
+    match verify_build(payload, &uid, &random_file_id).await {
+        Ok(res) => {
+            let _ = db.insert_or_update_verified_build(&res).await;
+            let _ = db
+                .update_build_status(build_id, JobStatus::Completed.into())
+                .await;
+            Ok(res)
+        }
+        Err(err) => {
+            let _ = db
+                .update_build_status(build_id, JobStatus::Failed.into())
+                .await;
+            let _ = db
+                .insert_logs_info(&random_file_id, &program_id, build_id)
+                .await;
+
+            tracing::error!("Error verifying build: {:?}", err);
+            tracing::error!("{:?}", ErrorMessages::Unexpected.to_string());
+            Err(err)
+        }
+    }
+}
 
 pub async fn verify_build(
     payload: SolanaProgramBuildParams,
@@ -13,15 +90,6 @@ pub async fn verify_build(
     random_file_id: &str,
 ) -> Result<VerifiedProgram> {
     tracing::info!("Verifying build..");
-
-    let mut payload = payload;
-
-    // Use on-chain metadata if available 
-    let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
-
-    if let Ok(params_from_onchain) = params_from_onchain {
-        payload = SolanaProgramBuildParams::from(params_from_onchain);
-    }
 
     let mut cmd = Command::new("solana-verify");
 
