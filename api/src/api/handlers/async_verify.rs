@@ -1,6 +1,6 @@
 use crate::db::models::{
-    ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-    VerifyResponse,
+    ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams,
+    SolanaProgramBuildParamsWithSigner, Status, VerifyResponse,
 };
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
@@ -12,6 +12,21 @@ use axum::{extract::State, http::StatusCode, Json};
 pub(crate) async fn process_async_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
+) -> (StatusCode, Json<ApiResponse>) {
+    process_verification(db, payload, None).await
+}
+
+pub(crate) async fn process_async_verification_with_signer(
+    State(db): State<DbClient>,
+    Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
+) -> (StatusCode, Json<ApiResponse>) {
+    process_verification(db, payload.params, Some(payload.signer)).await
+}
+
+async fn process_verification(
+    db: DbClient,
+    payload: SolanaProgramBuildParams,
+    signer: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
     let mut payload = payload;
     let verify_build_data = SolanaProgramBuild::from(&payload);
@@ -40,7 +55,8 @@ pub(crate) async fn process_async_verification(
     }
 
     // Now check if there was a PDA associated with that Build if so we need to handle it
-    let params_from_onchain = onchain::get_otter_verify_params(&verify_build_data.program_id).await;
+    let params_from_onchain =
+        onchain::get_otter_verify_params(&verify_build_data.program_id, None).await;
 
     if let Ok(params_from_onchain) = params_from_onchain {
         tracing::info!("{:?} using Otter params", params_from_onchain);

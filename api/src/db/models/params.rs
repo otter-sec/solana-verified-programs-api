@@ -13,6 +13,13 @@ pub struct SolanaProgramBuildParams {
     pub cargo_args: Option<Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SolanaProgramBuildParamsWithSigner {
+    pub signer: String,
+    #[serde(flatten)]
+    pub params: SolanaProgramBuildParams,
+}
+
 impl From<OtterBuildParams> for SolanaProgramBuildParams {
     fn from(otter: OtterBuildParams) -> Self {
         SolanaProgramBuildParams {

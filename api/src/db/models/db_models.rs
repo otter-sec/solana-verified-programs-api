@@ -2,8 +2,11 @@ use crate::schema::{build_logs, solana_program_builds, verified_programs};
 use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use solana_sdk::{pubkey::Pubkey, system_program};
 
 use super::SolanaProgramBuildParams;
+
+pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
 
 #[derive(
     Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
@@ -21,6 +24,7 @@ pub struct SolanaProgramBuild {
     pub bpf_flag: bool,
     pub created_at: NaiveDateTime,
     pub status: String,
+    pub signer: Option<String>,
 }
 
 impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
@@ -38,6 +42,7 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
             mount_path: params.mount_path.clone(),
             cargo_args: params.cargo_args.clone(),
             status: JobStatus::InProgress.into(),
+            signer: Some(DEFAULT_SIGNER.to_string()),
         }
     }
 }

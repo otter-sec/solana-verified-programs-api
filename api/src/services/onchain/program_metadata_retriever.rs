@@ -134,10 +134,29 @@ pub async fn get_all_pdas_availabe(
     Err(ApiError::Custom("Otter-Verify PDA not found".to_string()))
 }
 
-pub async fn get_otter_verify_params(program_id: &str) -> Result<OtterBuildParams> {
+pub async fn get_otter_verify_params(
+    program_id: &str,
+    signer: Option<String>,
+) -> Result<OtterBuildParams> {
     let rpc_url = CONFIG.rpc_url.clone();
     let client = RpcClient::new(rpc_url.clone());
     let program_id_pubkey = Pubkey::from_str(program_id)?;
+
+    if let Some(signer) = signer {
+        let signer_pubkey = Pubkey::from_str(&signer)
+            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {}", signer)))?;
+
+        if let Ok(otter_build_params) =
+            get_otter_pda(&client, &signer_pubkey, &program_id_pubkey).await
+        {
+            return Ok(otter_build_params);
+        } else {
+            return Err(ApiError::Custom(format!(
+                "Otter-Verify PDA not found for the given signer: {}",
+                signer
+            )));
+        }
+    }
 
     // Try the first PDA based on authority
     if let Some(authority) = get_program_authority(&program_id_pubkey).await? {
@@ -175,7 +194,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_on_chain_hash() {
         let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
-        let data = get_otter_verify_params(program_id).await;
+        let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
         let params = data.unwrap();
         assert!(params.address.to_string() == "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
@@ -185,7 +204,7 @@ mod tests {
     #[tokio::test]
     async fn test_params() {
         let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
-        let data = get_otter_verify_params(program_id).await;
+        let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
         let params = data.unwrap();
         let solana_build_params = SolanaProgramBuildParams::from(params);
@@ -201,7 +220,7 @@ mod tests {
     #[tokio::test]
     async fn test_params_squads() {
         let program_id = "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu";
-        let data = get_otter_verify_params(program_id).await;
+        let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
         let params = data.unwrap();
         let solana_build_params = SolanaProgramBuildParams::from(params);

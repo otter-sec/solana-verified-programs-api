@@ -15,6 +15,13 @@ pub struct VerificationResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct VerificationResponseWithSigner {
+    pub signer: String,
+    #[serde(flatten)]
+    pub verification_response: VerificationResponse,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Success,
@@ -50,6 +57,7 @@ pub struct VerifyResponse {
 pub enum SuccessResponse {
     Status(StatusResponse),
     Verify(VerifyResponse),
+    StatusAll(Vec<VerificationResponseWithSigner>),
 }
 
 impl From<StatusResponse> for SuccessResponse {
