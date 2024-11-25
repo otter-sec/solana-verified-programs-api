@@ -25,7 +25,6 @@ pub struct VerifiedProgramsStatusListResponse {
 pub(crate) async fn get_verified_programs_status(
     State(db): State<DbClient>,
 ) -> (StatusCode, Json<VerifiedProgramsStatusListResponse>) {
-
     let verified_programs = match db.get_verified_programs().await {
         Ok(programs) => programs,
         Err(err) => {
@@ -36,7 +35,7 @@ pub(crate) async fn get_verified_programs_status(
                     status: Status::Error,
                     data: None,
                     error: Some("An unexpected database error occurred.".to_string()),
-                })
+                }),
             );
         }
     };
@@ -46,7 +45,11 @@ pub(crate) async fn get_verified_programs_status(
     for program in verified_programs {
         // db.clone() in this case is essentially free
         // No performance penalty for using it in loops or async operations
-        match db.clone().check_is_verified(program.program_id.clone()).await {
+        match db
+            .clone()
+            .check_is_verified(program.program_id.clone())
+            .await
+        {
             Ok(result) => {
                 programs_status.push(VerifiedProgramStatusResponse {
                     program_id: program.program_id,
@@ -76,6 +79,6 @@ pub(crate) async fn get_verified_programs_status(
             status: Status::Success,
             data: Some(programs_status),
             error: None,
-        })
+        }),
     )
 }

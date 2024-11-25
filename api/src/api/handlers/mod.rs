@@ -15,4 +15,3 @@ pub(crate) use unverify::handle_unverify;
 pub(crate) use verification_status::get_verification_status;
 pub(crate) use verified_programs_list::get_verified_programs_list;
 pub(crate) use verified_programs_status::get_verified_programs_status;
-
