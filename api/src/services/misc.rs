@@ -7,7 +7,7 @@ pub fn get_last_line(output: &str) -> Option<String> {
 pub fn get_repo_url(build_params: &SolanaProgramBuild) -> String {
     build_params.commit_hash.as_ref().map_or_else(
         || build_params.repository.clone(),
-        |hash| format!("{}/tree/{}", build_params.repository, hash),
+        |hash| format!("{}/tree/{}", build_params.repository.trim_end_matches('/'), hash),
     )
 }
 
