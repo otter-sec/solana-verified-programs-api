@@ -50,7 +50,6 @@ pub(crate) async fn get_verified_programs_status(
             .check_is_verified(program.program_id.clone())
             .await
         {
-        match db.clone().check_is_verified(program.program_id.clone()).await {
             Ok(result) => {
                 programs_status.push(VerifiedProgramStatusResponse {
                     program_id: program.program_id,
