@@ -65,6 +65,16 @@ pub async fn check_and_handle_duplicates(
                     message: "Build verification already in progress".to_string(),
                 })
             }
+            JobStatus::Unused => {
+                // Retry build
+                tracing::info!("These params were not used. There might be a PDA associated with this program ID.");
+                Some(VerifyResponse {
+                    status: JobStatus::Completed,
+                    request_id: respose.id,
+                    message: "These params were not used. There might be a PDA associated with this program ID.".to_string(),
+                })
+            }
+
             JobStatus::Failed => {
                 // Retry build
                 tracing::info!("Previous build failed for this program. Initiating new build");

@@ -49,6 +49,13 @@ pub(crate) async fn get_job_status(
                 executable_hash: "".to_string(),
                 repo_url: "".to_string(),
             }),
+            JobStatus::Unused => Json(JobVerificationResponse {
+                status: JobStatus::Failed.into(),
+                message: "These params were not used. There might be a PDA associated with this program ID.".to_string(),
+                on_chain_hash: "".to_string(),
+                executable_hash: "".to_string(),
+                repo_url: "".to_string(),
+            }),
         },
         Err(err) => {
             tracing::error!("Error getting data from database: {}", err);

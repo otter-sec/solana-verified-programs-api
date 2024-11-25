@@ -64,6 +64,8 @@ pub enum JobStatus {
     Completed,
     #[serde(rename = "failed")]
     Failed,
+    #[serde(rename = "un-used")]
+    Unused,
 }
 
 impl From<JobStatus> for String {
@@ -72,6 +74,7 @@ impl From<JobStatus> for String {
             JobStatus::InProgress => "in_progress".to_string(),
             JobStatus::Completed => "completed".to_string(),
             JobStatus::Failed => "failed".to_string(),
+            JobStatus::Unused => "un-used".to_string(),
         }
     }
 }
@@ -82,6 +85,7 @@ impl From<String> for JobStatus {
             "in_progress" => JobStatus::InProgress,
             "completed" => JobStatus::Completed,
             "failed" => JobStatus::Failed,
+            "un-used" => JobStatus::Unused,
             _ => panic!("Invalid job status"),
         }
     }
