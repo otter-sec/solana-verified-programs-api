@@ -1,4 +1,7 @@
-use crate::db::models::{JobStatus, SolanaProgramBuildParams, VerifiedProgram, VerifyResponse};
+use crate::db::models::{
+    JobStatus, SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner, VerifiedProgram,
+    VerifyResponse,
+};
 use crate::db::DbClient;
 use crate::errors::ApiError;
 use crate::errors::ErrorMessages;
@@ -18,7 +21,7 @@ pub async fn check_and_process_verification(
     let program_id = payload.program_id.clone();
     let uid = build_id.to_string();
 
-    match verify_build(payload, None, &uid, &random_file_id).await {
+    match verify_build(payload, &uid, &random_file_id).await {
         Ok(res) => {
             let _ = db.insert_or_update_verified_build(&res).await;
             let _ = db
@@ -40,7 +43,7 @@ pub async fn check_and_process_verification(
 }
 
 pub async fn check_and_handle_duplicates(
-    payload: &SolanaProgramBuildParams,
+    payload: &SolanaProgramBuildParamsWithSigner,
     db: &DbClient,
 ) -> Option<VerifyResponse> {
     // Check if the build was already processed
@@ -88,7 +91,6 @@ pub async fn check_and_handle_duplicates(
 
 pub async fn verify_build(
     payload: SolanaProgramBuildParams,
-    signer: Option<String>,
     build_id: &str,
     random_file_id: &str,
 ) -> Result<VerifiedProgram> {

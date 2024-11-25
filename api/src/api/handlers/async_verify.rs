@@ -7,6 +7,7 @@ use crate::errors::ErrorMessages;
 use crate::services::onchain;
 use crate::services::verification::{check_and_handle_duplicates, check_and_process_verification};
 use axum::{extract::State, http::StatusCode, Json};
+use solana_sdk::system_program;
 
 // Route handler for POST /verify which creates a new process to verify the program
 pub(crate) async fn process_async_verification(
@@ -28,7 +29,10 @@ async fn process_verification(
     payload: SolanaProgramBuildParams,
     signer: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut payload = payload;
+    let mut payload = SolanaProgramBuildParamsWithSigner {
+        params: payload,
+        signer: signer.clone().unwrap_or(system_program::id().to_string()),
+    };
     let verify_build_data = SolanaProgramBuild::from(&payload);
     let mut uuid = verify_build_data.id.clone();
 
@@ -56,11 +60,11 @@ async fn process_verification(
 
     // Now check if there was a PDA associated with that Build if so we need to handle it
     let params_from_onchain =
-        onchain::get_otter_verify_params(&verify_build_data.program_id, None).await;
+        onchain::get_otter_verify_params(&verify_build_data.program_id, signer.clone()).await;
 
     if let Ok(params_from_onchain) = params_from_onchain {
         tracing::info!("{:?} using Otter params", params_from_onchain);
-        payload = SolanaProgramBuildParams::from(params_from_onchain);
+        payload.params = SolanaProgramBuildParams::from(params_from_onchain);
 
         // check if the params was already processed
         let is_duplicate = check_and_handle_duplicates(&payload, &db).await;
@@ -86,7 +90,7 @@ async fn process_verification(
     //run task in background
     let req_id = uuid.clone();
     tokio::spawn(async move {
-        let _ = check_and_process_verification(payload, &uuid, &db).await;
+        let _ = check_and_process_verification(payload.params, &uuid, &db).await;
     });
 
     (

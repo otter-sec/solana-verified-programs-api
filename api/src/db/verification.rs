@@ -119,6 +119,8 @@ impl DbClient {
                     let is_verified = if let Some(hash) = hash.clone() {
                         if *hash != verified_build.on_chain_hash {
                             tracing::info!("On chain hash doesn't match.");
+
+                            // TODO: Implement this in such a way that it doesn't block the main thread
                             // tokio::spawn(async move {
                             // self.update_onchain_hash(
                             //     &program_address,
@@ -275,7 +277,7 @@ impl DbClient {
         //run task in background
         tokio::spawn(async move {
             let random_file_id = uuid::Uuid::new_v4().to_string();
-            match verification::verify_build(payload, None, &build_id, &random_file_id).await {
+            match verification::verify_build(payload, &build_id, &random_file_id).await {
                 Ok(res) => {
                     let _ = self.insert_or_update_verified_build(&res).await;
                     let _ = self

@@ -1,6 +1,6 @@
 use crate::db::models::{
-    ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-    StatusResponse,
+    ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams,
+    SolanaProgramBuildParamsWithSigner, Status, StatusResponse, DEFAULT_SIGNER,
 };
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
@@ -15,7 +15,14 @@ pub(crate) async fn process_sync_verification(
     let uuid = verify_build_data.id.clone();
 
     // First check if the program is already verified
-    let is_dublicate = check_and_handle_duplicates(&payload, &db).await;
+    let is_dublicate = check_and_handle_duplicates(
+        &SolanaProgramBuildParamsWithSigner {
+            params: payload.clone(),
+            signer: DEFAULT_SIGNER.to_string(),
+        },
+        &db,
+    )
+    .await;
 
     if let Some(response) = is_dublicate {
         return (StatusCode::OK, Json(response.into()));
