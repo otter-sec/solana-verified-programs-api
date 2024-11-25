@@ -4,7 +4,8 @@ use crate::db::models::{
 };
 use crate::db::DbClient;
 use crate::errors::ErrorMessages;
-use crate::services::verification::check_and_process_verification;
+use crate::services::onchain;
+use crate::services::verification::{check_and_handle_duplicates, check_and_process_verification};
 use axum::{extract::State, http::StatusCode, Json};
 
 // Route handler for POST /verify which creates a new process to verify the program
@@ -12,51 +13,18 @@ pub(crate) async fn process_async_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let mut payload = payload;
     let verify_build_data = SolanaProgramBuild::from(&payload);
-    let uuid = verify_build_data.id.clone();
+    let mut uuid = verify_build_data.id.clone();
 
     // Check if the build was already processed
-    let is_duplicate = db.check_for_duplicate(&payload).await;
+    let is_dublicate = check_and_handle_duplicates(&payload, &db).await;
 
-    if let Ok(respose) = is_duplicate {
-        match respose.status.into() {
-            JobStatus::Completed => {
-                // Get the verified build from the database
-                let verified_build = db.get_verified_build(&respose.program_id).await.unwrap();
-                return (
-                    StatusCode::OK,
-                    Json(
-                        VerifyResponse {
-                            status: JobStatus::Completed,
-                            request_id: verified_build.solana_build_id,
-                            message: "Verification already completed.".to_string(),
-                        }
-                        .into(),
-                    ),
-                );
-            }
-            JobStatus::InProgress => {
-                // Return ID to user to check status
-                return (
-                    StatusCode::OK,
-                    Json(
-                        VerifyResponse {
-                            status: JobStatus::InProgress,
-                            request_id: respose.id,
-                            message: "Build verification already in progress".to_string(),
-                        }
-                        .into(),
-                    ),
-                );
-            }
-            JobStatus::Failed => {
-                // Retry build
-                tracing::info!("Previous build failed for this program. Initiating new build");
-            }
-        }
+    if let Some(response) = is_dublicate {
+        return (StatusCode::OK, Json(response.into()));
     }
 
-    // insert into database
+    // Else insert into database
     if let Err(e) = db.insert_build_params(&verify_build_data).await {
         tracing::error!("Error inserting into database: {:?}", e);
         return (
@@ -71,8 +39,39 @@ pub(crate) async fn process_async_verification(
         );
     }
 
-    tracing::info!("Inserted into database");
+    tracing::info!("UUID: {:?}", uuid);
 
+    // Now check if there was a PDA associated with that Build if so we need to handle it
+    let params_from_onchain = onchain::get_otter_verify_params(&verify_build_data.program_id).await;
+
+    if let Ok(params_from_onchain) = params_from_onchain {
+        tracing::info!("{:?} using Otter params", params_from_onchain);
+        payload = SolanaProgramBuildParams::from(params_from_onchain);
+
+        // check if the params was already processed
+        let is_duplicate = check_and_handle_duplicates(&payload, &db).await;
+        if let Some(respose) = is_duplicate {
+            return (StatusCode::OK, Json(respose.into()));
+        }
+
+        // Updated the build status to completed for recieved build params and update the uuid to a new one
+        let _ = db
+            .update_build_status(&uuid, JobStatus::Completed.into())
+            .await
+            .map_err(|e| {
+                tracing::error!("Error updating build status: {:?}", e);
+                e
+            });
+
+        // Insert the new build params into the database and update the uuid
+        let new_build = SolanaProgramBuild::from(&payload);
+        let _ = db.insert_build_params(&new_build).await;
+        uuid = new_build.id.clone();
+    }
+
+    tracing::info!("UUID: {:?}", uuid);
+
+    //run task in background
     let req_id = uuid.clone();
     //run task in background
     tokio::spawn(async move {

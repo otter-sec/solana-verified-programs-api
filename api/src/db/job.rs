@@ -26,16 +26,4 @@ impl DbClient {
             .await
             .map_err(Into::into)
     }
-
-    pub async fn update_uuid(&self, old_uid: &str) -> Result<usize> {
-        let new_uid = uuid::Uuid::new_v4().to_string();
-        use crate::schema::solana_program_builds::dsl::*;
-        let conn = &mut self.db_pool.get().await?;
-        diesel::update(solana_program_builds)
-            .filter(id.eq(old_uid))
-            .set(id.eq(new_uid))
-            .execute(conn)
-            .await
-            .map_err(Into::into)
-    }
 }
