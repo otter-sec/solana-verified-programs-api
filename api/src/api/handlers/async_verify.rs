@@ -39,8 +39,6 @@ pub(crate) async fn process_async_verification(
         );
     }
 
-    tracing::info!("UUID: {:?}", uuid);
-
     // Now check if there was a PDA associated with that Build if so we need to handle it
     let params_from_onchain = onchain::get_otter_verify_params(&verify_build_data.program_id).await;
 
@@ -69,11 +67,8 @@ pub(crate) async fn process_async_verification(
         uuid = new_build.id.clone();
     }
 
-    tracing::info!("UUID: {:?}", uuid);
-
     //run task in background
     let req_id = uuid.clone();
-    //run task in background
     tokio::spawn(async move {
         let _ = check_and_process_verification(payload, &uuid, &db).await;
     });
