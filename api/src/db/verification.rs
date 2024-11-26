@@ -120,7 +120,7 @@ impl DbClient {
 
                 let mut verification_responses = vec![];
                 for (verified_build, build) in res {
-                    if !verified_build.is_some() {
+                    if verified_build.is_none() {
                         tracing::info!("Verified build not found for {:?}", build.signer);
                         continue;
                     }

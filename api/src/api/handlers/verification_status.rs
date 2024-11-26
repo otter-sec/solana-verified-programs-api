@@ -45,7 +45,7 @@ pub(crate) async fn get_verification_status_all(
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
     match db.get_all_verification_info(address).await {
-        Ok(result) => Json(ApiResponse::Success(SuccessResponse::StatusAll(result)).into()),
+        Ok(result) => Json(ApiResponse::Success(SuccessResponse::StatusAll(result))),
         Err(err) => {
             tracing::error!("Error getting data from database: {}", err);
             Json(
