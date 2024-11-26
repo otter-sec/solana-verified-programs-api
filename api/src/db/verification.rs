@@ -128,19 +128,20 @@ impl DbClient {
                     let is_verified = if let Some(hash) = hash.clone() {
                         if *hash != verified_build.on_chain_hash {
                             tracing::info!("On chain hash doesn't match.");
+                            // Update the on-chain hash in the database
+                            self.update_onchain_hash(
+                                &program_address,
+                                &hash,
+                                hash == verified_build.executable_hash,
+                            )
+                            .await.unwrap();
 
-                            // TODO: Implement this in such a way that it doesn't block the main thread
-                            // tokio::spawn(async move {
-                            // self.update_onchain_hash(
-                            //     &program_address,
-                            //     &hash,
-                            //     hash == verified_build.executable_hash,
-                            // )
-                            // .await.unwrap();
                             // run re-verification task in background
-                            //     let params_cloned = build_params.clone();
-                            //     self.reverify_program(params_cloned).await;
-                            // });
+                            let params_cloned = build_params.clone();
+                            let db_cloed = self.clone();
+                            tokio::spawn(async move {
+                                db_cloed.reverify_program(params_cloned).await;
+                            });
                         } else {
                             tracing::info!("On chain hash matches. Returning the cached value.");
                         }
@@ -268,6 +269,7 @@ impl DbClient {
     }
 
     pub async fn reverify_program(self, build_params: SolanaProgramBuild) {
+        tracing::info!("Re-verifying the build.");
         let mut payload = SolanaProgramBuildParams {
             program_id: build_params.program_id,
             repository: build_params.repository,
