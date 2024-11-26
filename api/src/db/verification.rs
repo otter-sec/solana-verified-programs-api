@@ -116,6 +116,8 @@ impl DbClient {
                     }
                 };
 
+                let mut is_verification_needed = false;
+
                 let mut verification_responses = vec![];
                 for (verified_build, build) in res {
                     if verified_build.is_none() {
@@ -133,13 +135,7 @@ impl DbClient {
                                 hash == verified_build.executable_hash,
                             )
                             .await.unwrap();
-
-                            // run re-verification task in background
-                            let params_cloned: SolanaProgramBuild = build.clone();
-                            let db_cloed = self.clone();
-                            tokio::spawn(async move {
-                                db_cloed.reverify_program(params_cloned).await;
-                            });
+                            is_verification_needed = true;
                         } else {
                             tracing::info!("On chain hash matches. Returning the cached value.");
                         }
@@ -159,6 +155,14 @@ impl DbClient {
                         },
                         signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
                     })
+                }
+
+                // Run re-verification task in background if needed
+                if is_verification_needed {
+                    let params = self.get_build_params(&program_address).await?;
+                    tokio::spawn(async move {
+                        self.reverify_program(params).await;
+                    });
                 }
                 Ok(verification_responses)
             }
@@ -279,9 +283,9 @@ impl DbClient {
             cargo_args: build_params.cargo_args,
         };
 
+        // Get the build params from the on-chain Metadata
         let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id, None).await;
 
-        // Todo: Handle both cases accordingly
         if let Ok(params_from_onchain) = params_from_onchain {
             // Compare the build params from on-chain and the build params from the database
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
