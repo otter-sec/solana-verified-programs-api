@@ -10,7 +10,7 @@ pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    match db.check_is_verified(address).await {
+    match db.check_is_verified(address, None).await {
         Ok(result) => Json(
             StatusResponse {
                 is_verified: result.is_verified,

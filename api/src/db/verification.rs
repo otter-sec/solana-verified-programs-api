@@ -7,13 +7,17 @@ use crate::db::models::{
 use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
 use diesel::expression_methods::BoolExpressionMethods;
-use diesel::Table;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
+use diesel::{JoinOnDsl, SelectableHelper, Table};
 use diesel_async::RunQueryDsl;
 
 impl DbClient {
-    pub async fn check_is_verified(self, program_address: String) -> Result<VerificationResponse> {
-        let res = self.get_verified_build(&program_address).await;
+    pub async fn check_is_verified(
+        self,
+        program_address: String,
+        signer: Option<String>,
+    ) -> Result<VerificationResponse> {
+        let res = self.get_verified_build(&program_address, signer).await;
         match res {
             Ok(res) => {
                 let cache_result = self
@@ -116,6 +120,11 @@ impl DbClient {
 
                 let mut verification_responses = vec![];
                 for (verified_build, build) in res {
+                    if !verified_build.is_some() {
+                        tracing::info!("Verified build not found for {:?}", build.signer);
+                        continue;
+                    }
+                    let verified_build = verified_build.unwrap();
                     let is_verified = if let Some(hash) = hash.clone() {
                         if *hash != verified_build.on_chain_hash {
                             tracing::info!("On chain hash doesn't match.");
@@ -165,40 +174,57 @@ impl DbClient {
         }
     }
 
-    pub async fn get_verified_build(&self, program_address: &str) -> Result<VerifiedProgram> {
+    pub async fn get_verified_build(
+        &self,
+        program_address: &str,
+        signer: Option<String>,
+    ) -> Result<VerifiedProgram> {
         use crate::schema::verified_programs::dsl::*;
 
+        tracing::info!("Getting verified build for {:?}", program_address);
+
         let conn = &mut self.db_pool.get().await?;
-        verified_programs
+        let query = verified_programs
             .inner_join(crate::schema::solana_program_builds::table)
             .filter(crate::schema::verified_programs::program_id.eq(program_address))
-            .select(verified_programs::all_columns())
-            .filter(
-                crate::schema::solana_program_builds::signer
-                    .eq(DEFAULT_SIGNER.to_string())
-                    .or(crate::schema::solana_program_builds::signer.is_null()),
-            )
-            .first::<VerifiedProgram>(conn)
-            .await
-            .map_err(Into::into)
-    }
+            .select(verified_programs::all_columns());
 
+        match signer {
+            Some(signer) => query
+                .filter(crate::schema::solana_program_builds::signer.eq(signer))
+                .first::<VerifiedProgram>(conn)
+                .await
+                .map_err(Into::into),
+            None => query
+                .filter(
+                    crate::schema::solana_program_builds::signer
+                        .eq(DEFAULT_SIGNER.to_string())
+                        .or(crate::schema::solana_program_builds::signer.is_null()),
+                )
+                .first::<VerifiedProgram>(conn)
+                .await
+                .map_err(Into::into),
+        }
+    }
     pub async fn get_verified_builds_with_signer(
         &self,
         program_address: &str,
-    ) -> Result<Vec<(VerifiedProgram, SolanaProgramBuild)>> {
+    ) -> Result<Vec<(Option<VerifiedProgram>, SolanaProgramBuild)>> {
         use crate::schema::solana_program_builds::dsl::*;
-        use crate::schema::verified_programs::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
-        verified_programs
-            .inner_join(crate::schema::solana_program_builds::table)
-            .filter(crate::schema::verified_programs::program_id.eq(program_address))
+        solana_program_builds
+            .left_join(
+                crate::schema::verified_programs::table
+                    .on(crate::schema::verified_programs::solana_build_id
+                        .eq(crate::schema::solana_program_builds::id)),
+            )
+            .filter(crate::schema::solana_program_builds::program_id.eq(program_address))
             .select((
-                verified_programs::all_columns(),
-                solana_program_builds::all_columns(),
+                Option::<VerifiedProgram>::as_select(),
+                SolanaProgramBuild::as_select(),
             ))
-            .load::<(VerifiedProgram, SolanaProgramBuild)>(conn)
+            .load::<(Option<VerifiedProgram>, SolanaProgramBuild)>(conn)
             .await
             .map_err(Into::into)
     }
@@ -212,7 +238,8 @@ impl DbClient {
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(verified_programs)
             .values(payload)
-            .on_conflict(program_id)
+            // Should never get hit
+            .on_conflict(id)
             .do_update()
             .set(payload)
             .execute(conn)

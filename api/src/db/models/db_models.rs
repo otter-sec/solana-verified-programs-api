@@ -9,7 +9,16 @@ use super::{SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner};
 pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
 
 #[derive(
-    Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Insertable,
+    Identifiable,
+    Queryable,
+    AsChangeset,
+    Selectable,
+    QueryableByName,
 )]
 #[diesel(table_name = solana_program_builds, primary_key(id))]
 pub struct SolanaProgramBuild {
@@ -56,7 +65,16 @@ impl<'a> From<&'a SolanaProgramBuildParamsWithSigner> for SolanaProgramBuild {
 }
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Insertable,
+    Identifiable,
+    Queryable,
+    AsChangeset,
+    Selectable,
+    QueryableByName,
 )]
 #[diesel(table_name = verified_programs, primary_key(id))]
 pub struct VerifiedProgram {

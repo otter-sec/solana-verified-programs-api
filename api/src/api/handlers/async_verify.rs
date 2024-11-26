@@ -90,6 +90,11 @@ async fn process_verification(
     //run task in background
     let req_id = uuid.clone();
     tokio::spawn(async move {
+        tracing::info!(
+            "Spawning verification task with signer: {:?} and uuid: {:?}",
+            signer,
+            uuid
+        );
         let _ = check_and_process_verification(payload.params, &uuid, &db).await;
     });
 

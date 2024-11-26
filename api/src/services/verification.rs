@@ -23,7 +23,8 @@ pub async fn check_and_process_verification(
 
     match verify_build(payload, &uid, &random_file_id).await {
         Ok(res) => {
-            let _ = db.insert_or_update_verified_build(&res).await;
+            let insertion_count = db.insert_or_update_verified_build(&res).await?;
+            tracing::info!("Inserted {:?} verified builds", insertion_count);
             let _ = db
                 .update_build_status(&uid, JobStatus::Completed.into())
                 .await;
@@ -53,12 +54,22 @@ pub async fn check_and_handle_duplicates(
         match respose.status.into() {
             JobStatus::Completed => {
                 // Get the verified build from the database
-                let verified_build = db.get_verified_build(&respose.program_id).await.unwrap();
-                Some(VerifyResponse {
-                    status: JobStatus::Completed,
-                    request_id: verified_build.solana_build_id,
-                    message: "Verification already completed.".to_string(),
-                })
+                println!("COMPLETED STATUS");
+                println!("program_id: {:?}", respose.program_id);
+                match db
+                    .get_verified_build(&respose.program_id, respose.signer)
+                    .await
+                {
+                    Ok(verified_build) => Some(VerifyResponse {
+                        status: JobStatus::Completed,
+                        request_id: verified_build.solana_build_id,
+                        message: "Verification already completed.".to_string(),
+                    }),
+                    Err(err) => {
+                        tracing::error!("Error getting verified build: {:?}", err);
+                        None
+                    }
+                }
             }
             JobStatus::InProgress => {
                 // Return ID to user to check status

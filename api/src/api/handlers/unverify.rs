@@ -29,7 +29,8 @@ pub async fn handle_unverify(
                                 let program_id = ix.accounts[1].clone();
                                 // get on-chain program hash
                                 let onchain_hash = get_on_chain_hash(&program_id).await;
-                                let executable_hash = db.get_verified_build(&program_id).await;
+                                let executable_hash =
+                                    db.get_verified_build(&program_id, None).await;
 
                                 if let Ok(executable_hash) = executable_hash {
                                     if let Ok(onchain_hash) = onchain_hash {

@@ -1,6 +1,6 @@
 use super::models::SolanaProgramBuildParamsWithSigner;
 use super::DbClient;
-use crate::db::models::{SolanaProgramBuild, SolanaProgramBuildParams};
+use crate::db::models::SolanaProgramBuild;
 use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
@@ -55,7 +55,7 @@ impl DbClient {
             query = query.filter(cargo_args.eq(args));
         }
 
-        query = query.filter(signer.eq(signer));
+        query = query.filter(signer.eq(data.signer.clone()));
 
         query
             .order(created_at.desc())
