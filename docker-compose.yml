@@ -12,6 +12,7 @@ services:
       - ./api/migrations/2023-07-04-082332_init/up.sql:/docker-entrypoint-initdb.d/initdb1.sql
       - ./api/migrations/2024-01-11-080939_update/up.sql:/docker-entrypoint-initdb.d/initdb2.sql
       - ./api/migrations/2024-10-10-061245_create_logs_table/up.sql:/docker-entrypoint-initdb.d/initdb3.sql
+      - ./api/migrations/2024-11-22-184632_track_signer_upload/up.sql:/docker-entrypoint-initdb.d/initdb4.sql
       # - ./crawler/migrations/2024-03-11-035137_mainnet_programs/up.sql:/docker-entrypoint-initdb.d/initdb4.sql
 
   redis:
