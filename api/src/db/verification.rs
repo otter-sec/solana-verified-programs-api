@@ -126,7 +126,8 @@ impl DbClient {
                     }
                     let verified_build = verified_build.unwrap();
                     let is_verified = if let Some(hash) = hash.clone() {
-                        if *hash != verified_build.on_chain_hash {
+                        // Check if the on-chain hash matches the cached build hash
+                        if *hash != verified_build.executable_hash {
                             tracing::info!("On chain hash doesn't match.");
                             // Update the on-chain hash in the database
                             self.update_onchain_hash(
