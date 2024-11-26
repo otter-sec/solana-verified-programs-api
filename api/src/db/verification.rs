@@ -116,8 +116,6 @@ impl DbClient {
                     }
                 };
 
-                let build_params = self.get_build_params(&program_address).await?;
-
                 let mut verification_responses = vec![];
                 for (verified_build, build) in res {
                     if verified_build.is_none() {
@@ -137,7 +135,7 @@ impl DbClient {
                             .await.unwrap();
 
                             // run re-verification task in background
-                            let params_cloned = build_params.clone();
+                            let params_cloned: SolanaProgramBuild = build.clone();
                             let db_cloed = self.clone();
                             tokio::spawn(async move {
                                 db_cloed.reverify_program(params_cloned).await;
@@ -155,7 +153,7 @@ impl DbClient {
                             is_verified,
                             on_chain_hash: verified_build.on_chain_hash,
                             executable_hash: verified_build.executable_hash,
-                            repo_url: get_repo_url(&build_params),
+                            repo_url: get_repo_url(&build),
                             last_verified_at: Some(verified_build.verified_at),
                             commit: build.commit_hash.unwrap_or_default(),
                         },
