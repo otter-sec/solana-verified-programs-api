@@ -62,29 +62,46 @@ async fn process_verification(
     let params_from_onchain =
         onchain::get_otter_verify_params(&verify_build_data.program_id, signer.clone()).await;
 
-    if let Ok(params_from_onchain) = params_from_onchain {
-        tracing::info!("{:?} using Otter params", params_from_onchain);
-        payload.params = SolanaProgramBuildParams::from(params_from_onchain);
+    match params_from_onchain {
+        Ok(params) => {
+            tracing::info!("{:?} using Otter params", params);
+            payload.params = SolanaProgramBuildParams::from(params);
 
-        // check if the params was already processed
-        let is_duplicate = check_and_handle_duplicates(&payload, &db).await;
-        if let Some(respose) = is_duplicate {
-            return (StatusCode::OK, Json(respose.into()));
+            // check if the params was already processed
+            let is_duplicate = check_and_handle_duplicates(&payload, &db).await;
+            if let Some(response) = is_duplicate {
+                return (StatusCode::OK, Json(response.into()));
+            }
+
+            // Updated the build status to completed for recieved build params and update the uuid to a new one
+            let _ = db
+                .update_build_status(&uuid, JobStatus::Completed.into())
+                .await
+                .map_err(|e| {
+                    tracing::error!("Error updating build status: {:?}", e);
+                    e
+                });
+
+            // Insert the new build params into the database and update the uuid
+            let new_build = SolanaProgramBuild::from(&payload);
+            let _ = db.insert_build_params(&new_build).await;
+            uuid = new_build.id.clone();
         }
-
-        // Updated the build status to completed for recieved build params and update the uuid to a new one
-        let _ = db
-            .update_build_status(&uuid, JobStatus::Completed.into())
-            .await
-            .map_err(|e| {
-                tracing::error!("Error updating build status: {:?}", e);
-                e
-            });
-
-        // Insert the new build params into the database and update the uuid
-        let new_build = SolanaProgramBuild::from(&payload);
-        let _ = db.insert_build_params(&new_build).await;
-        uuid = new_build.id.clone();
+        Err(e) => {
+            if signer.is_some() {
+                tracing::error!("Error fetching onchain params: {:?}", e);
+                return (
+                    StatusCode::OK,
+                    Json(
+                        ErrorResponse {
+                            status: Status::Error,
+                            error: ErrorMessages::NoPDA.to_string(),
+                        }
+                        .into(),
+                    ),
+                );
+            }
+        }
     }
 
     //run task in background

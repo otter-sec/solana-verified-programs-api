@@ -43,6 +43,7 @@ pub enum ApiError {
 pub enum ErrorMessages {
     Unexpected,
     DB,
+    NoPDA,
 }
 
 impl fmt::Display for ErrorMessages {
@@ -50,6 +51,7 @@ impl fmt::Display for ErrorMessages {
         let message = match self {
             ErrorMessages::Unexpected => "We encountered an unexpected error during the verification process.",
             ErrorMessages::DB => "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.",
+            ErrorMessages::NoPDA => "The PDA associated with the given signer was not found. Please try again with a valid signer.",
         };
         write!(f, "{}", message)
     }
