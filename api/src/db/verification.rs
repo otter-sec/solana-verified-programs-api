@@ -235,7 +235,7 @@ impl DbClient {
                         verified_programs vp
                         LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
                     WHERE
-                        vp.program_id = $1
+                        vp.program_id = $1 AND vp.is_verified = true
                 ) subquery
             WHERE
                 rn = 1
