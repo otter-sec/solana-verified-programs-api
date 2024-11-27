@@ -8,7 +8,7 @@ use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
 use diesel::expression_methods::BoolExpressionMethods;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
-use diesel::{JoinOnDsl, SelectableHelper, Table};
+use diesel::{sql_query, Table};
 use diesel_async::RunQueryDsl;
 
 impl DbClient {
