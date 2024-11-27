@@ -119,7 +119,7 @@ impl DbClient {
                 let mut is_verification_needed = false;
 
                 let mut verification_responses = vec![];
-                for (verified_build, build) in res {
+                for (build, verified_build) in res {
                     if verified_build.is_none() {
                         tracing::info!("Verified build not found for {:?}", build.signer);
                         continue;
@@ -210,28 +210,42 @@ impl DbClient {
                 .map_err(Into::into),
         }
     }
+    
     pub async fn get_verified_builds_with_signer(
         &self,
         program_address: &str,
-    ) -> Result<Vec<(Option<VerifiedProgram>, SolanaProgramBuild)>> {
-        use crate::schema::solana_program_builds::dsl::*;
-
+    ) -> Result<Vec<(SolanaProgramBuild, Option<VerifiedProgram>)>> {
         let conn = &mut self.db_pool.get().await?;
-        solana_program_builds
-            .left_join(
-                crate::schema::verified_programs::table
-                    .on(crate::schema::verified_programs::solana_build_id
-                        .eq(crate::schema::solana_program_builds::id)),
-            )
-            .filter(crate::schema::solana_program_builds::program_id.eq(program_address))
-            .select((
-                Option::<VerifiedProgram>::as_select(),
-                SolanaProgramBuild::as_select(),
-            ))
-            .load::<(Option<VerifiedProgram>, SolanaProgramBuild)>(conn)
-            .await
-            .map_err(Into::into)
+        sql_query(
+            r#"
+    SELECT
+        *
+    FROM
+        (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY
+                        sp.signer
+                    ORDER BY
+                        created_at
+                ) AS rn
+            FROM
+                verified_programs vp
+                LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+            WHERE
+                vp.program_id = $1
+        ) subquery
+    WHERE
+        rn = 1
+"#,
+        )
+        .bind::<diesel::sql_types::Text, _>(program_address)
+        .load::<(SolanaProgramBuild, Option<VerifiedProgram>)>(conn)
+        .await
+        .map_err(Into::into)
     }
+
 
     pub async fn insert_or_update_verified_build(
         &self,
