@@ -141,7 +141,7 @@ impl DbClient {
                         } else {
                             tracing::info!("On chain hash matches. Returning the cached value.");
                         }
-                        *hash == verified_build.on_chain_hash
+                        *hash == verified_build.executable_hash
                     } else {
                         verified_build.executable_hash == verified_build.on_chain_hash
                     };
