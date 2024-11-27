@@ -135,7 +135,8 @@ impl DbClient {
                                 &hash,
                                 hash == verified_build.executable_hash,
                             )
-                            .await.unwrap();
+                            .await
+                            .unwrap();
                             is_verification_needed = true;
                         } else {
                             tracing::info!("On chain hash matches. Returning the cached value.");
@@ -210,7 +211,7 @@ impl DbClient {
                 .map_err(Into::into),
         }
     }
-    
+
     pub async fn get_verified_builds_with_signer(
         &self,
         program_address: &str,
@@ -218,34 +219,33 @@ impl DbClient {
         let conn = &mut self.db_pool.get().await?;
         sql_query(
             r#"
-    SELECT
-        *
-    FROM
-        (
             SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY
-                        sp.signer
-                    ORDER BY
-                        created_at
-                ) AS rn
+                *
             FROM
-                verified_programs vp
-                LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+                (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                sp.signer
+                            ORDER BY
+                                created_at
+                        ) AS rn
+                    FROM
+                        verified_programs vp
+                        LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+                    WHERE
+                        vp.program_id = $1
+                ) subquery
             WHERE
-                vp.program_id = $1
-        ) subquery
-    WHERE
-        rn = 1
-"#,
+                rn = 1
+        "#,
         )
         .bind::<diesel::sql_types::Text, _>(program_address)
         .load::<(SolanaProgramBuild, Option<VerifiedProgram>)>(conn)
         .await
         .map_err(Into::into)
     }
-
 
     pub async fn insert_or_update_verified_build(
         &self,

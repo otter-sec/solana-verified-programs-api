@@ -1,8 +1,7 @@
 use super::handlers::{
-    async_verify::process_async_verification_with_signer,
-    get_build_logs, get_job_status, get_verification_status, get_verified_programs_list,
-    get_verified_programs_status, handle_unverify, process_async_verification,
-    process_sync_verification,
+    async_verify::process_async_verification_with_signer, get_build_logs, get_job_status,
+    get_verification_status, get_verified_programs_list, get_verified_programs_status,
+    handle_unverify, process_async_verification, process_sync_verification,
     verification_status::get_verification_status_all,
 };
 use crate::db::DbClient;
