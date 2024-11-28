@@ -1,7 +1,7 @@
 use crate::services::onchain::OtterBuildParams;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SolanaProgramBuildParams {
     pub repository: String,
     pub program_id: String,
@@ -11,6 +11,13 @@ pub struct SolanaProgramBuildParams {
     pub base_image: Option<String>,
     pub mount_path: Option<String>,
     pub cargo_args: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SolanaProgramBuildParamsWithSigner {
+    pub signer: String,
+    #[serde(flatten)]
+    pub params: SolanaProgramBuildParams,
 }
 
 impl From<OtterBuildParams> for SolanaProgramBuildParams {

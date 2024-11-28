@@ -1,5 +1,6 @@
+use super::models::SolanaProgramBuildParamsWithSigner;
 use super::DbClient;
-use crate::db::models::{SolanaProgramBuild, SolanaProgramBuildParams};
+use crate::db::models::SolanaProgramBuild;
 use crate::Result;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
@@ -18,11 +19,12 @@ impl DbClient {
 
     pub async fn check_for_duplicate(
         &self,
-        payload: &SolanaProgramBuildParams,
+        data: &SolanaProgramBuildParamsWithSigner,
     ) -> Result<SolanaProgramBuild> {
         use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
+        let payload = &data.params;
 
         let mut query = solana_program_builds.into_boxed();
 
@@ -52,6 +54,8 @@ impl DbClient {
         if let Some(args) = payload.cargo_args.clone() {
             query = query.filter(cargo_args.eq(args));
         }
+
+        query = query.filter(signer.eq(data.signer.clone()));
 
         query
             .order(created_at.desc())

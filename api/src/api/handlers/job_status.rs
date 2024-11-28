@@ -12,7 +12,9 @@ pub(crate) async fn get_job_status(
     match status {
         Ok(res) => match res.status.into() {
             JobStatus::Completed => {
-                let verify_build_data = db.get_verified_build(&res.program_id).await;
+                let verify_build_data = db
+                    .get_verified_build(&res.program_id, None)
+                    .await;
                 match verify_build_data {
                     Ok(verified_build) => Json(JobVerificationResponse {
                         status: JobStatus::Completed.into(),

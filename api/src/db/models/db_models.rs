@@ -2,11 +2,23 @@ use crate::schema::{build_logs, solana_program_builds, verified_programs};
 use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use solana_sdk::{pubkey::Pubkey, system_program};
 
-use super::SolanaProgramBuildParams;
+use super::{SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner};
+
+pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
 
 #[derive(
-    Clone, Debug, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Insertable,
+    Identifiable,
+    Queryable,
+    AsChangeset,
+    Selectable,
+    QueryableByName,
 )]
 #[diesel(table_name = solana_program_builds, primary_key(id))]
 pub struct SolanaProgramBuild {
@@ -21,6 +33,7 @@ pub struct SolanaProgramBuild {
     pub bpf_flag: bool,
     pub created_at: NaiveDateTime,
     pub status: String,
+    pub signer: Option<String>,
 }
 
 impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
@@ -38,12 +51,30 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
             mount_path: params.mount_path.clone(),
             cargo_args: params.cargo_args.clone(),
             status: JobStatus::InProgress.into(),
+            signer: Some(DEFAULT_SIGNER.to_string()),
         }
     }
 }
 
+impl<'a> From<&'a SolanaProgramBuildParamsWithSigner> for SolanaProgramBuild {
+    fn from(body: &'a SolanaProgramBuildParamsWithSigner) -> Self {
+        let mut build = SolanaProgramBuild::from(&body.params);
+        build.signer = Some(body.signer.clone());
+        build
+    }
+}
+
 #[derive(
-    Debug, Clone, Serialize, Deserialize, Insertable, Identifiable, Queryable, AsChangeset,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Insertable,
+    Identifiable,
+    Queryable,
+    AsChangeset,
+    Selectable,
+    QueryableByName,
 )]
 #[diesel(table_name = verified_programs, primary_key(id))]
 pub struct VerifiedProgram {

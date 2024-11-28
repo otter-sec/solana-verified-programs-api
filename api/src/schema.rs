@@ -23,6 +23,7 @@ diesel::table! {
         created_at -> Timestamp,
         #[max_length = 20]
         status -> Varchar,
+        signer -> Nullable<Varchar>,
     }
 }
 

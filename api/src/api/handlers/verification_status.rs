@@ -1,5 +1,5 @@
 use crate::db::models::{
-    ApiResponse, ErrorResponse, Status, StatusResponse, VerificationStatusParams,
+    ApiResponse, ErrorResponse, Status, StatusResponse, SuccessResponse, VerificationStatusParams,
 };
 use crate::db::DbClient;
 use axum::extract::{Path, State};
@@ -10,7 +10,7 @@ pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> Json<ApiResponse> {
-    match db.check_is_verified(address).await {
+    match db.check_is_verified(address, None).await {
         Ok(result) => Json(
             StatusResponse {
                 is_verified: result.is_verified,
@@ -27,6 +27,25 @@ pub(crate) async fn get_verification_status(
             }
             .into(),
         ),
+        Err(err) => {
+            tracing::error!("Error getting data from database: {}", err);
+            Json(
+                ErrorResponse {
+                    status: Status::Error,
+                    error: "An unexpected database error occurred.".to_string(),
+                }
+                .into(),
+            )
+        }
+    }
+}
+
+pub(crate) async fn get_verification_status_all(
+    State(db): State<DbClient>,
+    Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
+) -> Json<ApiResponse> {
+    match db.get_all_verification_info(address).await {
+        Ok(result) => Json(ApiResponse::Success(SuccessResponse::StatusAll(result))),
         Err(err) => {
             tracing::error!("Error getting data from database: {}", err);
             Json(

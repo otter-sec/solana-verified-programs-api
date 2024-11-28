@@ -1,15 +1,23 @@
+use super::models::VerificationResponseWithSigner;
 use super::DbClient;
 use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
+    DEFAULT_SIGNER,
 };
 use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
+use diesel::expression_methods::BoolExpressionMethods;
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
+use diesel::{sql_query, Table};
 use diesel_async::RunQueryDsl;
 
 impl DbClient {
-    pub async fn check_is_verified(self, program_address: String) -> Result<VerificationResponse> {
-        let res = self.get_verified_build(&program_address).await;
+    pub async fn check_is_verified(
+        self,
+        program_address: String,
+        signer: Option<String>,
+    ) -> Result<VerificationResponse> {
+        let res = self.get_verified_build(&program_address, signer).await;
         match res {
             Ok(res) => {
                 let cache_result = self
@@ -89,15 +97,154 @@ impl DbClient {
         }
     }
 
-    pub async fn get_verified_build(&self, program_address: &str) -> Result<VerifiedProgram> {
+    pub async fn get_all_verification_info(
+        self,
+        program_address: String,
+    ) -> Result<Vec<VerificationResponseWithSigner>> {
+        let res = self.get_verified_builds_with_signer(&program_address).await;
+        match res {
+            Ok(res) => {
+                let hash = if let Ok(cache_result) = self.get_cache(&program_address).await {
+                    Some(cache_result)
+                } else {
+                    let on_chain_hash = get_on_chain_hash(&program_address).await;
+                    if let Ok(on_chain_hash) = on_chain_hash {
+                        self.set_cache(&program_address, &on_chain_hash).await?;
+                        Some(on_chain_hash)
+                    } else {
+                        None
+                    }
+                };
+
+                let mut is_verification_needed = false;
+
+                let mut verification_responses = vec![];
+                for (build, verified_build) in res {
+                    if verified_build.is_none() {
+                        tracing::info!("Verified build not found for {:?}", build.signer);
+                        continue;
+                    }
+                    let verified_build = verified_build.unwrap();
+                    let is_verified = if let Some(hash) = hash.clone() {
+                        // Check if the on-chain hash matches the cached build hash
+                        if *hash != verified_build.executable_hash {
+                            tracing::info!("On chain hash doesn't match.");
+                            // Update the on-chain hash in the database
+                            self.update_onchain_hash(
+                                &program_address,
+                                &hash,
+                                hash == verified_build.executable_hash,
+                            )
+                            .await
+                            .unwrap();
+                            is_verification_needed = true;
+                        } else {
+                            tracing::info!("On chain hash matches. Returning the cached value.");
+                        }
+                        *hash == verified_build.executable_hash
+                    } else {
+                        verified_build.executable_hash == verified_build.on_chain_hash
+                    };
+
+                    verification_responses.push(VerificationResponseWithSigner {
+                        verification_response: VerificationResponse {
+                            is_verified,
+                            on_chain_hash: verified_build.on_chain_hash,
+                            executable_hash: verified_build.executable_hash,
+                            repo_url: get_repo_url(&build),
+                            last_verified_at: Some(verified_build.verified_at),
+                            commit: build.commit_hash.unwrap_or_default(),
+                        },
+                        signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
+                    })
+                }
+
+                // Run re-verification task in background if needed
+                if is_verification_needed {
+                    let params = self.get_build_params(&program_address).await?;
+                    tokio::spawn(async move {
+                        self.reverify_program(params).await;
+                    });
+                }
+                Ok(verification_responses)
+            }
+            Err(err) => {
+                tracing::error!("Error getting data from database: {}", err);
+                if err.to_string() == "Record not found" {
+                    tracing::info!("{}: Program record not found in database", program_address);
+                    return Ok(vec![]);
+                }
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn get_verified_build(
+        &self,
+        program_address: &str,
+        signer: Option<String>,
+    ) -> Result<VerifiedProgram> {
         use crate::schema::verified_programs::dsl::*;
 
+        tracing::info!("Getting verified build for {:?}", program_address);
+
         let conn = &mut self.db_pool.get().await?;
-        verified_programs
+        let query = verified_programs
+            .inner_join(crate::schema::solana_program_builds::table)
             .filter(crate::schema::verified_programs::program_id.eq(program_address))
-            .first::<VerifiedProgram>(conn)
-            .await
-            .map_err(Into::into)
+            .select(verified_programs::all_columns());
+
+        match signer {
+            Some(signer) => query
+                .filter(crate::schema::solana_program_builds::signer.eq(signer))
+                .first::<VerifiedProgram>(conn)
+                .await
+                .map_err(Into::into),
+            None => query
+                .filter(
+                    crate::schema::solana_program_builds::signer
+                        .eq(DEFAULT_SIGNER.to_string())
+                        .or(crate::schema::solana_program_builds::signer.is_null()),
+                )
+                .first::<VerifiedProgram>(conn)
+                .await
+                .map_err(Into::into),
+        }
+    }
+
+    pub async fn get_verified_builds_with_signer(
+        &self,
+        program_address: &str,
+    ) -> Result<Vec<(SolanaProgramBuild, Option<VerifiedProgram>)>> {
+        let conn = &mut self.db_pool.get().await?;
+        sql_query(
+            r#"
+            SELECT
+                *
+            FROM
+                (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                sp.signer
+                            ORDER BY
+                                created_at
+                        ) AS rn
+                    FROM
+                        verified_programs vp
+                        LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+                    WHERE
+                        vp.program_id = $1 AND vp.is_verified = true
+                ) subquery
+            WHERE
+                rn = 1
+        "#,
+        )
+        .bind::<diesel::sql_types::Text, _>(program_address)
+        .load::<(SolanaProgramBuild, Option<VerifiedProgram>)>(conn)
+        .await
+        .map_err(Into::into)
     }
 
     pub async fn insert_or_update_verified_build(
@@ -109,7 +256,8 @@ impl DbClient {
         let conn = &mut self.db_pool.get().await?;
         diesel::insert_into(verified_programs)
             .values(payload)
-            .on_conflict(program_id)
+            // Should never get hit
+            .on_conflict(id)
             .do_update()
             .set(payload)
             .execute(conn)
@@ -138,6 +286,7 @@ impl DbClient {
     }
 
     pub async fn reverify_program(self, build_params: SolanaProgramBuild) {
+        tracing::info!("Re-verifying the build.");
         let mut payload = SolanaProgramBuildParams {
             program_id: build_params.program_id,
             repository: build_params.repository,
@@ -149,9 +298,9 @@ impl DbClient {
             cargo_args: build_params.cargo_args,
         };
 
-        let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id).await;
+        // Get the build params from the on-chain Metadata
+        let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id, None).await;
 
-        // Todo: Handle both cases accordingly
         if let Ok(params_from_onchain) = params_from_onchain {
             // Compare the build params from on-chain and the build params from the database
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
