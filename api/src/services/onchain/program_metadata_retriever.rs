@@ -137,7 +137,7 @@ pub async fn get_all_pdas_availabe(
 pub async fn get_otter_verify_params(
     program_id: &str,
     signer: Option<String>,
-) -> Result<OtterBuildParams> {
+) -> Result<(OtterBuildParams, String)> {
     let rpc_url = CONFIG.rpc_url.clone();
     let client = RpcClient::new(rpc_url.clone());
     let program_id_pubkey = Pubkey::from_str(program_id)?;
@@ -149,7 +149,7 @@ pub async fn get_otter_verify_params(
         if let Ok(otter_build_params) =
             get_otter_pda(&client, &signer_pubkey, &program_id_pubkey).await
         {
-            return Ok(otter_build_params);
+            return Ok((otter_build_params, signer_pubkey.to_string()));
         } else {
             return Err(ApiError::Custom(format!(
                 "Otter-Verify PDA not found for the given signer: {}",
@@ -165,14 +165,14 @@ pub async fn get_otter_verify_params(
         if let Ok(otter_build_params) =
             get_otter_pda(&client, &authority_pubkey, &program_id_pubkey).await
         {
-            return Ok(otter_build_params);
+            return Ok((otter_build_params, authority_pubkey.to_string()));
         }
     }
 
     // Fallback: PDA based on whitelisted pubkeys
     for signer in SIGNER_KEYS.iter() {
         if let Ok(otter_build_params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
-            return Ok(otter_build_params);
+            return Ok((otter_build_params, signer.to_string()));
         }
     }
 
@@ -196,7 +196,7 @@ mod tests {
         let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
         let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
-        let params = data.unwrap();
+        let params = data.unwrap().0;
         assert!(params.address.to_string() == "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
         assert!(params.signer.to_string() == "9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU");
     }
@@ -206,7 +206,7 @@ mod tests {
         let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
         let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
-        let params = data.unwrap();
+        let params = data.unwrap().0;
         let solana_build_params = SolanaProgramBuildParams::from(params);
         assert!(solana_build_params.program_id == "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
         assert!(solana_build_params.base_image.is_some());
@@ -222,7 +222,7 @@ mod tests {
         let program_id = "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu";
         let data = get_otter_verify_params(program_id, None).await;
         assert!(data.is_ok());
-        let params = data.unwrap();
+        let params = data.unwrap().0;
         let solana_build_params = SolanaProgramBuildParams::from(params);
         assert!(solana_build_params.program_id == "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu");
         assert!(solana_build_params.base_image.is_none());

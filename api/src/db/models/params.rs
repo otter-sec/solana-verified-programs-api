@@ -16,8 +16,7 @@ pub struct SolanaProgramBuildParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SolanaProgramBuildParamsWithSigner {
     pub signer: String,
-    #[serde(flatten)]
-    pub params: SolanaProgramBuildParams,
+    pub program_id: String,
 }
 
 impl From<OtterBuildParams> for SolanaProgramBuildParams {

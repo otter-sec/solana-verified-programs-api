@@ -1,7 +1,4 @@
-use crate::db::models::{
-    JobStatus, SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner, VerifiedProgram,
-    VerifyResponse,
-};
+use crate::db::models::{JobStatus, SolanaProgramBuildParams, VerifiedProgram, VerifyResponse};
 use crate::db::DbClient;
 use crate::errors::ApiError;
 use crate::errors::ErrorMessages;
@@ -44,11 +41,12 @@ pub async fn check_and_process_verification(
 }
 
 pub async fn check_and_handle_duplicates(
-    payload: &SolanaProgramBuildParamsWithSigner,
+    payload: &SolanaProgramBuildParams,
+    signer: String,
     db: &DbClient,
 ) -> Option<VerifyResponse> {
     // Check if the build was already processed
-    let is_duplicate = db.check_for_duplicate(payload).await;
+    let is_duplicate = db.check_for_duplicate(payload, signer).await;
 
     if let Ok(respose) = is_duplicate {
         match respose.status.into() {

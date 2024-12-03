@@ -301,7 +301,7 @@ impl DbClient {
         // Get the build params from the on-chain Metadata
         let params_from_onchain = onchain::get_otter_verify_params(&payload.program_id, None).await;
 
-        if let Ok(params_from_onchain) = params_from_onchain {
+        if let Ok((params_from_onchain, _)) = params_from_onchain {
             // Compare the build params from on-chain and the build params from the database
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
             if otter_params != payload {

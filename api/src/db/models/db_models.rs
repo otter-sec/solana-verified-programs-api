@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use solana_sdk::{pubkey::Pubkey, system_program};
 
-use super::{SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner};
+use super::SolanaProgramBuildParams;
 
 pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
 
@@ -53,14 +53,6 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
             status: JobStatus::InProgress.into(),
             signer: Some(DEFAULT_SIGNER.to_string()),
         }
-    }
-}
-
-impl<'a> From<&'a SolanaProgramBuildParamsWithSigner> for SolanaProgramBuild {
-    fn from(body: &'a SolanaProgramBuildParamsWithSigner) -> Self {
-        let mut build = SolanaProgramBuild::from(&body.params);
-        build.signer = Some(body.signer.clone());
-        build
     }
 }
 
