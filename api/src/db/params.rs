@@ -1,4 +1,4 @@
-use super::models::SolanaProgramBuildParamsWithSigner;
+use super::models::SolanaProgramBuildParams;
 use super::DbClient;
 use crate::db::models::SolanaProgramBuild;
 use crate::Result;
@@ -19,12 +19,13 @@ impl DbClient {
 
     pub async fn check_for_duplicate(
         &self,
-        data: &SolanaProgramBuildParamsWithSigner,
+        data: &SolanaProgramBuildParams,
+        pda_signer: String,
     ) -> Result<SolanaProgramBuild> {
         use crate::schema::solana_program_builds::dsl::*;
 
         let conn = &mut self.db_pool.get().await?;
-        let payload = &data.params;
+        let payload = &data;
 
         let mut query = solana_program_builds.into_boxed();
 
@@ -55,7 +56,7 @@ impl DbClient {
             query = query.filter(cargo_args.eq(args));
         }
 
-        query = query.filter(signer.eq(data.signer.clone()));
+        query = query.filter(signer.eq(pda_signer.clone()));
 
         query
             .order(created_at.desc())
