@@ -56,7 +56,7 @@ pub(crate) async fn process_async_verification_with_signer(
         Err(e) => {
             tracing::error!("Error fetching onchain params: {:?}", e);
             (
-                StatusCode::OK,
+                StatusCode::NOT_FOUND,
                 Json(
                     ErrorResponse {
                         status: Status::Error,
