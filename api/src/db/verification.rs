@@ -4,6 +4,7 @@ use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
     DEFAULT_SIGNER,
 };
+use crate::services::onchain::program_metadata_retriever::SIGNER_KEYS;
 use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
 use diesel::expression_methods::BoolExpressionMethods;
@@ -204,6 +205,10 @@ impl DbClient {
                 .filter(
                     crate::schema::solana_program_builds::signer
                         .eq(DEFAULT_SIGNER.to_string())
+                        .or(crate::schema::solana_program_builds::signer
+                            .eq(SIGNER_KEYS[0].to_string()))
+                        .or(crate::schema::solana_program_builds::signer
+                            .eq(SIGNER_KEYS[1].to_string()))
                         .or(crate::schema::solana_program_builds::signer.is_null()),
                 )
                 .first::<VerifiedProgram>(conn)
