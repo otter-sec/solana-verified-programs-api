@@ -32,7 +32,7 @@ pub struct OtterBuildParams {
 const OTTER_VERIFY_PROGRAMID: Pubkey =
     solana_sdk::pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
 
-const SIGNER_KEYS: [Pubkey; 2] = [
+pub const SIGNER_KEYS: [Pubkey; 2] = [
     solana_sdk::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU"),
     solana_sdk::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
 ];
