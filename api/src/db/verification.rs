@@ -1,16 +1,21 @@
+use std::str::FromStr;
+
 use super::models::VerificationResponseWithSigner;
 use super::DbClient;
 use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
     DEFAULT_SIGNER,
 };
-use crate::services::onchain::program_metadata_retriever::SIGNER_KEYS;
+use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
 use crate::services::{get_on_chain_hash, get_repo_url, onchain, verification};
 use crate::Result;
-use diesel::expression_methods::BoolExpressionMethods;
-use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
-use diesel::{sql_query, Table};
+use diesel::{
+    expression_methods::{BoolExpressionMethods, ExpressionMethods},
+    query_dsl::QueryDsl,
+    sql_query, Table,
+};
 use diesel_async::RunQueryDsl;
+use solana_sdk::pubkey::Pubkey;
 
 impl DbClient {
     pub async fn check_is_verified(
@@ -201,19 +206,43 @@ impl DbClient {
                 .first::<VerifiedProgram>(conn)
                 .await
                 .map_err(Into::into),
-            None => query
-                .filter(
-                    crate::schema::solana_program_builds::signer
-                        .eq(DEFAULT_SIGNER.to_string())
-                        .or(crate::schema::solana_program_builds::signer
-                            .eq(SIGNER_KEYS[0].to_string()))
-                        .or(crate::schema::solana_program_builds::signer
-                            .eq(SIGNER_KEYS[1].to_string()))
-                        .or(crate::schema::solana_program_builds::signer.is_null()),
-                )
-                .first::<VerifiedProgram>(conn)
-                .await
-                .map_err(Into::into),
+            None => {
+                // If signer was not provided, fetch program authority from on-chain
+                let program_address_key = Pubkey::from_str(program_address)?;
+                let program_authority = get_program_authority(&program_address_key).await;
+                let mut filtered_query = query
+                    .filter(
+                        crate::schema::solana_program_builds::signer
+                            .eq(Some(DEFAULT_SIGNER.to_string()))
+                            .or(crate::schema::solana_program_builds::signer
+                                .eq(Some(SIGNER_KEYS[0].to_string())))
+                            .or(crate::schema::solana_program_builds::signer
+                                .eq(Some(SIGNER_KEYS[1].to_string())))
+                            .or(crate::schema::solana_program_builds::signer.is_null()),
+                    )
+                    .into_boxed();
+
+                if let Ok(Some(program_authority)) = program_authority {
+                    filtered_query = query
+                        .filter(
+                            crate::schema::solana_program_builds::signer
+                                .eq(Some(DEFAULT_SIGNER.to_string()))
+                                .or(crate::schema::solana_program_builds::signer
+                                    .eq(Some(SIGNER_KEYS[0].to_string())))
+                                .or(crate::schema::solana_program_builds::signer
+                                    .eq(Some(SIGNER_KEYS[1].to_string())))
+                                .or(crate::schema::solana_program_builds::signer
+                                    .eq(Some(program_authority)))
+                                .or(crate::schema::solana_program_builds::signer.is_null()),
+                        )
+                        .into_boxed();
+                }
+
+                filtered_query
+                    .first::<VerifiedProgram>(conn)
+                    .await
+                    .map_err(Into::into)
+            }
         }
     }
 
