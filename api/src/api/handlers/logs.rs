@@ -1,18 +1,34 @@
-use crate::db::DbClient;
-use crate::services::logging::read_logs;
-use axum::extract::{Path, State};
-use axum::Json;
+use crate::{db::DbClient, services::logging::read_logs};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use serde_json::{json, Value};
+use tracing::{error, info};
 
-// Route handler for GET /logs/:id which checks the status of a job
+/// Handler for retrieving build logs for a specific program
+///
+/// # Endpoint: GET /logs/:id
+///
+/// # Arguments
+/// * `db` - Database client from application state
+/// * `address` - Program address to fetch logs for
+///
+/// # Returns
+/// * JSON response containing either the logs or an error message
 pub(crate) async fn get_build_logs(
     State(db): State<DbClient>,
     Path(address): Path<String>,
 ) -> Json<Value> {
+    info!("Fetching build logs for program: {}", address);
+
     let file_id = match db.get_logs_info(&address).await {
-        Ok(res) => res.file_name,
+        Ok(res) => {
+            info!("Found log file: {}", res.file_name);
+            res.file_name
+        }
         Err(err) => {
-            tracing::error!("Error getting data from database: {}", err);
+            error!("Failed to retrieve logs from database: {}", err);
             return Json(json!({
                 "error": "We could not find the logs for this program"
             }));
@@ -20,6 +36,7 @@ pub(crate) async fn get_build_logs(
     };
 
     let logs = read_logs(&file_id);
+    info!("Successfully retrieved logs for program: {}", address);
 
     Json(logs)
 }

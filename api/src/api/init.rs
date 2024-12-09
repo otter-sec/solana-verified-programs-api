@@ -1,9 +1,3 @@
-use super::handlers::{
-    async_verify::process_async_verification_with_signer, get_build_logs, get_job_status,
-    get_verification_status, get_verified_programs_list, get_verified_programs_status,
-    handle_unverify, process_async_verification, process_sync_verification,
-    verification_status::get_verification_status_all,
-};
 use crate::db::DbClient;
 use axum::{
     error_handling::HandleErrorLayer,
@@ -23,7 +17,7 @@ use tower_http::{
 };
 use tracing::Level;
 
-use super::index::index;
+use super::{handlers::*, index::index};
 
 pub fn initialize_router(db: DbClient) -> Router {
     let error_handler = || {
@@ -69,8 +63,9 @@ pub fn initialize_router(db: DbClient) -> Router {
         .on_request(DefaultOnRequest::new().level(Level::INFO))
         .on_response(DefaultOnResponse::new().level(Level::INFO));
 
+    // Define routes with their rate limits
     Router::new()
-        .route("/", get(|| async { index() }))
+        // Verification routes (stricter rate limits)
         .route("/verify", post(process_async_verification))
         .route(
             "/verify-with-signer",
@@ -78,47 +73,23 @@ pub fn initialize_router(db: DbClient) -> Router {
         )
         .route("/verify_sync", post(process_sync_verification))
         .layer(
-            global_rate_limit(1)
+            global_rate_limit(5)
                 .layer(rate_limit_per_ip(30, 1))
+                .layer(cors(Method::POST))
+                .layer(CompressionLayer::new().zstd(true)),
+        )
+        .route("/unverify", post(handle_unverify))
+        .layer(
+            global_rate_limit(100)
+                .layer(rate_limit_per_ip(1, 100))
                 .layer(cors(Method::POST))
                 .layer(CompressionLayer::new().zstd(true)),
         )
         .route("/status-all/:address", get(get_verification_status_all))
         .route("/status/:address", get(get_verification_status))
-        .layer(
-            global_rate_limit(10000)
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::GET))
-                .layer(CompressionLayer::new().zstd(true)),
-        )
         .route("/job/:job_id", get(get_job_status))
-        .layer(
-            global_rate_limit(10000)
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::GET))
-                .layer(CompressionLayer::new().zstd(true)),
-        )
         .route("/logs/:address", get(get_build_logs))
-        .layer(
-            global_rate_limit(10000)
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::GET))
-                .layer(CompressionLayer::new().zstd(true)),
-        )
-        .route("/unverify", post(handle_unverify))
-        .layer(
-            global_rate_limit(10000)
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::POST))
-                .layer(CompressionLayer::new().zstd(true)),
-        )
         .route("/verified-programs", get(get_verified_programs_list))
-        .layer(
-            global_rate_limit(10000)
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::GET))
-                .layer(CompressionLayer::new().zstd(true)),
-        )
         .route(
             "/verified-programs-status",
             get(get_verified_programs_status),
@@ -129,6 +100,10 @@ pub fn initialize_router(db: DbClient) -> Router {
                 .layer(cors(Method::GET))
                 .layer(CompressionLayer::new().zstd(true)),
         )
+        // Base route
+        .route("/", get(|| async { index() }))
+        .route("/health", get(|| async { StatusCode::OK }))
+        // Apply common middleware
         .layer(trace_layer)
         .with_state(db)
 }
