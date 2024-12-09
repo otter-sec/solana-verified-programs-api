@@ -6,3 +6,5 @@ redis.conf
 /backupdata
 */Cargo.lock
 redisdata
+test_db
+.env.test

@@ -1,21 +1,33 @@
 use crate::services::onchain::OtterBuildParams;
 use serde::{Deserialize, Serialize};
 
+/// Parameters for Solana program build operations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SolanaProgramBuildParams {
+    /// GitHub repository URL
     pub repository: String,
+    /// Solana program ID
     pub program_id: String,
+    /// Git commit hash
     pub commit_hash: Option<String>,
+    /// Library name for the program
     pub lib_name: Option<String>,
+    /// Flag to indicate BPF compilation
     pub bpf_flag: Option<bool>,
+    /// Base Docker image for build
     pub base_image: Option<String>,
+    /// Mount path in container
     pub mount_path: Option<String>,
+    /// Additional cargo build arguments
     pub cargo_args: Option<Vec<String>>,
 }
 
+/// Build parameters with associated PDA signer
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SolanaProgramBuildParamsWithSigner {
+    /// Signer's public key
     pub signer: String,
+    /// Solana program ID
     pub program_id: String,
 }
 
@@ -34,7 +46,9 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
     }
 }
 
+/// Parameters for verification status requests
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct VerificationStatusParams {
+    /// Program address to check
     pub address: String,
 }

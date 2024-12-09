@@ -8,6 +8,7 @@ use super::SolanaProgramBuildParams;
 
 pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
 
+/// Represents a Solana program build in the database
 #[derive(
     Clone,
     Debug,
@@ -19,20 +20,33 @@ pub(crate) const DEFAULT_SIGNER: Pubkey = system_program::id();
     AsChangeset,
     Selectable,
     QueryableByName,
+    Default,
 )]
 #[diesel(table_name = solana_program_builds, primary_key(id))]
 pub struct SolanaProgramBuild {
+    /// Unique identifier for the build
     pub id: String,
+    /// Repository URL
     pub repository: String,
+    /// Git commit hash
     pub commit_hash: Option<String>,
+    /// Program ID
     pub program_id: String,
+    /// Library name
     pub lib_name: Option<String>,
+    /// Base Docker image
     pub base_docker_image: Option<String>,
+    /// Mount path in container
     pub mount_path: Option<String>,
+    /// Cargo build arguments
     pub cargo_args: Option<Vec<String>>,
+    /// BPF compilation flag
     pub bpf_flag: bool,
+    /// Build creation timestamp
     pub created_at: NaiveDateTime,
+    /// Build status
     pub status: String,
+    /// Signer's public key
     pub signer: Option<String>,
 }
 
@@ -70,12 +84,19 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
 )]
 #[diesel(table_name = verified_programs, primary_key(id))]
 pub struct VerifiedProgram {
+    /// Unique identifier
     pub id: String,
+    /// Program ID
     pub program_id: String,
+    /// Verification status
     pub is_verified: bool,
+    /// Hash of the program on chain
     pub on_chain_hash: String,
+    /// Hash of the executable
     pub executable_hash: String,
+    /// Verification timestamp
     pub verified_at: NaiveDateTime,
+    /// Build ID reference
     pub solana_build_id: String,
 }
 
@@ -114,11 +135,16 @@ impl From<String> for JobStatus {
     }
 }
 
+/// Represents build logs in the database
 #[derive(Clone, Debug, Serialize, Deserialize, Insertable, Queryable, AsChangeset)]
 #[diesel(table_name = build_logs, primary_key(id))]
 pub struct BuildLogs {
+    /// Unique identifier
     pub id: String,
+    /// Program address
     pub program_address: String,
+    /// Log file name
     pub file_name: String,
+    /// Log creation timestamp
     pub created_at: NaiveDateTime,
 }
