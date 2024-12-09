@@ -31,7 +31,7 @@ pub(crate) async fn get_job_status(
                     match db.get_verified_build(&job.program_id, None).await {
                         Ok(verified_build) => {
                             let repo_url = job.commit_hash.map_or(job.repository.clone(), |hash| {
-                                format!("{}/tree/{}", job.repository, hash)
+                                format!("{}/tree/{}", job.repository.trim_end_matches('/'), hash)
                             });
 
                             info!(
