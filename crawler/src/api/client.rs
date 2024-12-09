@@ -79,11 +79,20 @@ pub async fn verify_build(params: SolanaProgramBuildParams) -> anyhow::Result<()
                     let _ = sender.send(true);
                     handle.join().unwrap();
                     let status_response = status.respose.unwrap();
-                    tracing::info!(
-                        "Program {} has been successfully verified. ✅",
-                        params.program_id
-                    );
-                    tracing::info!("\nThe provided GitHub build matches the on-chain hash:");
+                    if status_response.on_chain_hash.as_str()
+                        == status_response.executable_hash.as_str()
+                    {
+                        tracing::info!(
+                            "Program {} has been successfully verified. ✅",
+                            params.program_id
+                        );
+                        tracing::info!("\nThe provided GitHub build matches the on-chain hash:");
+                    } else {
+                        tracing::error!("Program {} has not been verified. ❌", params.program_id);
+                        tracing::info!(
+                            "\nThe provided GitHub build does not match the on-chain hash:"
+                        );
+                    }
                     tracing::info!("On Chain Hash: {}", status_response.on_chain_hash.as_str());
                     tracing::info!(
                         "Executable Hash: {}",
