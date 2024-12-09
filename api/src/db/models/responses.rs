@@ -157,3 +157,36 @@ pub struct JobVerificationResponse {
 pub struct VerifiedProgramListResponse {
     pub verified_programs: Vec<String>,
 }
+
+
+/// Response structure for individual program status
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifiedProgramStatusResponse {
+    /// Program identifier
+    pub program_id: String,
+    /// Current verification status
+    pub is_verified: bool,
+    /// Status message
+    pub message: String,
+    /// Hash of the program on chain
+    pub on_chain_hash: String,
+    /// Hash of the executable
+    pub executable_hash: String,
+    /// Last verification timestamp
+    pub last_verified_at: Option<NaiveDateTime>,
+    /// Repository URL
+    pub repo_url: String,
+    /// Git commit hash
+    pub commit: String,
+}
+
+/// Response structure for list of program statuses
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifiedProgramsStatusListResponse {
+    /// Operation status
+    pub status: Status,
+    /// List of program statuses
+    pub data: Option<Vec<VerifiedProgramStatusResponse>>,
+    /// Error message if any
+    pub error: Option<String>,
+}

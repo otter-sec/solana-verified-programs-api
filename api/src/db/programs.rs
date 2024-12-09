@@ -1,5 +1,4 @@
-use super::DbClient;
-use crate::{db::models::VerifiedProgram, Result};
+use crate::{db::{models::{VerifiedProgram, VerifiedProgramStatusResponse}, DbClient}, Result};
 use diesel_async::RunQueryDsl;
 use tracing::{error, info};
 
@@ -21,6 +20,48 @@ impl DbClient {
                 error!("Failed to fetch verified programs: {}", e);
                 e.into()
             })
+    }
+
+
+
+    pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
+
+        let all_verified_programs = self.get_verified_programs().await?;
+
+        let mut programs_status_all = Vec::new();
+
+        for program in all_verified_programs {
+        info!("Checking verification status for program: {}", program.program_id);
+        match self.clone().check_is_verified(program.program_id.to_owned(), None).await {
+            Ok(result) => {
+                let status_message = if result.is_verified {
+                    "On chain program verified"
+                } else {
+                    "On chain program not verified"
+                };
+
+                info!("Program {} status: {}", program.program_id, status_message);
+                programs_status_all.push(VerifiedProgramStatusResponse {
+                    program_id: program.program_id.to_owned(),
+                    is_verified: result.is_verified,
+                    message: status_message.to_string(),
+                    on_chain_hash: result.on_chain_hash,
+                    executable_hash: result.executable_hash,
+                    last_verified_at: result.last_verified_at,
+                    repo_url: result.repo_url,
+                    commit: result.commit,
+                });
+            }
+            Err(err) => {
+                error!(
+                    "Failed to get verification status for program {}: {}",
+                    program.program_id, err
+                );
+            }
+            }
+        }
+
+        Ok(programs_status_all)
     }
 }
 
