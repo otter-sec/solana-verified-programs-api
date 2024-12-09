@@ -19,16 +19,16 @@ pub fn get_last_line(output: &str) -> Option<String> {
 /// # Returns
 /// * `String` - Full repository URL, optionally including commit reference
 pub fn build_repository_url(build_params: &SolanaProgramBuild) -> String {
-    build_params.commit_hash.as_ref().map_or_else(
-        || build_params.repository.clone(),
-        |hash| {
-            format!(
+    if let Some(hash) = &build_params.commit_hash {
+        if !hash.is_empty() {
+            return format!(
                 "{}/tree/{}",
                 build_params.repository.trim_end_matches('/'),
                 hash
-            )
-        },
-    )
+            );
+        }
+    }
+    build_params.repository.clone()
 }
 
 /// Extracts a hash value from output text with a specific prefix
@@ -80,6 +80,9 @@ mod tests {
         );
 
         build.commit_hash = None;
+        assert_eq!(build_repository_url(&build), "https://github.com/user/repo/");
+        
+        build.commit_hash = Some("".to_string());
         assert_eq!(build_repository_url(&build), "https://github.com/user/repo/");
     }
 
