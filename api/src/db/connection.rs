@@ -4,9 +4,7 @@ use diesel_async::AsyncPgConnection;
 use r2d2_redis::{r2d2, RedisConnectionManager};
 use std::time::Duration;
 
-use crate::errors::ApiError;
-
-const DEFAULT_POOL_SIZE: usize = 5;
+const DEFAULT_POOL_SIZE: usize = 10;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Clone)]
@@ -65,18 +63,6 @@ impl DbClient {
     ) -> Result<r2d2::PooledConnection<RedisConnectionManager>, r2d2::Error> {
         self.redis_pool.get()
     }
-
-    /// Check if both pools are healthy
-    pub async fn healthcheck(&self) -> Result<(), ApiError> {
-        let postgres_conn = self.db_pool.get().await;
-        let redis_conn = self.redis_pool.get();
-
-        if postgres_conn.is_err() || redis_conn.is_err() {
-            return Err(ApiError::Custom("Database or Redis connection failed".to_string()));
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -90,8 +76,10 @@ mod tests {
         let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
         let client = DbClient::new(&db_url, &redis_url);
 
-        let result = client.healthcheck().await;
+        let postgres_conn = client.get_db_conn().await;
+        let redis_conn = client.get_redis_conn();
 
-        assert!(result.is_ok());
+        assert!(postgres_conn.is_ok());
+        assert!(redis_conn.is_ok());
     }
 }
