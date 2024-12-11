@@ -90,6 +90,7 @@ pub fn initialize_router(db: DbClient) -> Router {
         .route("/job/:job_id", get(get_job_status))
         .route("/logs/:address", get(get_build_logs))
         .route("/verified-programs", get(get_verified_programs_list))
+        .route("/verified-programs/:page", get(get_verified_programs_list_paginated))
         .route(
             "/verified-programs-status",
             get(get_verified_programs_status),

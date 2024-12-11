@@ -20,5 +20,5 @@ pub(crate) use logs::get_build_logs;
 pub(crate) use sync_verify::process_sync_verification;
 pub(crate) use unverify::handle_unverify;
 pub(crate) use verification_status::{get_verification_status, get_verification_status_all};
-pub(crate) use verified_programs_list::get_verified_programs_list;
+pub(crate) use verified_programs_list::{get_verified_programs_list, get_verified_programs_list_paginated};
 pub(crate) use verified_programs_status::get_verified_programs_status;

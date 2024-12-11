@@ -1,6 +1,9 @@
 use crate::{db::{models::{VerifiedProgram, VerifiedProgramStatusResponse}, DbClient}, Result};
 use diesel_async::RunQueryDsl;
+use diesel::QueryDsl;
 use tracing::{error, info};
+
+const PER_PAGE: i64 = 20;
 
 /// DbClient helper functions for VerifiedPrograms table to retrieve verified programs
 impl DbClient {
@@ -20,6 +23,34 @@ impl DbClient {
                 error!("Failed to fetch verified programs: {}", e);
                 e.into()
             })
+    }
+
+
+    /// Retrieves a page of verified programs from the database
+    /// 
+    /// Returns a list of VerifiedProgram structs 
+    /// 
+    ///  
+    pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<Vec<String>> {
+        use crate::schema::verified_programs::dsl::*;
+
+        // Ensure page is valid
+        let page = if page > 0 { page } else { 1 };
+        let offset = (page - 1) * PER_PAGE;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        verified_programs
+        .select(program_id)
+        .order_by(id)
+        .limit(PER_PAGE)
+        .offset(offset)
+        .load::<String>(conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch verified programs: {}", e);
+            e.into()
+        })
     }
 
 
