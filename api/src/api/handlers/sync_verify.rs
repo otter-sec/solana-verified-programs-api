@@ -1,11 +1,12 @@
 use crate::{
-    db::models::{
+    db::{models::{
         ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-        StatusResponse, DEFAULT_SIGNER,
-    },
-    db::DbClient,
+        StatusResponse,
+    }, DbClient},
     errors::ErrorMessages,
-    services::verification::{check_and_handle_duplicates, process_verification_request},
+    services::{
+        build_repository_url, onchain::{self, get_program_authority}, verification::{check_and_handle_duplicates, process_verification_request}
+    },
 };
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
@@ -32,52 +33,58 @@ pub(crate) async fn process_sync_verification(
         payload.program_id
     );
 
-    // Create build record
-    let verify_build_data = SolanaProgramBuild::from(&payload);
+    // get program authority from on-chain
+    let program_authority = get_program_authority(&payload.program_id)
+        .await
+        .unwrap_or(None);
+
+    match onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
+        .await
+    {
+        Ok((params, signer)) => {
+            let _ = db
+                .insert_or_update_program_authority(&params.address, program_authority.as_deref())
+                .await;
+            process_verification_sync(db, SolanaProgramBuildParams::from(params), signer).await
+        }
+        Err(err) => {
+            error!(
+                "Unable to find on-chain PDA for given program id: {:?}",
+                err
+            );
+            (
+                StatusCode::NOT_FOUND,
+                Json(
+                    ErrorResponse {
+                        status: Status::Error,
+                        error: ErrorMessages::NoPDA.to_string(),
+                    }
+                    .into(),
+                ),
+            )
+        }
+    }
+}
+
+/// Processes the verification request synchronously
+async fn process_verification_sync(
+    db: DbClient,
+    payload: SolanaProgramBuildParams,
+    signer: String,
+) -> (StatusCode, Json<ApiResponse>) {
+    let mut verify_build_data = SolanaProgramBuild::from(&payload);
+    verify_build_data.signer = Some(signer.clone());
     let uuid = verify_build_data.id.clone();
 
     // Check for existing verification
-    if let Some(response) = check_for_duplicate(&payload, &db).await {
-        return response;
+    if let Some(response) = check_and_handle_duplicates(&payload, signer.clone(), &db).await {
+        return (StatusCode::OK, Json(response.into()));
     }
 
     // Insert build parameters
-    if let Err(e) = insert_build_params(&db, &verify_build_data).await {
-        return e;
-    }
-
-    // Process verification
-    match process_verification(&payload, &uuid, &db).await {
-        Ok(response) => response,
-        Err(response) => response,
-    }
-}
-
-/// Checks if the program is already verified
-async fn check_for_duplicate(
-    payload: &SolanaProgramBuildParams,
-    db: &DbClient,
-) -> Option<(StatusCode, Json<ApiResponse>)> {
-    match check_and_handle_duplicates(payload, DEFAULT_SIGNER.to_string(), db).await {
-        Some(response) => {
-            info!(
-                "Found existing verification for program: {}",
-                payload.program_id
-            );
-            Some((StatusCode::OK, Json(response.into())))
-        }
-        None => None,
-    }
-}
-
-/// Inserts build parameters into the database
-async fn insert_build_params(
-    db: &DbClient,
-    build_data: &SolanaProgramBuild,
-) -> Result<(), (StatusCode, Json<ApiResponse>)> {
-    if let Err(e) = db.insert_build_params(build_data).await {
+    if let Err(e) = db.insert_build_params(&verify_build_data).await {
         error!("Failed to insert build parameters: {:?}", e);
-        return Err((
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(
                 ErrorResponse {
@@ -86,32 +93,18 @@ async fn insert_build_params(
                 }
                 .into(),
             ),
-        ));
+        );
     }
-    Ok(())
-}
 
-/// Processes the verification request
-async fn process_verification(
-    payload: &SolanaProgramBuildParams,
-    uuid: &str,
-    db: &DbClient,
-) -> Result<(StatusCode, Json<ApiResponse>), (StatusCode, Json<ApiResponse>)> {
-    match process_verification_request(payload.clone(), uuid, db).await {
+    // Process verification synchronously
+    match process_verification_request(payload.clone(), &uuid, &db).await {
         Ok(res) => {
             info!(
                 "Verification completed for program: {} (verified: {})",
                 payload.program_id, res.is_verified
             );
 
-            let repo_url = payload
-                .commit_hash
-                .as_ref()
-                .map_or(payload.repository.clone(), |hash| {
-                    format!("{}/tree/{}", payload.repository, hash)
-                });
-
-            Ok((
+            (
                 StatusCode::OK,
                 Json(
                     StatusResponse {
@@ -125,16 +118,16 @@ async fn process_verification(
                         on_chain_hash: res.on_chain_hash,
                         executable_hash: res.executable_hash,
                         last_verified_at: Some(res.verified_at),
-                        repo_url,
+                        repo_url: build_repository_url(&verify_build_data),
                         commit: payload.commit_hash.clone().unwrap_or_default(),
                     }
                     .into(),
                 ),
-            ))
+            )
         }
         Err(err) => {
             error!("Verification failed: {:?}", err);
-            Err((
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(
                     ErrorResponse {
@@ -143,7 +136,7 @@ async fn process_verification(
                     }
                     .into(),
                 ),
-            ))
+            )
         }
     }
 }
