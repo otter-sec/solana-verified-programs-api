@@ -48,12 +48,16 @@ pub(crate) async fn get_verification_status(
                 .into(),
             )
         }
-        Err(err) => {
-            error!("Failed to get verification status from database: {}", err);
+        Err(_) => {
             Json(
-                ErrorResponse {
-                    status: Status::Error,
-                    error: "An unexpected database error occurred.".to_string(),
+                StatusResponse {
+                    is_verified: false,
+                    message: "On chain program not verified".to_string(),
+                    on_chain_hash: String::new(),
+                    last_verified_at: None,
+                    executable_hash: String::new(),
+                    repo_url: String::new(),
+                    commit: String::new(),
                 }
                 .into(),
             )
