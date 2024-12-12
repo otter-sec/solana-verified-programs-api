@@ -1,45 +1,37 @@
+use axum::Server;
 use config::Config;
-use dotenv::dotenv;
 use std::net::SocketAddr;
-
-extern crate diesel;
-extern crate tracing;
 
 mod api;
 mod config;
 mod db;
 mod errors;
-#[rustfmt::skip]
 mod schema;
 mod services;
 
+/// Result type for API
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 
-#[macro_use]
-extern crate lazy_static;
-
-lazy_static! {
-    pub static ref CONFIG: Config = load_config();
-}
-
-pub fn load_config() -> Config {
-    dotenv().ok();
+/// Static configuration instance for the API 
+static CONFIG: once_cell::sync::Lazy<Config> = once_cell::sync::Lazy::new(|| {
+    dotenv::dotenv().ok();
     envy::from_env::<Config>().expect("Failed to load configuration")
-}
+});
 
 #[tokio::main]
 async fn main() {
+    // Initialize logging
     tracing_subscriber::fmt::init();
-    let database_url = CONFIG.database_url.clone();
-    let redis_url = CONFIG.redis_url.clone();
 
-    let db_client = db::DbClient::new(&database_url, &redis_url);
+    // Initialize database and Redis connections
+    let db_client = db::DbClient::new(&CONFIG.database_url, &CONFIG.redis_url);
+
+    // Setup API router and start server
     let app = api::initialize_router(db_client);
+    let addr = SocketAddr::from(([0, 0, 0, 0], CONFIG.port));
+    tracing::info!("Server starting on {}", addr);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::info!("Listening on {}", addr);
-
-    axum::Server::bind(&addr)
+    Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .unwrap();

@@ -1,6 +1,11 @@
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
+use diesel_async::pooled_connection::deadpool::{self, PoolError};
+use diesel_async::pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager};
+use diesel_async::AsyncPgConnection;
 use r2d2_redis::{r2d2, RedisConnectionManager};
+use std::time::Duration;
+
+const DEFAULT_POOL_SIZE: usize = 10;
+const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Clone)]
 pub struct DbClient {
@@ -10,20 +15,71 @@ pub struct DbClient {
 
 impl DbClient {
     pub fn new(db_url: &str, redis_url: &str) -> Self {
-        let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(db_url);
+        Self::with_config(
+            db_url,
+            redis_url,
+            DEFAULT_POOL_SIZE,
+            DEFAULT_TIMEOUT_SECONDS,
+        )
+    }
+
+    pub fn with_config(
+        db_url: &str,
+        redis_url: &str,
+        pool_size: usize,
+        timeout_seconds: u64,
+    ) -> Self {
+        // Configure PostgreSQL connection
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
         let postgres_pool = Pool::builder(config)
             .build()
             .expect("Failed to create DB Pool");
-        let manager = RedisConnectionManager::new(redis_url).expect(
-            "Failed to create Redis connection manager. Check that REDIS_URL is set in .env file",
-        );
-        let redis_pool = r2d2::Pool::builder().build(manager).expect(
-            "Failed to create Redis connection pool. Check that REDIS_URL is set in .env file",
-        );
+
+        // Configure Redis connection
+        let redis_manager = RedisConnectionManager::new(redis_url)
+            .expect("Failed to create Redis connection manager");
+
+        let redis_pool = r2d2::Pool::builder()
+            .max_size(pool_size as u32)
+            .min_idle(Some(1))
+            .max_lifetime(Some(Duration::from_secs(timeout_seconds)))
+            .build(redis_manager)
+            .expect("Failed to create Redis connection pool");
 
         Self {
             db_pool: postgres_pool,
             redis_pool,
         }
+    }
+
+    /// Get a connection from the Postgres pool with timeout
+    pub async fn get_db_conn(&self) -> Result<deadpool::Object<AsyncPgConnection>, PoolError> {
+        self.db_pool.get().await
+    }
+
+    /// Get a connection from the Redis pool with timeout
+    pub fn get_redis_conn(
+        &self,
+    ) -> Result<r2d2::PooledConnection<RedisConnectionManager>, r2d2::Error> {
+        self.redis_pool.get()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_db_conn_healthcheck() {
+        dotenv::dotenv().ok();
+        let db_url = std::env::var("TEST_DATABASE_URL").unwrap();
+        let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
+        let client = DbClient::new(&db_url, &redis_url);
+
+        let postgres_conn = client.get_db_conn().await;
+        let redis_conn = client.get_redis_conn();
+
+        assert!(postgres_conn.is_ok());
+        assert!(redis_conn.is_ok());
     }
 }

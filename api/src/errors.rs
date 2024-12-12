@@ -38,14 +38,19 @@ pub enum ApiError {
 
     #[error(transparent)]
     DbPool(#[from] diesel_async::pooled_connection::deadpool::PoolError),
+
+    #[error("Redis record not found: {0}")]
+    NotFound(String),
 }
 
+/// Error messages for the API Responses
 pub enum ErrorMessages {
     Unexpected,
     DB,
     NoPDA,
 }
 
+// Use the ErrorMessages enum to display error messages for the API Responses
 impl fmt::Display for ErrorMessages {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
