@@ -32,14 +32,21 @@ pub async fn process_verification_request(
         Ok(res) => {
             let insertion_count = db.insert_or_update_verified_build(&res).await?;
             info!("Inserted {} verified builds", insertion_count);
-            let _ = db.update_build_status(&uid, JobStatus::Completed).await;
+            if let Err(e) = db.update_build_status(&uid, JobStatus::Completed).await {
+                error!("Failed to update build status to completed: {:?}", e);
+            }
             Ok(res)
         }
         Err(err) => {
-            let _ = db.update_build_status(&uid, JobStatus::Failed).await;
-            let _ = db
+            if let Err(e) = db.update_build_status(&uid, JobStatus::Failed).await {
+                error!("Failed to update build status to failed: {:?}", e);
+            }
+            if let Err(e) = db
                 .insert_logs_info(&random_file_id, &program_id, &uid)
-                .await;
+                .await
+            {
+                error!("Failed to insert logs info: {:?}", e);
+            }
             error!("Build verification failed: {:?}", err);
             Err(err)
         }
@@ -199,7 +206,9 @@ fn process_verification_output(
 
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-        let _ = crate::services::logging::write_logs(&stderr, &stdout, random_file_id);
+        if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id) {
+            error!("Failed to write logs: {:?}", e);
+        }
         return Err(ApiError::Build(stdout));
     }
 

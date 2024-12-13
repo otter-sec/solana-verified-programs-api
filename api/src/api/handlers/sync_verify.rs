@@ -47,9 +47,12 @@ pub(crate) async fn process_sync_verification(
         .await
     {
         Ok((params, signer)) => {
-            let _ = db
+            if let Err(err) = db
                 .insert_or_update_program_authority(&params.address, program_authority.as_deref())
-                .await;
+                .await
+            {
+                error!("Failed to update program authority: {:?}", err);
+            }
             process_verification_sync(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {

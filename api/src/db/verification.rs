@@ -322,27 +322,47 @@ impl DbClient {
             cargo_args: build_params.cargo_args,
         };
 
-        let program_authority = get_program_authority(&payload.program_id)
-            .await
-            .unwrap_or(None);
+        // Better error handling for program authority
+        let program_authority = match get_program_authority(&payload.program_id).await {
+            Ok(authority) => authority,
+            Err(e) => {
+                error!(
+                    "Failed to get program authority for {}: {:?}",
+                    payload.program_id, e
+                );
+                None
+            }
+        };
 
         let params_from_onchain =
             onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
                 .await;
 
         if let Ok((params_from_onchain, _)) = params_from_onchain {
-            let _ = self
+            // Store program authority in database if available
+            if let Err(e) = self
                 .insert_or_update_program_authority(
                     &params_from_onchain.address,
                     program_authority.as_deref(),
                 )
-                .await;
+                .await
+            {
+                error!(
+                    "Failed to update program authority for {}: {:?}",
+                    params_from_onchain.address, e
+                );
+            }
 
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
             if otter_params != payload {
                 info!("Build params from on-chain and database don't match. Re-verifying the build using onchain Metadata.");
                 payload = otter_params;
             }
+        } else if let Err(e) = params_from_onchain {
+            error!(
+                "Failed to get on-chain parameters for {}: {:?}",
+                payload.program_id, e
+            );
         }
 
         let build_id = build_params.id;
@@ -351,13 +371,20 @@ impl DbClient {
         tokio::spawn(async move {
             match verification::execute_verification(payload, &build_id, &random_file_id).await {
                 Ok(res) => {
-                    let _ = self.insert_or_update_verified_build(&res).await;
-                    let _ = self
+                    if let Err(e) = self.insert_or_update_verified_build(&res).await {
+                        error!("Failed to insert/update verified build: {:?}", e);
+                    }
+                    if let Err(e) = self
                         .update_build_status(&build_id, JobStatus::Completed)
-                        .await;
+                        .await
+                    {
+                        error!("Failed to update build status to completed: {:?}", e);
+                    }
                 }
                 Err(err) => {
-                    let _ = self.update_build_status(&build_id, JobStatus::Failed).await;
+                    if let Err(e) = self.update_build_status(&build_id, JobStatus::Failed).await {
+                        error!("Failed to update build status to failed: {:?}", e);
+                    }
                     error!("Error verifying build: {:?}", err);
                 }
             }

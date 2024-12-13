@@ -36,9 +36,12 @@ pub(crate) async fn process_async_verification(
         .await
     {
         Ok((params, signer)) => {
-            let _ = db
+            if let Err(e) = db
                 .insert_or_update_program_authority(&params.address, program_authority.as_deref())
-                .await;
+                .await
+            {
+                error!("Failed to update program authority: {:?}", e);
+            }
             process_verification(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
@@ -84,9 +87,12 @@ pub(crate) async fn process_async_verification_with_signer(
     .await
     {
         Ok((params, signer)) => {
-            let _ = db
+            if let Err(e) = db
                 .insert_or_update_program_authority(&params.address, program_authority.as_deref())
-                .await;
+                .await
+            {
+                error!("Failed to update program authority: {:?}", e);
+            }
             process_verification(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
@@ -136,7 +142,9 @@ async fn process_verification(
     }
 
     // Update the build status to completed
-    let _ = db.update_build_status(&uuid, JobStatus::Completed).await;
+    if let Err(e) = db.update_build_status(&uuid, JobStatus::Completed).await {
+        error!("Failed to update build status to completed: {:?}", e);
+    }
 
     // Create and insert new build params
     let mut new_build = SolanaProgramBuild::from(&payload);
