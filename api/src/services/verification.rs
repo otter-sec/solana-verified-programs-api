@@ -203,7 +203,8 @@ fn process_verification_output(
         return Err(ApiError::Build(stdout));
     }
 
-    let onchain_hash = extract_hash_with_prefix(&stdout, "On-chain Program Hash:").unwrap_or_default();
+    let onchain_hash =
+        extract_hash_with_prefix(&stdout, "On-chain Program Hash:").unwrap_or_default();
     let build_hash =
         extract_hash_with_prefix(&stdout, "Executable Program Hash from repo:").unwrap_or_default();
 

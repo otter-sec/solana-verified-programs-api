@@ -80,10 +80,16 @@ mod tests {
         );
 
         build.commit_hash = None;
-        assert_eq!(build_repository_url(&build), "https://github.com/user/repo/");
-        
+        assert_eq!(
+            build_repository_url(&build),
+            "https://github.com/user/repo/"
+        );
+
         build.commit_hash = Some("".to_string());
-        assert_eq!(build_repository_url(&build), "https://github.com/user/repo/");
+        assert_eq!(
+            build_repository_url(&build),
+            "https://github.com/user/repo/"
+        );
     }
 
     #[test]

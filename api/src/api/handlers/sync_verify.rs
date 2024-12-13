@@ -1,11 +1,16 @@
 use crate::{
-    db::{models::{
-        ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-        StatusResponse,
-    }, DbClient},
+    db::{
+        models::{
+            ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
+            StatusResponse,
+        },
+        DbClient,
+    },
     errors::ErrorMessages,
     services::{
-        build_repository_url, onchain::{self, get_program_authority}, verification::{check_and_handle_duplicates, process_verification_request}
+        build_repository_url,
+        onchain::{self, get_program_authority},
+        verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
 use axum::{extract::State, http::StatusCode, Json};

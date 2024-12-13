@@ -5,7 +5,7 @@ use crate::db::models::{
     DEFAULT_SIGNER,
 };
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
-use crate::services::{get_on_chain_hash, build_repository_url, onchain, verification};
+use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
 use crate::Result;
 use diesel::{
     expression_methods::{BoolExpressionMethods, ExpressionMethods},
@@ -16,7 +16,7 @@ use diesel_async::RunQueryDsl;
 
 use tracing::{error, info};
 
-/// DbClient helper functions for VerifiedPrograms table and Reverification 
+/// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
     /// Check if a program is already verified
     pub async fn check_is_verified(
@@ -155,9 +155,8 @@ impl DbClient {
         Ok(verification_responses)
     }
 
-
     /// Get the verification status for a program
-    /// 
+    ///
     /// Returns a VerifiedProgram struct
     pub async fn get_verified_build(
         &self,

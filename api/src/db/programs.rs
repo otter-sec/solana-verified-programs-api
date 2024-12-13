@@ -1,6 +1,12 @@
-use crate::{db::{models::{VerifiedProgram, VerifiedProgramStatusResponse}, DbClient}, Result};
-use diesel_async::RunQueryDsl;
+use crate::{
+    db::{
+        models::{VerifiedProgram, VerifiedProgramStatusResponse},
+        DbClient,
+    },
+    Result,
+};
 use diesel::QueryDsl;
+use diesel_async::RunQueryDsl;
 use tracing::{error, info};
 
 const PER_PAGE: i64 = 20;
@@ -8,7 +14,7 @@ const PER_PAGE: i64 = 20;
 /// DbClient helper functions for VerifiedPrograms table to retrieve verified programs
 impl DbClient {
     /// Retrieves all verified programs from the database
-    /// 
+    ///
     /// Returns a list of VerifiedProgram structs
     pub async fn get_verified_programs(&self) -> Result<Vec<VerifiedProgram>> {
         use crate::schema::verified_programs::dsl::*;
@@ -25,11 +31,10 @@ impl DbClient {
             })
     }
 
-
     /// Retrieves a page of verified programs from the database
-    /// 
-    /// Returns a list of VerifiedProgram structs 
-    /// 
+    ///
+    /// Returns a list of VerifiedProgram structs
+    ///
     ///  
     pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<Vec<String>> {
         use crate::schema::verified_programs::dsl::*;
@@ -41,54 +46,58 @@ impl DbClient {
         let conn = &mut self.get_db_conn().await?;
 
         verified_programs
-        .select(program_id)
-        .order_by(id)
-        .limit(PER_PAGE)
-        .offset(offset)
-        .load::<String>(conn)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch verified programs: {}", e);
-            e.into()
-        })
+            .select(program_id)
+            .order_by(id)
+            .limit(PER_PAGE)
+            .offset(offset)
+            .load::<String>(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch verified programs: {}", e);
+                e.into()
+            })
     }
 
-
-
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
-
         let all_verified_programs = self.get_verified_programs().await?;
 
         let mut programs_status_all = Vec::new();
 
         for program in all_verified_programs {
-        info!("Checking verification status for program: {}", program.program_id);
-        match self.clone().check_is_verified(program.program_id.to_owned(), None).await {
-            Ok(result) => {
-                let status_message = if result.is_verified {
-                    "On chain program verified"
-                } else {
-                    "On chain program not verified"
-                };
+            info!(
+                "Checking verification status for program: {}",
+                program.program_id
+            );
+            match self
+                .clone()
+                .check_is_verified(program.program_id.to_owned(), None)
+                .await
+            {
+                Ok(result) => {
+                    let status_message = if result.is_verified {
+                        "On chain program verified"
+                    } else {
+                        "On chain program not verified"
+                    };
 
-                info!("Program {} status: {}", program.program_id, status_message);
-                programs_status_all.push(VerifiedProgramStatusResponse {
-                    program_id: program.program_id.to_owned(),
-                    is_verified: result.is_verified,
-                    message: status_message.to_string(),
-                    on_chain_hash: result.on_chain_hash,
-                    executable_hash: result.executable_hash,
-                    last_verified_at: result.last_verified_at,
-                    repo_url: result.repo_url,
-                    commit: result.commit,
-                });
-            }
-            Err(err) => {
-                error!(
-                    "Failed to get verification status for program {}: {}",
-                    program.program_id, err
-                );
-            }
+                    info!("Program {} status: {}", program.program_id, status_message);
+                    programs_status_all.push(VerifiedProgramStatusResponse {
+                        program_id: program.program_id.to_owned(),
+                        is_verified: result.is_verified,
+                        message: status_message.to_string(),
+                        on_chain_hash: result.on_chain_hash,
+                        executable_hash: result.executable_hash,
+                        last_verified_at: result.last_verified_at,
+                        repo_url: result.repo_url,
+                        commit: result.commit,
+                    });
+                }
+                Err(err) => {
+                    error!(
+                        "Failed to get verification status for program {}: {}",
+                        program.program_id, err
+                    );
+                }
             }
         }
 

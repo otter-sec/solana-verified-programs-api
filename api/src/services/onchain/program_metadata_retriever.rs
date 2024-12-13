@@ -79,19 +79,19 @@ impl OtterBuildParams {
 }
 
 /// Retrieves Otter Verify PDA for a program and signer
-/// 
+///
 /// This function is used to retrieve the OtterVerify PDA for a given program and signer.
 /// It uses the seeds "otter_verify", the signer's public key, and the program's public key to calculate the PDA.
 /// It then fetches the account data for the PDA and attempts to deserialize it into an `OtterBuildParams` struct.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `client` - The RPC client to use for fetching account data
 /// * `signer` - The PDA signer's public key
 /// * `program_id_pubkey` - The program's public key
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Result<OtterBuildParams>` - The OtterVerify PDA parameters if successful, or an error
 pub async fn get_otter_pda(
     client: &RpcClient,
@@ -110,19 +110,19 @@ pub async fn get_otter_pda(
 }
 
 /// Retrieves Otter Verify parameters for a program
-/// 
+///
 /// This function is used to retrieve the OtterVerify parameters for a given program.
 /// It tries to retrieve the parameters from the PDA first if provided, then from the program authority, and finally from the whitelisted signers.
 /// If no valid parameters are found, it returns an error.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `program_id` - The program's public key
 /// * `signer` - The PDA signer's public key
 /// * `program_authority` - The program's authority public key
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Result<(OtterBuildParams, String)>` - The OtterVerify parameters and the signer's public key if successful, or an error
 pub async fn get_otter_verify_params(
     program_id: &str,

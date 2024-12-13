@@ -12,7 +12,7 @@ mod services;
 /// Result type for API
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 
-/// Static configuration instance for the API 
+/// Static configuration instance for the API
 static CONFIG: once_cell::sync::Lazy<Config> = once_cell::sync::Lazy::new(|| {
     dotenv::dotenv().ok();
     envy::from_env::<Config>().expect("Failed to load configuration")
