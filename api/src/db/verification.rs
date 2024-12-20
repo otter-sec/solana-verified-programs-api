@@ -98,15 +98,15 @@ impl DbClient {
             .get_verified_builds_with_signer(&program_address)
             .await?;
 
-        let hash = if let Ok(cache_result) = self.get_cache(&program_address).await {
-            Some(cache_result)
-        } else {
-            match get_on_chain_hash(&program_address).await {
-                Ok(on_chain_hash) => {
-                    self.set_cache(&program_address, &on_chain_hash).await?;
+        let hash = match self.get_cache(&program_address).await {
+            Ok(cache_result) => Some(cache_result),
+            Err(_) => {
+                if let Ok(on_chain_hash) = get_on_chain_hash(&program_address).await {
+                    self.set_cache(&program_address, &on_chain_hash).await.ok();
                     Some(on_chain_hash)
+                } else {
+                    None
                 }
-                Err(_) => None,
             }
         };
 
