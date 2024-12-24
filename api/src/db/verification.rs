@@ -239,7 +239,7 @@ impl DbClient {
                         *,
                         ROW_NUMBER() OVER (
                             PARTITION BY
-                                sp.signer
+                                COALESCE(sp.signer, '11111111111111111111111111111111')
                             ORDER BY
                                 created_at
                         ) AS rn
