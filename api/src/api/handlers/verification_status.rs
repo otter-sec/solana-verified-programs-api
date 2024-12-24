@@ -48,20 +48,18 @@ pub(crate) async fn get_verification_status(
                 .into(),
             )
         }
-        Err(_) => {
-            Json(
-                StatusResponse {
-                    is_verified: false,
-                    message: "On chain program not verified".to_string(),
-                    on_chain_hash: String::new(),
-                    last_verified_at: None,
-                    executable_hash: String::new(),
-                    repo_url: String::new(),
-                    commit: String::new(),
-                }
-                .into(),
-            )
-        }
+        Err(_) => Json(
+            StatusResponse {
+                is_verified: false,
+                message: "On chain program not verified".to_string(),
+                on_chain_hash: String::new(),
+                last_verified_at: None,
+                executable_hash: String::new(),
+                repo_url: String::new(),
+                commit: String::new(),
+            }
+            .into(),
+        ),
     }
 }
 

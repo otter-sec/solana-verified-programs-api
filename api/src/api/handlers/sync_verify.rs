@@ -1,11 +1,16 @@
 use crate::{
-    db::{models::{
-        ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-        StatusResponse,
-    }, DbClient},
+    db::{
+        models::{
+            ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
+            StatusResponse,
+        },
+        DbClient,
+    },
     errors::ErrorMessages,
     services::{
-        build_repository_url, onchain::{self, get_program_authority}, verification::{check_and_handle_duplicates, process_verification_request}
+        build_repository_url,
+        onchain::{self, get_program_authority},
+        verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
 use axum::{extract::State, http::StatusCode, Json};
@@ -42,9 +47,12 @@ pub(crate) async fn process_sync_verification(
         .await
     {
         Ok((params, signer)) => {
-            let _ = db
+            if let Err(err) = db
                 .insert_or_update_program_authority(&params.address, program_authority.as_deref())
-                .await;
+                .await
+            {
+                error!("Failed to update program authority: {:?}", err);
+            }
             process_verification_sync(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {

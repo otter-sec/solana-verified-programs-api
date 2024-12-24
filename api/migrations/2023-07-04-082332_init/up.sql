@@ -47,4 +47,5 @@ CREATE INDEX IF NOT EXISTS solana_program_builds_id_idx ON solana_program_builds
 CREATE INDEX IF NOT EXISTS verified_programs_program_id_idx ON verified_programs (program_id);
 CREATE INDEX IF NOT EXISTS verified_programs_solana_build_id_idx ON verified_programs (solana_build_id);
 CREATE INDEX IF NOT EXISTS program_authority_program_id_index ON program_authority (program_id);
-
+CREATE INDEX IF NOT EXISTS idx_verified_programs_program_id_is_verified ON verified_programs(program_id, is_verified);
+CREATE INDEX IF NOT EXISTS idx_solana_program_builds_created_at ON solana_program_builds(created_at DESC);

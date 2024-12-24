@@ -5,7 +5,7 @@ use crate::db::models::{
     DEFAULT_SIGNER,
 };
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
-use crate::services::{get_on_chain_hash, build_repository_url, onchain, verification};
+use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
 use crate::Result;
 use diesel::{
     expression_methods::{BoolExpressionMethods, ExpressionMethods},
@@ -16,7 +16,7 @@ use diesel_async::RunQueryDsl;
 
 use tracing::{error, info};
 
-/// DbClient helper functions for VerifiedPrograms table and Reverification 
+/// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
     /// Check if a program is already verified
     pub async fn check_is_verified(
@@ -98,15 +98,15 @@ impl DbClient {
             .get_verified_builds_with_signer(&program_address)
             .await?;
 
-        let hash = if let Ok(cache_result) = self.get_cache(&program_address).await {
-            Some(cache_result)
-        } else {
-            match get_on_chain_hash(&program_address).await {
-                Ok(on_chain_hash) => {
-                    self.set_cache(&program_address, &on_chain_hash).await?;
+        let hash = match self.get_cache(&program_address).await {
+            Ok(cache_result) => Some(cache_result),
+            Err(_) => {
+                if let Ok(on_chain_hash) = get_on_chain_hash(&program_address).await {
+                    self.set_cache(&program_address, &on_chain_hash).await.ok();
                     Some(on_chain_hash)
+                } else {
+                    None
                 }
-                Err(_) => None,
             }
         };
 
@@ -155,9 +155,8 @@ impl DbClient {
         Ok(verification_responses)
     }
 
-
     /// Get the verification status for a program
-    /// 
+    ///
     /// Returns a VerifiedProgram struct
     pub async fn get_verified_build(
         &self,
@@ -172,7 +171,8 @@ impl DbClient {
         let query = verified_programs
             .inner_join(crate::schema::solana_program_builds::table)
             .filter(program_id.eq(program_address))
-            .select(verified_programs::all_columns());
+            .select(verified_programs::all_columns())
+            .order(verified_at.desc());
 
         match signer {
             Some(signer) => query
@@ -323,27 +323,47 @@ impl DbClient {
             cargo_args: build_params.cargo_args,
         };
 
-        let program_authority = get_program_authority(&payload.program_id)
-            .await
-            .unwrap_or(None);
+        // Better error handling for program authority
+        let program_authority = match get_program_authority(&payload.program_id).await {
+            Ok(authority) => authority,
+            Err(e) => {
+                error!(
+                    "Failed to get program authority for {}: {:?}",
+                    payload.program_id, e
+                );
+                None
+            }
+        };
 
         let params_from_onchain =
             onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
                 .await;
 
         if let Ok((params_from_onchain, _)) = params_from_onchain {
-            let _ = self
+            // Store program authority in database if available
+            if let Err(e) = self
                 .insert_or_update_program_authority(
                     &params_from_onchain.address,
                     program_authority.as_deref(),
                 )
-                .await;
+                .await
+            {
+                error!(
+                    "Failed to update program authority for {}: {:?}",
+                    params_from_onchain.address, e
+                );
+            }
 
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
             if otter_params != payload {
                 info!("Build params from on-chain and database don't match. Re-verifying the build using onchain Metadata.");
                 payload = otter_params;
             }
+        } else if let Err(e) = params_from_onchain {
+            error!(
+                "Failed to get on-chain parameters for {}: {:?}",
+                payload.program_id, e
+            );
         }
 
         let build_id = build_params.id;
@@ -352,13 +372,20 @@ impl DbClient {
         tokio::spawn(async move {
             match verification::execute_verification(payload, &build_id, &random_file_id).await {
                 Ok(res) => {
-                    let _ = self.insert_or_update_verified_build(&res).await;
-                    let _ = self
+                    if let Err(e) = self.insert_or_update_verified_build(&res).await {
+                        error!("Failed to insert/update verified build: {:?}", e);
+                    }
+                    if let Err(e) = self
                         .update_build_status(&build_id, JobStatus::Completed)
-                        .await;
+                        .await
+                    {
+                        error!("Failed to update build status to completed: {:?}", e);
+                    }
                 }
                 Err(err) => {
-                    let _ = self.update_build_status(&build_id, JobStatus::Failed).await;
+                    if let Err(e) = self.update_build_status(&build_id, JobStatus::Failed).await {
+                        error!("Failed to update build status to failed: {:?}", e);
+                    }
                     error!("Error verifying build: {:?}", err);
                 }
             }

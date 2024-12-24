@@ -1,4 +1,7 @@
-use crate::db::{models::{Status, VerifiedProgramsStatusListResponse}, DbClient};
+use crate::db::{
+    models::{Status, VerifiedProgramsStatusListResponse},
+    DbClient,
+};
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
 
@@ -18,16 +21,16 @@ pub(crate) async fn get_verified_programs_status(
     match all_verified_programs {
         Ok(all_verified_programs) => {
             info!("Successfully retrieved status for all programs");
-    (
-        StatusCode::OK,
-        Json(VerifiedProgramsStatusListResponse {
-            status: Status::Success,
-            data: Some(all_verified_programs),
-                error: None,
-            }),
-        )
-    }
-    Err(err) => {
+            (
+                StatusCode::OK,
+                Json(VerifiedProgramsStatusListResponse {
+                    status: Status::Success,
+                    data: Some(all_verified_programs),
+                    error: None,
+                }),
+            )
+        }
+        Err(err) => {
             error!("Failed to fetch verified programs from database: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -19,9 +19,9 @@ pub(crate) async fn get_verified_programs_list(
 }
 
 /// Handler for retrieving a paginated list of verified programs
-/// 
+///
 /// # Endpoint: GET /verified-programs/:page
-/// 
+///
 /// # Returns
 /// * `(StatusCode, Json<VerifiedProgramListResponse>)` - Status code and list of verified program addresses
 pub(crate) async fn get_verified_programs_list_paginated(
@@ -38,9 +38,17 @@ pub(crate) async fn get_verified_programs_list_paginated(
         }
         Err(err) => {
             error!("Failed to fetch verified programs: {}", err);
-            return (StatusCode::OK, Json(VerifiedProgramListResponse { verified_programs: Vec::new() }));
+            return (
+                StatusCode::OK,
+                Json(VerifiedProgramListResponse {
+                    verified_programs: Vec::new(),
+                }),
+            );
         }
     };
 
-    (StatusCode::OK, Json(VerifiedProgramListResponse { verified_programs }))
+    (
+        StatusCode::OK,
+        Json(VerifiedProgramListResponse { verified_programs }),
+    )
 }

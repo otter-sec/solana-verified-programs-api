@@ -158,7 +158,6 @@ pub struct VerifiedProgramListResponse {
     pub verified_programs: Vec<String>,
 }
 
-
 /// Response structure for individual program status
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramStatusResponse {
