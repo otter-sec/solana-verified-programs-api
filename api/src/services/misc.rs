@@ -20,7 +20,7 @@ pub fn get_last_line(output: &str) -> Option<String> {
 /// * `String` - Full repository URL, optionally including commit reference
 pub fn build_repository_url(build_params: &SolanaProgramBuild) -> String {
     if let Some(hash) = &build_params.commit_hash {
-        if !hash.is_empty() {
+        if !hash.is_empty() && hash != "None" {
             return format!(
                 "{}/tree/{}",
                 build_params.repository.trim_end_matches('/'),
