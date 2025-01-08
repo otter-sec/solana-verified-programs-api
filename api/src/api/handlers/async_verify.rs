@@ -28,9 +28,9 @@ pub(crate) async fn process_async_verification(
     );
 
     // get program authority from on-chain
-    let program_authority = get_program_authority(&payload.program_id)
+    let (program_authority, _is_frozen) = get_program_authority(&payload.program_id)
         .await
-        .unwrap_or(None);
+        .unwrap_or((None, false));
 
     match onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
         .await
@@ -75,9 +75,9 @@ pub(crate) async fn process_async_verification_with_signer(
         payload.program_id, payload.signer
     );
 
-    let program_authority = get_program_authority(&payload.program_id)
+    let (program_authority, _is_frozen) = get_program_authority(&payload.program_id)
         .await
-        .unwrap_or(None);
+        .unwrap_or((None, false));
 
     match onchain::get_otter_verify_params(
         &payload.program_id,

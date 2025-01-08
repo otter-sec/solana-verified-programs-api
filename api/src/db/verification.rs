@@ -324,14 +324,14 @@ impl DbClient {
         };
 
         // Better error handling for program authority
-        let program_authority = match get_program_authority(&payload.program_id).await {
+        let (program_authority, _is_frozen) = match get_program_authority(&payload.program_id).await {
             Ok(authority) => authority,
             Err(e) => {
                 error!(
                     "Failed to get program authority for {}: {:?}",
                     payload.program_id, e
                 );
-                None
+                (None, false)
             }
         };
 
