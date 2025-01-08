@@ -39,7 +39,7 @@ pub(crate) async fn process_sync_verification(
     );
 
     // get program authority from on-chain
-    let (program_authority, _is_frozen) = get_program_authority(&payload.program_id)
+    let (program_authority, is_frozen) = get_program_authority(&payload.program_id)
         .await
         .unwrap_or((None, false));
 
@@ -48,7 +48,7 @@ pub(crate) async fn process_sync_verification(
     {
         Ok((params, signer)) => {
             if let Err(err) = db
-                .insert_or_update_program_authority(&params.address, program_authority.as_deref())
+                .insert_or_update_program_authority(&params.address, program_authority.as_deref(), is_frozen)
                 .await
             {
                 error!("Failed to update program authority: {:?}", err);

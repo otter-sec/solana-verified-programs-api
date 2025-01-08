@@ -324,7 +324,7 @@ impl DbClient {
         };
 
         // Better error handling for program authority
-        let (program_authority, _is_frozen) = match get_program_authority(&payload.program_id).await {
+        let (program_authority, is_frozen) = match get_program_authority(&payload.program_id).await {
             Ok(authority) => authority,
             Err(e) => {
                 error!(
@@ -345,6 +345,7 @@ impl DbClient {
                 .insert_or_update_program_authority(
                     &params_from_onchain.address,
                     program_authority.as_deref(),
+                    is_frozen
                 )
                 .await
             {
