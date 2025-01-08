@@ -1,0 +1,1 @@
+ALTER TABLE program_authority ADD COLUMN is_frozen BOOLEAN DEFAULT FALSE;

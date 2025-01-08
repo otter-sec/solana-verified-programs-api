@@ -18,6 +18,7 @@ diesel::table! {
         #[max_length = 44]
         authority_id -> Nullable<Varchar>,
         last_updated -> Timestamp,
+        is_frozen -> Bool,
     }
 }
 
