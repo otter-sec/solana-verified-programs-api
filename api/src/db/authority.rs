@@ -43,7 +43,7 @@ impl DbClient {
                     return Ok(0); // Return 0 to indicate no update was performed
                 }
     
-                if existing_authority.as_deref() == authority_value {
+                if existing_authority.as_deref() == authority_value && existing_is_frozen == program_is_frozen {
                     info!(
                         "Authority for program_id {} is already the same. Skipping update.",
                         program_id_str
