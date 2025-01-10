@@ -148,3 +148,13 @@ pub struct BuildLogs {
     /// Log creation timestamp
     pub created_at: NaiveDateTime,
 }
+
+#[derive(QueryableByName)]
+pub struct VerifiedBuildWithSigner {
+    #[diesel(embed)]
+    pub solana_program_build: SolanaProgramBuild,
+    #[diesel(embed)]
+    pub verified_program: Option<VerifiedProgram>,
+    #[sql_type = "diesel::sql_types::Nullable<diesel::sql_types::Bool>"]
+    pub is_frozen: Option<bool>,
+}
