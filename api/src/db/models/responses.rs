@@ -27,6 +27,8 @@ pub struct VerificationResponse {
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
     pub signer: String,
+    /// Public key of the signer who verified the program
+    pub is_frozen: bool,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,

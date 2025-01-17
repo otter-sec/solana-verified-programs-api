@@ -12,13 +12,60 @@ impl DbClient {
         &self,
         program_address: &Pubkey,
         authority_value: Option<&str>,
+        program_is_frozen: bool,
     ) -> Result<usize> {
         use crate::schema::program_authority::dsl::*;
 
         let conn = &mut self.get_db_conn().await?;
         let current_time = chrono::Utc::now().naive_utc();
         let program_id_str = program_address.to_string();
-
+    
+        // Fetch the saved record from the database
+        let saved_record = program_authority
+            .select((authority_id, is_frozen))
+            .filter(program_id.eq(&program_id_str))
+            .first::<(Option<String>, bool)>(conn)
+            .await;
+    
+        match saved_record {
+            Ok((existing_authority, existing_is_frozen)) => {
+                info!(
+                    "Program authority found for program_id {}: {:?}, is_frozen: {}",
+                    program_id_str, existing_authority, existing_is_frozen
+                );
+    
+                // If the record is frozen or the authority hasn't changed, return without updating
+                if existing_is_frozen {
+                    info!(
+                        "Program authority for program_id {} is frozen. Skipping update.",
+                        program_id_str
+                    );
+                    return Ok(0); // Return 0 to indicate no update was performed
+                }
+    
+                if existing_authority.as_deref() == authority_value && existing_is_frozen == program_is_frozen {
+                    info!(
+                        "Authority for program_id {} is already the same. Skipping update.",
+                        program_id_str
+                    );
+                    return Ok(0); // Return 0 to indicate no update was performed
+                }
+            }
+            Err(diesel::result::Error::NotFound) => {
+                info!(
+                    "No existing program authority found for program_id {}. Proceeding to insert.",
+                    program_id_str
+                );
+            }
+            Err(e) => {
+                info!(
+                    "Failed to fetch authority for program_id {}: {}",
+                    program_id_str, e
+                );
+            }
+        }
+    
+        // Insert or update the record
         info!(
             "Updating authority for program: {} to: {:?}",
             program_id_str, authority_value
@@ -28,6 +75,7 @@ impl DbClient {
             .values((
                 program_id.eq(&program_id_str),
                 authority_id.eq(authority_value.map(|val| val.to_string())),
+                is_frozen.eq(program_is_frozen),
                 last_updated.eq(current_time),
             ))
             .on_conflict(program_id)
@@ -90,7 +138,7 @@ mod tests {
 
         // Test insert
         let insert_result = client
-            .insert_or_update_program_authority(&program_key, Some(authority))
+            .insert_or_update_program_authority(&program_key, Some(authority), false)
             .await;
         assert!(insert_result.is_ok());
 

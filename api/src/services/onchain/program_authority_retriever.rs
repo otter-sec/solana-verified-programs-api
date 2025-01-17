@@ -2,8 +2,11 @@ use crate::{errors::ApiError, Result, CONFIG};
 use solana_account_decoder::parse_bpf_loader::{
     parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
 };
-use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_client::{
+    nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
+};
+use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
 use std::str::FromStr;
 use tracing::{error, info};
 
@@ -20,7 +23,7 @@ use tracing::{error, info};
 /// 2. Extracts the program data account address
 /// 3. Fetches the program data account
 /// 4. Extracts the upgrade authority
-pub async fn get_program_authority(program_id: &str) -> Result<Option<String>> {
+pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, bool)> {
     // Parse program ID as Pubkey
     let program_id = Pubkey::from_str(program_id).map_err(|e| {
         error!("Invalid program ID: {}", e);
@@ -53,31 +56,77 @@ pub async fn get_program_authority(program_id: &str) -> Result<Option<String>> {
         }
     };
 
-    // Get program data account
-    let program_data_account_bytes = client
-        .get_account_data(&program_data_account_id)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch program data account: {}", e);
-            ApiError::Custom(format!("Failed to fetch program data account: {}", e))
-        })?;
-
-    // Parse program data account to get authority
-    match parse_bpf_upgradeable_loader(&program_data_account_bytes)? {
-        BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData { authority, .. }) => {
-            info!("Successfully retrieved program authority: {:?}", authority);
-            Ok(authority)
+    // Fetch program data account
+    match client.get_account_data(&program_data_account_id).await {
+        Ok(bytes) => {
+            if let BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData {
+                authority, ..
+            }) = parse_bpf_upgradeable_loader(&bytes)?
+            {
+                if authority.is_some() {
+                    info!("Successfully retrieved program authority: {:?}", authority);
+                    // Returning authority and is_frozen as false
+                    return Ok((authority, false));
+                }
+            }
         }
-        unexpected => {
-            error!("Unexpected program data account type: {:?}", unexpected);
-            Err(ApiError::Custom(format!(
-                "Expected ProgramData account type, found: {:?}",
-                unexpected
-            )))
+        Err(e) => {
+            error!("Failed to fetch program data account: {}", e);
         }
     }
-}
 
+    info!(
+        "Fetching program authority from latest transaction for {}",
+        program_data_account_id.to_string()
+    );
+
+    // Set a limit on the number of transactions to fetch
+    let config = GetConfirmedSignaturesForAddress2Config {
+        limit: Some(1), // Fetch only the latest 1 transaction
+        before: None,
+        until: None,
+        commitment: None,
+    };
+
+    // Fetch recent transactions for the program data account
+    let transactions = match client
+        .get_signatures_for_address_with_config(&program_data_account_id, config)
+        .await
+    {
+        Ok(txns) => txns,
+        Err(e) => {
+            error!("Failed to fetch recent transactions: {}", e);
+            return Ok((None, false)); // Return is_frozen as true if we can't fetch transactions
+        }
+    };
+
+    // Take the latest transaction
+    if let Some(latest_transaction) = transactions.first() {
+        let signature = Signature::from_str(&latest_transaction.signature).map_err(|e| {
+            ApiError::Custom(format!("Failed to parse transaction signature: {}", e))
+        })?;
+
+        // Fetch the full transaction details using the signature
+        let transaction_details = client
+            .get_transaction(&signature, UiTransactionEncoding::Json)
+            .await?;
+
+        // Access and decode the accounts involved
+        let versioned_transaction = transaction_details.transaction.transaction;
+        if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
+            if let UiMessage::Raw(raw_message) = &ui_transaction.message {
+                info!(
+                    "Successfully retrieved program authority from transaction: {:?}",
+                    raw_message.account_keys[0]
+                );
+                // Return the authority and is_frozen as true
+                return Ok((Some(raw_message.account_keys[0].clone()), true));
+            }
+        }
+    }
+
+    Ok((None, false)) // Default to is_frozen as true if no authority is found
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,10 +143,21 @@ mod tests {
         let authority = result.unwrap();
 
         assert_eq!(
-            authority,
+            authority.0,
             Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU".to_string()),
             "Unexpected authority value"
         );
+    }
+
+
+    #[tokio::test]
+    async fn test_get_program_authority_for_frozen_program() {
+        let result = get_program_authority("paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR").await;
+
+        assert!(result.is_ok(), "Failed to get authority: {:?}", result.err());
+        let authority = result.unwrap();
+
+        assert_eq!(authority.0, Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD".to_string()));
     }
 
     #[tokio::test]

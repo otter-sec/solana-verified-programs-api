@@ -1,8 +1,8 @@
 use super::models::VerificationResponseWithSigner;
 use super::DbClient;
 use crate::db::models::{
-    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse, VerifiedProgram,
-    DEFAULT_SIGNER,
+    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse,
+    VerifiedBuildWithSigner, VerifiedProgram, DEFAULT_SIGNER,
 };
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
 use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
@@ -113,7 +113,10 @@ impl DbClient {
         let mut is_verification_needed = false;
         let mut verification_responses = vec![];
 
-        for (build, verified_build) in res {
+        for verified_build_with_signer in res {
+            let build = verified_build_with_signer.solana_program_build;
+            let verified_build = verified_build_with_signer.verified_program;
+
             if let Some(verified_build) = verified_build {
                 let is_verified = if let Some(ref hash) = hash {
                     if *hash != verified_build.executable_hash {
@@ -141,6 +144,7 @@ impl DbClient {
                         commit: build.commit_hash.unwrap_or_default(),
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
+                    is_frozen: verified_build_with_signer.is_frozen.unwrap_or_default(),
                 });
             }
         }
@@ -227,7 +231,7 @@ impl DbClient {
     pub async fn get_verified_builds_with_signer(
         &self,
         program_address: &str,
-    ) -> Result<Vec<(SolanaProgramBuild, Option<VerifiedProgram>)>> {
+    ) -> Result<Vec<VerifiedBuildWithSigner>> {
         let conn = &mut self.get_db_conn().await?;
         sql_query(
             r#"
@@ -246,6 +250,7 @@ impl DbClient {
                     FROM
                         verified_programs vp
                         LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+                        LEFT JOIN program_authority pa ON pa.program_id = $1
                     WHERE
                         vp.program_id = $1 AND vp.is_verified = true
                 ) subquery
@@ -254,7 +259,7 @@ impl DbClient {
         "#,
         )
         .bind::<diesel::sql_types::Text, _>(program_address)
-        .load::<(SolanaProgramBuild, Option<VerifiedProgram>)>(conn)
+        .load::<VerifiedBuildWithSigner>(conn)
         .await
         .map_err(|e| {
             error!("Failed to get verified builds with signer: {}", e);
@@ -324,14 +329,15 @@ impl DbClient {
         };
 
         // Better error handling for program authority
-        let program_authority = match get_program_authority(&payload.program_id).await {
+        let (program_authority, is_frozen) = match get_program_authority(&payload.program_id).await
+        {
             Ok(authority) => authority,
             Err(e) => {
                 error!(
                     "Failed to get program authority for {}: {:?}",
                     payload.program_id, e
                 );
-                None
+                (None, false)
             }
         };
 
@@ -345,6 +351,7 @@ impl DbClient {
                 .insert_or_update_program_authority(
                     &params_from_onchain.address,
                     program_authority.as_deref(),
+                    is_frozen,
                 )
                 .await
             {
