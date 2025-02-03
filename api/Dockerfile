@@ -7,6 +7,10 @@ COPY api ./api
 
 COPY .env .
 
+# Install necessary dependencies
+RUN apt-get update && \
+    apt-get install -y pkg-config libssl-dev build-essential
+
 WORKDIR /solana_verified_program_api/api
 
 RUN cargo build --release
