@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 rust:1.79 as api_build
+FROM --platform=linux/amd64 rust:1.84 AS api_build
 
 WORKDIR /solana_verified_program_api
 
@@ -13,7 +13,7 @@ RUN cargo build --release
 
 RUN cargo install solana-verify --git https://github.com/Ellipsis-Labs/solana-verifiable-build --rev b03e8ae
 
-FROM --platform=linux/amd64 debian:stable-slim as api_final
+FROM --platform=linux/amd64 debian:stable-slim AS api_final
 
 WORKDIR /solana_verified_program_api
 
