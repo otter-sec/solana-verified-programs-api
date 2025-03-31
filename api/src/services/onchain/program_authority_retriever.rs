@@ -149,15 +149,21 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn test_get_program_authority_for_frozen_program() {
         let result = get_program_authority("paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR").await;
 
-        assert!(result.is_ok(), "Failed to get authority: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to get authority: {:?}",
+            result.err()
+        );
         let authority = result.unwrap();
 
-        assert_eq!(authority.0, Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD".to_string()));
+        assert_eq!(
+            authority.0,
+            Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD".to_string())
+        );
     }
 
     #[tokio::test]

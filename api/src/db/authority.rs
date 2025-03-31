@@ -19,21 +19,21 @@ impl DbClient {
         let conn = &mut self.get_db_conn().await?;
         let current_time = chrono::Utc::now().naive_utc();
         let program_id_str = program_address.to_string();
-    
+
         // Fetch the saved record from the database
         let saved_record = program_authority
             .select((authority_id, is_frozen))
             .filter(program_id.eq(&program_id_str))
             .first::<(Option<String>, bool)>(conn)
             .await;
-    
+
         match saved_record {
             Ok((existing_authority, existing_is_frozen)) => {
                 info!(
                     "Program authority found for program_id {}: {:?}, is_frozen: {}",
                     program_id_str, existing_authority, existing_is_frozen
                 );
-    
+
                 // If the record is frozen or the authority hasn't changed, return without updating
                 if existing_is_frozen {
                     info!(
@@ -42,8 +42,10 @@ impl DbClient {
                     );
                     return Ok(0); // Return 0 to indicate no update was performed
                 }
-    
-                if existing_authority.as_deref() == authority_value && existing_is_frozen == program_is_frozen {
+
+                if existing_authority.as_deref() == authority_value
+                    && existing_is_frozen == program_is_frozen
+                {
                     info!(
                         "Authority for program_id {} is already the same. Skipping update.",
                         program_id_str
@@ -64,7 +66,7 @@ impl DbClient {
                 );
             }
         }
-    
+
         // Insert or update the record
         info!(
             "Updating authority for program: {} to: {:?}",

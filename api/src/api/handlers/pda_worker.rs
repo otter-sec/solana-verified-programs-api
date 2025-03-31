@@ -1,39 +1,26 @@
 use crate::{
-    api::handlers::is_authorized,
-    db::{models::extract_instruction, DbClient},
-    services::get_on_chain_hash,
+    api::handlers::{async_verify::process_verification, is_authorized},
+    db::{
+        models::{extract_instruction, SolanaProgramBuildParams},
+        DbClient,
+    },
+    services::{get_on_chain_hash, onchain::OtterBuildParams},
 };
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
     Json,
 };
+use borsh::BorshDeserialize;
 use serde_json::Value;
 use tracing::{error, info, warn};
 
-/// Constant for the upgrade instruction data identifier
-const UPGRADE_INSTRUCTION_DATA: &str = "5Sxr3";
-
-/// Handler for unverifying a program after an upgrade
-///
-/// # Endpoint: POST /unverify
-///
-/// # Arguments
-/// * `db` - Database client from application state
-/// * `headers` - Request headers containing authorization
-/// * `payload` - Vector of instruction data
-///
-/// # Returns
-/// * `(StatusCode, &'static str)` - Status code and response message
-///
-/// # Security
-/// Requires valid authorization header matching CONFIG.auth_secret
-pub async fn handle_unverify(
+pub(crate) async fn handle_pda_updates_creations(
     State(db): State<DbClient>,
     headers: HeaderMap,
     Json(payload): Json<Vec<Value>>,
 ) -> (StatusCode, &'static str) {
-    info!("Received unverify request");
+    info!("Received PDA updates/creations request");
 
     // Validate authorization
     if !is_authorized(&headers) {
@@ -52,39 +39,46 @@ pub async fn handle_unverify(
 
     // Process instructions
     for ix in instruction.instructions {
-        if ix.data == UPGRADE_INSTRUCTION_DATA {
-            let program_id = &ix.accounts[1];
-            info!("Processing upgrade instruction for program: {}", program_id);
+        let program_id = &ix.accounts[1];
+        info!("Processing upgrade instruction for program: {}", program_id);
 
-            if let Err(e) = process_program_upgrade(&db, program_id).await {
-                error!("Failed to process program upgrade: {}", e);
+        let data = ix.data.as_bytes();
+        let otter_build_params = match OtterBuildParams::try_from_slice(&data[8..]) {
+            Ok(params) => params,
+            Err(e) => {
+                error!("Failed to deserialize PDA data: {}", e);
                 continue;
             }
+        };
+
+        if let Err(e) = process_pda_upgrade(&db, program_id, otter_build_params).await {
+            error!("Failed to process program upgrade: {}", e);
+            continue;
         }
     }
 
-    (StatusCode::OK, "Unverify request received")
+    (StatusCode::OK, "PDA updates/creations request received")
 }
 
-/// Processes a program upgrade by checking and updating verification status
-async fn process_program_upgrade(
+async fn process_pda_upgrade(
     db: &DbClient,
     program_id: &str,
+    params: OtterBuildParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Get current verification status
     let executable_hash = db.get_verified_build(program_id, None).await?;
 
-    // Get new on-chain hash
     let onchain_hash = get_on_chain_hash(program_id).await?;
 
-    // Check if program needs to be unverified
     if onchain_hash != executable_hash.on_chain_hash {
         info!("Program {} has been upgraded, unverifying", program_id);
         db.unverify_program(program_id, &onchain_hash).await?;
+        // start new build
+        let signer = params.signer.to_string();
+        let solana_build_params = SolanaProgramBuildParams::from(params);
+        let _ = process_verification(db.clone(), solana_build_params, signer).await;
         info!("Successfully unverified program {}", program_id);
     } else {
         info!("Program {} has not been upgraded", program_id);
     }
-
     Ok(())
 }
