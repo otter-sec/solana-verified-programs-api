@@ -16,7 +16,7 @@ impl DbClient {
             ApiError::from(err)
         })?;
 
-        redis_conn
+        let _: () = redis_conn
             .set_ex(program_address, value, CACHE_EXPIRY_SECONDS as usize)
             .map_err(|err| {
                 error!("Redis SET failed: {}", err);

@@ -69,9 +69,8 @@ pub async fn handle_unverify(
 /// Validates the authorization header against the configured secret
 fn is_authorized(headers: &HeaderMap) -> bool {
     headers
-        .get("AUTHORIZATION")
-        .and_then(|value| value.to_str().ok())
-        .map_or(false, |header_value| header_value == CONFIG.auth_secret)
+    .get("AUTHORIZATION")
+    .and_then(|value| value.to_str().ok()).is_some_and(|header_value| header_value == CONFIG.auth_secret)
 }
 
 /// Extracts and validates the upgrade instruction from the payload
