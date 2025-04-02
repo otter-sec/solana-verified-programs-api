@@ -1,6 +1,6 @@
 use crate::{
     api::handlers::is_authorized,
-    db::{models::extract_instruction, DbClient},
+    db::{models::parse_helius_transaction, DbClient},
     services::get_on_chain_hash,
 };
 use axum::{
@@ -45,13 +45,13 @@ pub async fn handle_unverify(
     }
 
     // Validate payload
-    let instruction = match extract_instruction(&payload) {
-        Ok(instruction) => instruction,
+    let helius_parsed_transaction = match parse_helius_transaction(&payload) {
+        Ok(parsed_transaction) => parsed_transaction,
         Err(status) => return status,
     };
 
     // Process instructions
-    for ix in instruction.instructions {
+    for ix in helius_parsed_transaction.instructions {
         if ix.data == UPGRADE_INSTRUCTION_DATA {
             let program_id = &ix.accounts[1];
             info!("Processing upgrade instruction for program: {}", program_id);

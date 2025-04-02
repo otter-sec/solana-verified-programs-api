@@ -64,7 +64,7 @@ pub struct Instruction {
 }
 
 /// Extracts and validates the upgrade instruction from the payload
-pub fn extract_instruction(
+pub fn parse_helius_transaction(
     payload: &[Value],
 ) -> Result<HeliusParsedTransaction, (StatusCode, &'static str)> {
     if payload.is_empty() {
