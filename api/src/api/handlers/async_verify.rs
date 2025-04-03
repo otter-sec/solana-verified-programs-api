@@ -37,7 +37,11 @@ pub(crate) async fn process_async_verification(
     {
         Ok((params, signer)) => {
             if let Err(e) = db
-                .insert_or_update_program_authority(&params.address, program_authority.as_deref(), is_frozen)
+                .insert_or_update_program_authority(
+                    &params.address,
+                    program_authority.as_deref(),
+                    is_frozen,
+                )
                 .await
             {
                 error!("Failed to update program authority: {:?}", e);
@@ -88,7 +92,11 @@ pub(crate) async fn process_async_verification_with_signer(
     {
         Ok((params, signer)) => {
             if let Err(e) = db
-                .insert_or_update_program_authority(&params.address, program_authority.as_deref(), is_frozen)
+                .insert_or_update_program_authority(
+                    &params.address,
+                    program_authority.as_deref(),
+                    is_frozen,
+                )
                 .await
             {
                 error!("Failed to update program authority: {:?}", e);
@@ -112,7 +120,7 @@ pub(crate) async fn process_async_verification_with_signer(
 }
 
 /// Processes the verification request asynchronously
-async fn process_verification(
+pub async fn process_verification(
     db: DbClient,
     payload: SolanaProgramBuildParams,
     signer: String,

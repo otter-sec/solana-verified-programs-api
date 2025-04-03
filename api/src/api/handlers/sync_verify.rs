@@ -48,7 +48,11 @@ pub(crate) async fn process_sync_verification(
     {
         Ok((params, signer)) => {
             if let Err(err) = db
-                .insert_or_update_program_authority(&params.address, program_authority.as_deref(), is_frozen)
+                .insert_or_update_program_authority(
+                    &params.address,
+                    program_authority.as_deref(),
+                    is_frozen,
+                )
                 .await
             {
                 error!("Failed to update program authority: {:?}", err);

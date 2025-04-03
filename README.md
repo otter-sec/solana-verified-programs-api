@@ -26,6 +26,32 @@ $ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqL
 }
 ```
 
+## Otter Verify PDA Worker
+
+The Otter Verify PDA Worker is a service that monitors and processes Program Derived Address (PDA) updates and creations from the Otter Verify program. It automatically updates the database with new PDAs and initiates verification jobs if needed.
+
+### Setup Requirements
+
+1. **Helius Webhook Configuration**
+   - Set up a enhanced Helius webhook to monitor all transactions (Select Any in the transaction type filter).
+   - Configure the webhook to listen to the Otter Verify program address: `verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC`
+   - The webhook should forward transactions to: `https://verify.osec.io/pda`
+
+## Monitor Program upgrades
+
+Monitor program upgrades, and unverify the program if it is upgraded.
+
+### Setup
+
+1. **Helius Webhook Configuration**
+   - Set up a enhanced Helius webhook to monitor transactions of type `UPGRADE_PROGRAM_INSTRUCTION`.
+   - Configure the webhook to listen to the BPF Loader program address: `BPFLoaderUpgradeab1e11111111111111111111111`
+   - The webhook should forward transactions to: `https://verify.osec.io/unverify`
+
+### Security
+
+To ensure that only legitimate requests from our Helius webhook are processed, we add a secret key (defined in `.env`) as a authentication header in the webhook requests.
+
 ## Deployment
 
 ```bash

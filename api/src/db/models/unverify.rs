@@ -1,10 +1,11 @@
+use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 
 /// Represents an upgrade program instruction
 #[allow(dead_code, non_snake_case)]
 #[derive(Debug, Deserialize)]
-pub struct UpgradeProgramInstruction {
+pub struct HeliusParsedTransaction {
     /// Description of the instruction
     pub description: String,
     /// Type of instruction
@@ -60,4 +61,18 @@ pub struct Instruction {
     pub programId: String,
     /// Inner instructions generated during execution
     pub innerInstructions: Vec<Value>,
+}
+
+/// Extracts and validates the upgrade instruction from the payload
+pub fn parse_helius_transaction(
+    payload: &[Value],
+) -> Result<HeliusParsedTransaction, (StatusCode, &'static str)> {
+    if payload.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Empty payload"));
+    }
+
+    serde_json::from_value(payload[0].clone()).map_err(|e| {
+        tracing::error!("Failed to parse instruction payload: {}", e);
+        (StatusCode::BAD_REQUEST, "Invalid payload")
+    })
 }

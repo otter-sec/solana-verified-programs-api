@@ -1,7 +1,7 @@
 use crate::{
-    db::{models::UpgradeProgramInstruction, DbClient},
+    api::handlers::is_authorized,
+    db::{models::parse_helius_transaction, DbClient},
     services::get_on_chain_hash,
-    CONFIG,
 };
 use axum::{
     extract::State,
@@ -45,13 +45,13 @@ pub async fn handle_unverify(
     }
 
     // Validate payload
-    let instruction = match extract_instruction(&payload) {
-        Ok(instruction) => instruction,
+    let helius_parsed_transaction = match parse_helius_transaction(&payload) {
+        Ok(parsed_transaction) => parsed_transaction,
         Err(status) => return status,
     };
 
     // Process instructions
-    for ix in instruction.instructions {
+    for ix in helius_parsed_transaction.instructions {
         if ix.data == UPGRADE_INSTRUCTION_DATA {
             let program_id = &ix.accounts[1];
             info!("Processing upgrade instruction for program: {}", program_id);
@@ -64,28 +64,6 @@ pub async fn handle_unverify(
     }
 
     (StatusCode::OK, "Unverify request received")
-}
-
-/// Validates the authorization header against the configured secret
-fn is_authorized(headers: &HeaderMap) -> bool {
-    headers
-        .get("AUTHORIZATION")
-        .and_then(|value| value.to_str().ok())
-        .map_or(false, |header_value| header_value == CONFIG.auth_secret)
-}
-
-/// Extracts and validates the upgrade instruction from the payload
-fn extract_instruction(
-    payload: &[Value],
-) -> Result<UpgradeProgramInstruction, (StatusCode, &'static str)> {
-    if payload.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "Empty payload"));
-    }
-
-    serde_json::from_value(payload[0].clone()).map_err(|e| {
-        error!("Failed to parse instruction payload: {}", e);
-        (StatusCode::BAD_REQUEST, "Invalid payload")
-    })
 }
 
 /// Processes a program upgrade by checking and updating verification status
