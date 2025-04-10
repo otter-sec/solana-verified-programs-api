@@ -28,6 +28,7 @@ impl DbClient {
         on_chain_hash: String,
         is_frozen: bool,
         is_closed: bool,
+        signer: Option<String>,
     ) -> VerificationResponse {
         let build_params = SolanaProgramBuild::from(verification_data);
         VerificationResponse::builder()
@@ -39,6 +40,7 @@ impl DbClient {
             .with_last_verified_at(Some(verification_data.verified_at))
             .with_is_frozen(is_frozen)
             .with_is_closed(is_closed)
+            .with_signer(signer)
             .build()
     }
 
@@ -183,6 +185,7 @@ impl DbClient {
                     verification_data.on_chain_hash.clone(),
                     program_frozen,
                     program_closed,
+                    build_params.signer.clone(),
                 );
                 return return_response(response).await;
             }
@@ -254,6 +257,7 @@ impl DbClient {
                     on_chain_hash,
                     program_frozen,
                     program_closed,
+                    build_params.signer.clone(),
                 );
                 return return_response(response).await;
             }
@@ -281,6 +285,7 @@ impl DbClient {
                     verification_data.on_chain_hash.clone(),
                     program_frozen,
                     program_closed,
+                    build_params.signer.clone(),
                 );
                 return return_response(response).await;
             }
@@ -412,6 +417,7 @@ impl DbClient {
                         commit: build.commit_hash.unwrap_or_default(),
                         is_frozen: is_program_frozen,
                         is_closed: false, // Default to false for existing verified programs
+                        signer: build.signer.clone(),
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
                 });

@@ -23,6 +23,8 @@ pub struct VerificationResponse {
     pub is_frozen: bool,
     /// Indicates if the program is closed (program data account doesn't exist)
     pub is_closed: bool,
+    /// Signer public key
+    pub signer: Option<String>,
 }
 
 impl VerificationResponse {
@@ -43,6 +45,7 @@ pub struct VerificationResponseBuilder {
     last_verified_at: Option<NaiveDateTime>,
     is_frozen: bool,
     is_closed: bool,
+    signer: Option<String>,
 }
 
 impl VerificationResponseBuilder {
@@ -85,6 +88,10 @@ impl VerificationResponseBuilder {
         self.is_closed = value;
         self
     }
+    pub fn with_signer(mut self, value: Option<String>) -> Self {
+        self.signer = value;
+        self
+    }
 
     pub fn build(self) -> VerificationResponse {
         VerificationResponse {
@@ -96,6 +103,7 @@ impl VerificationResponseBuilder {
             last_verified_at: self.last_verified_at,
             is_frozen: self.is_frozen,
             is_closed: self.is_closed,
+            signer: self.signer,
         }
     }
 }
@@ -150,6 +158,8 @@ pub struct StatusResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+    /// Signer public key
+    pub signer: Option<String>,
 }
 
 /// Extended StatusResponse struct to return program frozen status

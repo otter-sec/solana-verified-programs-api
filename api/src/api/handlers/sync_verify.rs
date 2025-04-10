@@ -64,7 +64,11 @@ async fn process_verification_sync(
                 "Verification completed for program: {} (verified: {})",
                 payload.program_id, res.is_verified
             );
-
+            let build_signer = db
+                .get_build_params(&res.solana_build_id)
+                .await
+                .map(|build_params| build_params.signer)
+                .unwrap_or(None);
             (
                 StatusCode::OK,
                 Json(
@@ -85,6 +89,7 @@ async fn process_verification_sync(
                             build_repository_url(&build)
                         },
                         commit: payload.commit_hash.clone().unwrap_or_default(),
+                        signer: build_signer,
                     }
                     .into(),
                 ),
