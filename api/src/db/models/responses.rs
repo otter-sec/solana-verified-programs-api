@@ -19,6 +19,8 @@ pub struct VerificationResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+    /// Signer public key
+    pub signer: Option<String>,
 }
 
 /// Extends VerificationResponse with signer information
@@ -73,6 +75,8 @@ pub struct StatusResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+    /// Signer public key
+    pub signer: Option<String>,
 }
 
 /// Response structure for verification job status

@@ -44,6 +44,7 @@ pub(crate) async fn get_verification_status(
                     executable_hash: result.executable_hash,
                     repo_url: result.repo_url,
                     commit: result.commit,
+                    signer: result.signer,
                 }
                 .into(),
             )
@@ -57,6 +58,7 @@ pub(crate) async fn get_verification_status(
                 executable_hash: String::new(),
                 repo_url: String::new(),
                 commit: String::new(),
+                signer: None,
             }
             .into(),
         ),

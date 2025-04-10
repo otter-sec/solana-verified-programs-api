@@ -41,6 +41,7 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    signer: build_params.signer,
                 });
             }
         }
@@ -73,6 +74,7 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    signer: build_params.signer,
                 })
             }
             Err(_) => {
@@ -84,6 +86,7 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    signer: build_params.signer,
                 })
             }
         }
@@ -142,6 +145,7 @@ impl DbClient {
                         repo_url: build_repository_url(&build),
                         last_verified_at: Some(verified_build.verified_at),
                         commit: build.commit_hash.unwrap_or_default(),
+                        signer: build.signer.clone(),
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
                     is_frozen: verified_build_with_signer.is_frozen.unwrap_or_default(),
