@@ -1,11 +1,14 @@
+use anyhow::Context;
 use axum::Server;
 use config::Config;
+use logging::setup_logging;
 use std::net::SocketAddr;
 
 mod api;
 mod config;
 mod db;
 mod errors;
+mod logging;
 mod schema;
 mod services;
 
@@ -20,8 +23,8 @@ static CONFIG: once_cell::sync::Lazy<Config> = once_cell::sync::Lazy::new(|| {
 
 #[tokio::main]
 async fn main() {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+    // Initialize logging with persistent file-based logs
+    _ = setup_logging().context("Failed to initialize logging");
 
     // Initialize database and Redis connections
     let db_client = db::DbClient::new(&CONFIG.database_url, &CONFIG.redis_url);
