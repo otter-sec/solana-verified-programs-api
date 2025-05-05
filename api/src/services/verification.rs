@@ -33,21 +33,21 @@ pub async fn process_verification_request(
             let insertion_count = db.insert_or_update_verified_build(&res).await?;
             info!("Inserted {} verified builds", insertion_count);
             if let Err(e) = db.update_build_status(&uid, JobStatus::Completed).await {
-                error!("Failed to update build status to completed: {:?}", e);
+                error!(target: "save_to_log_file", "Failed to update build status to completed: {:?}", e);
             }
             Ok(res)
         }
         Err(err) => {
             if let Err(e) = db.update_build_status(&uid, JobStatus::Failed).await {
-                error!("Failed to update build status to failed: {:?}", e);
+                error!(target: "save_to_log_file", "Failed to update build status to failed: {:?}", e);
             }
             if let Err(e) = db
                 .insert_logs_info(&random_file_id, &program_id, &uid)
                 .await
             {
-                error!("Failed to insert logs info: {:?}", e);
+                error!(target: "save_to_log_file", "Failed to insert logs info: {:?}", e);
             }
-            error!("Build verification failed: {:?}", err);
+            error!(target: "save_to_log_file", "Build verification failed: {:?}", err);
             Err(err)
         }
     }
@@ -77,7 +77,7 @@ pub async fn check_and_handle_duplicates(
                         message: "Verification already completed.".to_string(),
                     }),
                     Err(err) => {
-                        error!("Failed to get verified build: {:?}", err);
+                        error!(target: "save_to_log_file", "Failed to get verified build: {:?}", err);
                         None
                     }
                 }
