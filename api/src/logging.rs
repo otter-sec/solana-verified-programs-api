@@ -8,7 +8,7 @@ pub fn setup_logging() -> Result<(), anyhow::Error> {
     fs::create_dir_all("./logs").context("Failed to create logs directory")?;
 
     // Configure a rolling file appender (one file per day)
-    let file_appender = rolling::daily("./logs", "app.log");
+    let file_appender = rolling::daily("/logs", "app.log");
 
     // File logging layer (no ANSI)
     let file_layer = fmt::layer().with_writer(file_appender).with_ansi(false); // Optional: adjust level

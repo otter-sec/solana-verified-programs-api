@@ -8,3 +8,4 @@ redis.conf
 redisdata
 test_db
 .env.test
+logs

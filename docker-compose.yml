@@ -32,7 +32,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
-      - /logs:/logs
+      - ./logs:/logs
     depends_on:
       - db
       - redis
