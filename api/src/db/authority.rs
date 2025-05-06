@@ -1,5 +1,5 @@
 use super::DbClient;
-use crate::{errors::ApiError, Result};
+use crate::{errors::ApiError, logging::LOG_TARGET, Result};
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 use solana_sdk::pubkey::Pubkey;
@@ -30,7 +30,7 @@ impl DbClient {
         match saved_record {
             Ok((existing_authority, existing_is_frozen)) => {
                 info!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "Program authority found for program_id {}: {:?}, is_frozen: {}",
                     program_id_str, existing_authority, existing_is_frozen
                 );
@@ -38,7 +38,7 @@ impl DbClient {
                 // If the record is frozen or the authority hasn't changed, return without updating
                 if existing_is_frozen {
                     info!(
-                        target: "save_to_log_file",
+                        target: LOG_TARGET,
                         "Program authority for program_id {} is frozen. Skipping update.",
                         program_id_str
                     );
@@ -49,7 +49,7 @@ impl DbClient {
                     && existing_is_frozen == program_is_frozen
                 {
                     info!(
-                        target: "save_to_log_file",
+                        target: LOG_TARGET,
                         "Authority for program_id {} is already the same. Skipping update.",
                         program_id_str
                     );
@@ -58,14 +58,14 @@ impl DbClient {
             }
             Err(diesel::result::Error::NotFound) => {
                 info!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "No existing program authority found for program_id {}. Proceeding to insert.",
                     program_id_str
                 );
             }
             Err(e) => {
                 info!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "Failed to fetch authority for program_id {}: {}",
                     program_id_str, e
                 );
@@ -74,7 +74,7 @@ impl DbClient {
 
         // Insert or update the record
         info!(
-            target: "save_to_log_file",
+            target: LOG_TARGET,
             "Updating authority for program: {} to: {:?}",
             program_id_str, authority_value
         );
@@ -95,12 +95,12 @@ impl DbClient {
             .execute(conn)
             .await
             .map_err(|e| {
-                error!(target: "save_to_log_file", "Failed to update authority: {}", e);
+                error!(target: LOG_TARGET, "Failed to update authority: {}", e);
                 ApiError::Diesel(e)
             })?;
 
         info!(
-            target: "save_to_log_file",
+            target: LOG_TARGET,
             "Successfully updated authority for program: {}",
             program_id_str
         );

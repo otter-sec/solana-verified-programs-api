@@ -1,6 +1,6 @@
 use super::models::SolanaProgramBuildParams;
 use super::DbClient;
-use crate::{db::models::SolanaProgramBuild, errors::ApiError, Result};
+use crate::{db::models::SolanaProgramBuild, errors::ApiError, logging::LOG_TARGET, Result};
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 use tracing::{error, info};
@@ -13,13 +13,13 @@ impl DbClient {
 
         let conn = &mut self.get_db_conn().await?;
 
-        info!(target: "save_to_log_file", "Inserting build params for program: {}", payload.program_id);
+        info!(target: LOG_TARGET, "Inserting build params for program: {}", payload.program_id);
         diesel::insert_into(solana_program_builds)
             .values(payload)
             .execute(conn)
             .await
             .map_err(|e| {
-                error!(target: "save_to_log_file", "Failed to insert build params: {}", e);
+                error!(target: LOG_TARGET, "Failed to insert build params: {}", e);
                 ApiError::Diesel(e)
             })
     }

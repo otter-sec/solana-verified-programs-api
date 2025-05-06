@@ -1,4 +1,4 @@
-use crate::{errors::ApiError, Result, CONFIG};
+use crate::{errors::ApiError, logging::LOG_TARGET, Result, CONFIG};
 use solana_account_decoder::parse_bpf_loader::{
     parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
 };
@@ -26,16 +26,16 @@ use tracing::{error, info};
 pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, bool)> {
     // Parse program ID as Pubkey
     let program_id = Pubkey::from_str(program_id).map_err(|e| {
-        error!(target: "save_to_log_file", "Invalid program ID: {}", e);
+        error!(target: LOG_TARGET, "Invalid program ID: {}", e);
         ApiError::Custom(format!("Invalid program ID: {}", e))
     })?;
 
     let client = RpcClient::new(CONFIG.rpc_url.clone());
-    info!(target: "save_to_log_file", "Fetching program authority for: {}", program_id);
+    info!(target: LOG_TARGET, "Fetching program authority for: {}", program_id);
 
     // Get program account data
     let program_account_bytes = client.get_account_data(&program_id).await.map_err(|e| {
-        error!(target: "save_to_log_file", "Failed to fetch program account data: {}", e);
+        error!(target: LOG_TARGET, "Failed to fetch program account data: {}", e);
         ApiError::Custom(format!("Failed to fetch program account: {}", e))
     })?;
 
@@ -43,12 +43,12 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
     let program_data_account_id = match parse_bpf_upgradeable_loader(&program_account_bytes)? {
         BpfUpgradeableLoaderAccountType::Program(UiProgram { program_data }) => {
             Pubkey::from_str(&program_data).map_err(|e| {
-                error!(target: "save_to_log_file", "Invalid program data address: {}", e);
+                error!(target: LOG_TARGET, "Invalid program data address: {}", e);
                 ApiError::Custom(format!("Invalid program data pubkey: {}", e))
             })?
         }
         unexpected => {
-            error!(target: "save_to_log_file", "Unexpected program account type: {:?}", unexpected);
+            error!(target: LOG_TARGET, "Unexpected program account type: {:?}", unexpected);
             return Err(ApiError::Custom(format!(
                 "Expected Program account type, found: {:?}",
                 unexpected
@@ -64,19 +64,19 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
             }) = parse_bpf_upgradeable_loader(&bytes)?
             {
                 if authority.is_some() {
-                    info!(target: "save_to_log_file", "Successfully retrieved program authority: {:?}", authority);
+                    info!(target: LOG_TARGET, "Successfully retrieved program authority: {:?}", authority);
                     // Returning authority and is_frozen as false
                     return Ok((authority, false));
                 }
             }
         }
         Err(e) => {
-            error!(target: "save_to_log_file", "Failed to fetch program data account: {}", e);
+            error!(target: LOG_TARGET, "Failed to fetch program data account: {}", e);
         }
     }
 
     info!(
-        target: "save_to_log_file",
+        target: LOG_TARGET,
         "Fetching program authority from latest transaction for {}",
         program_data_account_id.to_string()
     );
@@ -96,7 +96,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
     {
         Ok(txns) => txns,
         Err(e) => {
-            error!(target: "save_to_log_file", "Failed to fetch recent transactions: {}", e);
+            error!(target: LOG_TARGET, "Failed to fetch recent transactions: {}", e);
             return Ok((None, false)); // Return is_frozen as true if we can't fetch transactions
         }
     };
@@ -117,7 +117,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
         if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
             if let UiMessage::Raw(raw_message) = &ui_transaction.message {
                 info!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "Successfully retrieved program authority from transaction: {:?}",
                     raw_message.account_keys[0]
                 );

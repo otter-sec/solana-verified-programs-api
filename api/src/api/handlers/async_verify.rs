@@ -5,7 +5,7 @@ use crate::{
             SolanaProgramBuildParamsWithSigner, Status, VerifyResponse,
         },
         DbClient,
-    }, errors::ErrorMessages, logging::log_to_file, services::{
+    }, errors::ErrorMessages, logging::{log_to_file, LOG_TARGET}, services::{
         onchain::{self, get_program_authority},
         verification::{check_and_handle_duplicates, process_verification_request},
     }
@@ -46,13 +46,13 @@ pub(crate) async fn process_async_verification(
                 )
                 .await
             {
-                error!(target: "save_to_log_file", "Failed to update program authority: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to update program authority: {:?}", e);
             }
             process_verification(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
             error!(
-                target: "save_to_log_file",
+                target: LOG_TARGET,
                 "Unable to find on-chain PDA for given program id: {:?}",
                 err
             );
@@ -105,12 +105,12 @@ pub(crate) async fn process_async_verification_with_signer(
                 )
                 .await
             {
-                error!(target: "save_to_log_file", "Failed to update program authority: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to update program authority: {:?}", e);
             }
             process_verification(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
-            error!(target: "save_to_log_file", "Error fetching onchain params: {:?}", err);
+            error!(target: LOG_TARGET, "Error fetching onchain params: {:?}", err);
             (
                 StatusCode::NOT_FOUND,
                 Json(
@@ -142,7 +142,7 @@ pub async fn process_verification(
 
     // Insert initial build params
     if let Err(e) = db.insert_build_params(&verify_build_data).await {
-        error!(target: "save_to_log_file", "Error inserting into database: {:?}", e);
+        error!(target: LOG_TARGET, "Error inserting into database: {:?}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -157,14 +157,14 @@ pub async fn process_verification(
 
     // Update the build status to completed
     if let Err(e) = db.update_build_status(&uuid, JobStatus::Completed).await {
-        error!(target: "save_to_log_file", "Failed to update build status to completed: {:?}", e);
+        error!(target: LOG_TARGET, "Failed to update build status to completed: {:?}", e);
     }
 
     // Create and insert new build params
     let mut new_build = SolanaProgramBuild::from(&payload);
     new_build.signer = Some(signer);
     if let Err(e) = db.insert_build_params(&new_build).await {
-        error!(target: "save_to_log_file", "Error inserting into database: {:?}", e);
+        error!(target: LOG_TARGET, "Error inserting into database: {:?}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -180,13 +180,13 @@ pub async fn process_verification(
     // Spawn verification task
     let req_id = new_build.id.clone();
     tokio::spawn(async move {
-        info!(target: "save_to_log_file", "Spawning verification task with uuid: {:?}", &new_build.id);
+        info!(target: LOG_TARGET, "Spawning verification task with uuid: {:?}", &new_build.id);
         if let Err(e) = process_verification_request(payload, &new_build.id, &db).await {
-            error!(target: "save_to_log_file", "Verification task failed: {:?}", e);
+            error!(target: LOG_TARGET, "Verification task failed: {:?}", e);
         }
     });
 
-    info!(target: "save_to_log_file", "Verification task spawned with UUID: {}", req_id);
+    info!(target: LOG_TARGET, "Verification task spawned with UUID: {}", req_id);
     (
         StatusCode::OK,
         Json(

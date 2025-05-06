@@ -2,6 +2,8 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::logging::LOG_TARGET;
+
 /// Represents an upgrade program instruction
 #[allow(dead_code, non_snake_case)]
 #[derive(Debug, Deserialize)]
@@ -72,7 +74,7 @@ pub fn parse_helius_transaction(
     }
 
     serde_json::from_value(payload[0].clone()).map_err(|e| {
-        tracing::error!(target: "save_to_log_file", "Failed to parse instruction payload: {}", e);
+        tracing::error!(target: LOG_TARGET, "Failed to parse instruction payload: {}", e);
         (StatusCode::BAD_REQUEST, "Invalid payload")
     })
 }

@@ -5,7 +5,7 @@ use crate::{
             StatusResponse,
         },
         DbClient,
-    }, errors::ErrorMessages, logging::log_to_file, services::{
+    }, errors::ErrorMessages, logging::{log_to_file, LOG_TARGET}, services::{
         build_repository_url,
         onchain::{self, get_program_authority},
         verification::{check_and_handle_duplicates, process_verification_request},
@@ -57,13 +57,13 @@ pub(crate) async fn process_sync_verification(
                 )
                 .await
             {
-                error!(target: "save_to_log_file", "Failed to update program authority: {:?}", err);
+                error!(target: LOG_TARGET, "Failed to update program authority: {:?}", err);
             }
             process_verification_sync(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
             error!(
-                target: "save_to_log_file",
+                target: LOG_TARGET,
                 "Unable to find on-chain PDA for given program id: {:?}",
                 err
             );
@@ -98,7 +98,7 @@ async fn process_verification_sync(
 
     // Insert build parameters
     if let Err(e) = db.insert_build_params(&verify_build_data).await {
-        error!(target: "save_to_log_file", "Failed to insert build parameters: {:?}", e);
+        error!(target: LOG_TARGET, "Failed to insert build parameters: {:?}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -115,7 +115,7 @@ async fn process_verification_sync(
     match process_verification_request(payload.clone(), &uuid, &db).await {
         Ok(res) => {
             info!(
-                target: "save_to_log_file",
+                target: LOG_TARGET,
                 "Verification completed for program: {} (verified: {})",
                 payload.program_id, res.is_verified
             );
@@ -142,7 +142,7 @@ async fn process_verification_sync(
             )
         }
         Err(err) => {
-            error!(target: "save_to_log_file", "Verification failed: {:?}", err);
+            error!(target: LOG_TARGET, "Verification failed: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(

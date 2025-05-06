@@ -7,6 +7,8 @@ use tracing_appender::rolling;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::{fmt, layer::SubscriberExt, Layer, Registry};
 
+pub const LOG_TARGET: &str = "save_to_log_file";
+
 pub fn setup_logging() -> Result<(), anyhow::Error> {
     // Ensure /logs exists
     fs::create_dir_all("/logs").context("Failed to create logs directory")?;
@@ -15,7 +17,7 @@ pub fn setup_logging() -> Result<(), anyhow::Error> {
     let file_appender = rolling::daily("/logs", "app.log");
 
     // Targets that should log everything (TRACE includes DEBUG, INFO, WARN, ERROR)
-    let target_filter = Targets::new().with_target("save_to_log_file", LevelFilter::TRACE);
+    let target_filter = Targets::new().with_target(LOG_TARGET, LevelFilter::TRACE);
 
     // File layer with filtered targets
     let file_layer = fmt::layer()
@@ -42,7 +44,7 @@ pub fn log_to_file(method: &str, path: &str, body: Option<&Value>) {
     match body {
         Some(b) => {
             info!(
-                target: "save_to_log_file",
+                target: LOG_TARGET,
                 method = method,
                 uri = path,
                 body = %b,
@@ -51,7 +53,7 @@ pub fn log_to_file(method: &str, path: &str, body: Option<&Value>) {
         }
         None => {
             info!(
-                target: "save_to_log_file",
+                target: LOG_TARGET,
                 method = method,
                 uri = path,
                 "{} {} {}", timestamp, method, path

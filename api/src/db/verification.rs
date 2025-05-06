@@ -4,6 +4,7 @@ use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse,
     VerifiedBuildWithSigner, VerifiedProgram, DEFAULT_SIGNER,
 };
+use crate::logging::LOG_TARGET;
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
 use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
 use crate::Result;
@@ -169,7 +170,7 @@ impl DbClient {
     ) -> Result<VerifiedProgram> {
         use crate::schema::verified_programs::dsl::*;
 
-        info!(target: "save_to_log_file", "Getting verified build for {:?}", program_address);
+        info!(target: LOG_TARGET, "Getting verified build for {:?}", program_address);
         let conn = &mut self.get_db_conn().await?;
 
         let query = verified_programs
@@ -184,7 +185,7 @@ impl DbClient {
                 .first::<VerifiedProgram>(conn)
                 .await
                 .map_err(|e| {
-                    error!(target: "save_to_log_file", "Failed to get verified build: {}", e);
+                    error!(target: LOG_TARGET, "Failed to get verified build: {}", e);
                     e.into()
                 }),
             None => {
@@ -221,7 +222,7 @@ impl DbClient {
                     .first::<VerifiedProgram>(conn)
                     .await
                     .map_err(|e| {
-                        error!(target: "save_to_log_file", "Failed to get verified build: {}", e);
+                        error!(target: LOG_TARGET, "Failed to get verified build: {}", e);
                         e.into()
                     })
             }
@@ -419,7 +420,7 @@ impl DbClient {
             .execute(conn)
             .await
             .map_err(|e| {
-                error!(target: "save_to_log_file", "Failed to unverify program: {}", e);
+                error!(target: LOG_TARGET, "Failed to unverify program: {}", e);
                 e.into()
             })
     }

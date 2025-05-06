@@ -1,9 +1,5 @@
 use crate::{
-    db::models::{JobStatus, SolanaProgramBuildParams, VerifiedProgram, VerifyResponse},
-    db::DbClient,
-    errors::ApiError,
-    services::misc::extract_hash_with_prefix,
-    Result, CONFIG,
+    db::{models::{JobStatus, SolanaProgramBuildParams, VerifiedProgram, VerifyResponse}, DbClient}, errors::ApiError, logging::LOG_TARGET, services::misc::extract_hash_with_prefix, Result, CONFIG
 };
 use std::process::Stdio;
 use tokio::{io::AsyncWriteExt, process::Command};
@@ -33,21 +29,21 @@ pub async fn process_verification_request(
             let insertion_count = db.insert_or_update_verified_build(&res).await?;
             info!("Inserted {} verified builds", insertion_count);
             if let Err(e) = db.update_build_status(&uid, JobStatus::Completed).await {
-                error!(target: "save_to_log_file", "Failed to update build status to completed: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to update build status to completed: {:?}", e);
             }
             Ok(res)
         }
         Err(err) => {
             if let Err(e) = db.update_build_status(&uid, JobStatus::Failed).await {
-                error!(target: "save_to_log_file", "Failed to update build status to failed: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to update build status to failed: {:?}", e);
             }
             if let Err(e) = db
                 .insert_logs_info(&random_file_id, &program_id, &uid)
                 .await
             {
-                error!(target: "save_to_log_file", "Failed to insert logs info: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to insert logs info: {:?}", e);
             }
-            error!(target: "save_to_log_file", "Build verification failed: {:?}", err);
+            error!(target: LOG_TARGET, "Build verification failed: {:?}", err);
             Err(err)
         }
     }
@@ -77,7 +73,7 @@ pub async fn check_and_handle_duplicates(
                         message: "Verification already completed.".to_string(),
                     }),
                     Err(err) => {
-                        error!(target: "save_to_log_file", "Failed to get verified build: {:?}", err);
+                        error!(target: LOG_TARGET, "Failed to get verified build: {:?}", err);
                         None
                     }
                 }

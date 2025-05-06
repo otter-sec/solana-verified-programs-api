@@ -1,5 +1,5 @@
 use crate::{
-    api::handlers::is_authorized, db::{models::parse_helius_transaction, DbClient}, logging::log_to_file, services::get_on_chain_hash
+    api::handlers::is_authorized, db::{models::parse_helius_transaction, DbClient}, logging::{log_to_file, LOG_TARGET}, services::get_on_chain_hash
 };
 use axum::{
     extract::State,
@@ -38,7 +38,7 @@ pub async fn handle_unverify(
 
     // Validate authorization
     if !is_authorized(&headers) {
-        warn!(target: "save_to_log_file", "Unauthorized unverify attempt");
+        warn!(target: LOG_TARGET, "Unauthorized unverify attempt");
         return (
             StatusCode::UNAUTHORIZED,
             "Missing or invalid authorization header",
@@ -55,10 +55,10 @@ pub async fn handle_unverify(
     for ix in helius_parsed_transaction.instructions {
         if ix.data == UPGRADE_INSTRUCTION_DATA {
             let program_id = &ix.accounts[1];
-            info!(target: "save_to_log_file", "Processing upgrade instruction for program: {}", program_id);
+            info!(target: LOG_TARGET, "Processing upgrade instruction for program: {}", program_id);
 
             if let Err(e) = process_program_upgrade(&db, program_id).await {
-                error!(target: "save_to_log_file", "Failed to process program upgrade: {}", e);
+                error!(target: LOG_TARGET, "Failed to process program upgrade: {}", e);
                 continue;
             }
         }
@@ -80,11 +80,11 @@ async fn process_program_upgrade(
 
     // Check if program needs to be unverified
     if onchain_hash != executable_hash.on_chain_hash {
-        info!(target: "save_to_log_file", "Program {} has been upgraded, unverifying", program_id);
+        info!(target: LOG_TARGET, "Program {} has been upgraded, unverifying", program_id);
         db.unverify_program(program_id, &onchain_hash).await?;
-        info!(target: "save_to_log_file", "Successfully unverified program {}", program_id);
+        info!(target: LOG_TARGET, "Successfully unverified program {}", program_id);
     } else {
-        info!(target: "save_to_log_file", "Program {} has not been upgraded", program_id);
+        info!(target: LOG_TARGET, "Program {} has not been upgraded", program_id);
     }
 
     Ok(())

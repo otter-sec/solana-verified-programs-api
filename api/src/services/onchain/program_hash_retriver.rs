@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use crate::errors::ApiError;
+use crate::logging::LOG_TARGET;
 use crate::services::misc::get_last_line;
 use crate::{Result, CONFIG};
 use tokio::process::Command;
@@ -27,7 +28,7 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
         .arg(rpc_url);
 
     info!(
-        target: "save_to_log_file",
+        target: LOG_TARGET,
         "Attempting to get on-chain hash for program: {}",
         program_id
     );
@@ -36,7 +37,7 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
         match execute_command(&mut cmd).await {
             Ok(hash) => {
                 info!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "Successfully retrieved hash for program {}: {}",
                     program_id, hash
                 );
@@ -44,7 +45,7 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
             }
             Err(e) => {
                 error!(
-                    target: "save_to_log_file",
+                    target: LOG_TARGET,
                     "Attempt {}/3 failed to get on-chain hash for {}: {}",
                     attempt, program_id, e
                 );
