@@ -169,7 +169,7 @@ impl DbClient {
     ) -> Result<VerifiedProgram> {
         use crate::schema::verified_programs::dsl::*;
 
-        info!("Getting verified build for {:?}", program_address);
+        info!(target: "save_to_log_file", "Getting verified build for {:?}", program_address);
         let conn = &mut self.get_db_conn().await?;
 
         let query = verified_programs
@@ -184,7 +184,7 @@ impl DbClient {
                 .first::<VerifiedProgram>(conn)
                 .await
                 .map_err(|e| {
-                    error!("Failed to get verified build: {}", e);
+                    error!(target: "save_to_log_file", "Failed to get verified build: {}", e);
                     e.into()
                 }),
             None => {
@@ -221,7 +221,7 @@ impl DbClient {
                     .first::<VerifiedProgram>(conn)
                     .await
                     .map_err(|e| {
-                        error!("Failed to get verified build: {}", e);
+                        error!(target: "save_to_log_file", "Failed to get verified build: {}", e);
                         e.into()
                     })
             }
@@ -419,7 +419,7 @@ impl DbClient {
             .execute(conn)
             .await
             .map_err(|e| {
-                error!("Failed to unverify program: {}", e);
+                error!(target: "save_to_log_file", "Failed to unverify program: {}", e);
                 e.into()
             })
     }

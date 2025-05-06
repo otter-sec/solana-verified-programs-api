@@ -5,15 +5,14 @@ use crate::{
             StatusResponse,
         },
         DbClient,
-    },
-    errors::ErrorMessages,
-    services::{
+    }, errors::ErrorMessages, logging::log_to_file, services::{
         build_repository_url,
         onchain::{self, get_program_authority},
         verification::{check_and_handle_duplicates, process_verification_request},
-    },
+    }
 };
 use axum::{extract::State, http::StatusCode, Json};
+use serde_json::to_value;
 use tracing::{error, info};
 
 /// Handler for synchronous program verification
@@ -33,6 +32,9 @@ pub(crate) async fn process_sync_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let payload_value = to_value(&payload).ok();
+    log_to_file("POST", "/verify/sync", payload_value.as_ref());
+
     info!(
         "Starting synchronous verification for program: {}",
         payload.program_id
@@ -55,12 +57,13 @@ pub(crate) async fn process_sync_verification(
                 )
                 .await
             {
-                error!("Failed to update program authority: {:?}", err);
+                error!(target: "save_to_log_file", "Failed to update program authority: {:?}", err);
             }
             process_verification_sync(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
             error!(
+                target: "save_to_log_file",
                 "Unable to find on-chain PDA for given program id: {:?}",
                 err
             );
@@ -95,7 +98,7 @@ async fn process_verification_sync(
 
     // Insert build parameters
     if let Err(e) = db.insert_build_params(&verify_build_data).await {
-        error!("Failed to insert build parameters: {:?}", e);
+        error!(target: "save_to_log_file", "Failed to insert build parameters: {:?}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -112,6 +115,7 @@ async fn process_verification_sync(
     match process_verification_request(payload.clone(), &uuid, &db).await {
         Ok(res) => {
             info!(
+                target: "save_to_log_file",
                 "Verification completed for program: {} (verified: {})",
                 payload.program_id, res.is_verified
             );
@@ -138,7 +142,7 @@ async fn process_verification_sync(
             )
         }
         Err(err) => {
-            error!("Verification failed: {:?}", err);
+            error!(target: "save_to_log_file", "Verification failed: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(

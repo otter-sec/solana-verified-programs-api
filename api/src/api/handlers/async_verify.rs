@@ -22,7 +22,7 @@ pub(crate) async fn process_async_verification(
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
     let payload_value = to_value(&payload).ok();
-    log_to_file("POST", "verify", payload_value.as_ref());
+    log_to_file("POST", "/verify", payload_value.as_ref());
 
     info!(
         "Starting async verification for program: {}",
@@ -77,6 +77,9 @@ pub(crate) async fn process_async_verification_with_signer(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let payload_value = to_value(&payload).ok();
+    log_to_file("POST", "/verify/with-signer", payload_value.as_ref());
+    
     info!(
         "Starting async verification for program {} with signer {}",
         payload.program_id, payload.signer
@@ -102,12 +105,12 @@ pub(crate) async fn process_async_verification_with_signer(
                 )
                 .await
             {
-                error!("Failed to update program authority: {:?}", e);
+                error!(target: "save_to_log_file", "Failed to update program authority: {:?}", e);
             }
             process_verification(db, SolanaProgramBuildParams::from(params), signer).await
         }
         Err(err) => {
-            error!("Error fetching onchain params: {:?}", err);
+            error!(target: "save_to_log_file", "Error fetching onchain params: {:?}", err);
             (
                 StatusCode::NOT_FOUND,
                 Json(

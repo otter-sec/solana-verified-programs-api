@@ -13,13 +13,13 @@ impl DbClient {
 
         let conn = &mut self.get_db_conn().await?;
 
-        info!("Inserting build params for program: {}", payload.program_id);
+        info!(target: "save_to_log_file", "Inserting build params for program: {}", payload.program_id);
         diesel::insert_into(solana_program_builds)
             .values(payload)
             .execute(conn)
             .await
             .map_err(|e| {
-                error!("Failed to insert build params: {}", e);
+                error!(target: "save_to_log_file", "Failed to insert build params: {}", e);
                 ApiError::Diesel(e)
             })
     }

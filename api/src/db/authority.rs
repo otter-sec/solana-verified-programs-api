@@ -30,6 +30,7 @@ impl DbClient {
         match saved_record {
             Ok((existing_authority, existing_is_frozen)) => {
                 info!(
+                    target: "save_to_log_file",
                     "Program authority found for program_id {}: {:?}, is_frozen: {}",
                     program_id_str, existing_authority, existing_is_frozen
                 );
@@ -37,6 +38,7 @@ impl DbClient {
                 // If the record is frozen or the authority hasn't changed, return without updating
                 if existing_is_frozen {
                     info!(
+                        target: "save_to_log_file",
                         "Program authority for program_id {} is frozen. Skipping update.",
                         program_id_str
                     );
@@ -47,6 +49,7 @@ impl DbClient {
                     && existing_is_frozen == program_is_frozen
                 {
                     info!(
+                        target: "save_to_log_file",
                         "Authority for program_id {} is already the same. Skipping update.",
                         program_id_str
                     );
@@ -55,12 +58,14 @@ impl DbClient {
             }
             Err(diesel::result::Error::NotFound) => {
                 info!(
+                    target: "save_to_log_file",
                     "No existing program authority found for program_id {}. Proceeding to insert.",
                     program_id_str
                 );
             }
             Err(e) => {
                 info!(
+                    target: "save_to_log_file",
                     "Failed to fetch authority for program_id {}: {}",
                     program_id_str, e
                 );
@@ -69,6 +74,7 @@ impl DbClient {
 
         // Insert or update the record
         info!(
+            target: "save_to_log_file",
             "Updating authority for program: {} to: {:?}",
             program_id_str, authority_value
         );
@@ -89,11 +95,12 @@ impl DbClient {
             .execute(conn)
             .await
             .map_err(|e| {
-                error!("Failed to update authority: {}", e);
+                error!(target: "save_to_log_file", "Failed to update authority: {}", e);
                 ApiError::Diesel(e)
             })?;
 
         info!(
+            target: "save_to_log_file",
             "Successfully updated authority for program: {}",
             program_id_str
         );
