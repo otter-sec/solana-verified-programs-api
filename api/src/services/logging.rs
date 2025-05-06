@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{logging::LOG_TARGET, Result};
 use serde_json::{json, Value};
 use std::{
     fs::OpenOptions,
@@ -28,7 +28,7 @@ pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
 
     // Ensure logs directory exists
     if !logs_dir.exists() {
-        error!("Logs directory does not exist: {}", LOGS_DIR);
+        error!(target: LOG_TARGET, "Logs directory does not exist: {}", LOGS_DIR);
         return Err(
             std::io::Error::new(std::io::ErrorKind::NotFound, "Logs directory not found").into(),
         );
@@ -37,18 +37,18 @@ pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
     // Write stderr log
     let err_path = get_log_path(file_name, "err");
     write_log_file(&err_path, std_err).map_err(|e| {
-        error!("Failed to write stderr log: {}", e);
+        error!(target: LOG_TARGET, "Failed to write stderr log: {}", e);
         e
     })?;
 
     // Write stdout log
     let out_path = get_log_path(file_name, "out");
     write_log_file(&out_path, std_out).map_err(|e| {
-        error!("Failed to write stdout log: {}", e);
+        error!(target: LOG_TARGET, "Failed to write stdout log: {}", e);
         e
     })?;
 
-    info!("Successfully wrote logs for {}", file_name);
+    info!(target: LOG_TARGET, "Successfully wrote logs for {}", file_name);
     Ok(())
 }
 

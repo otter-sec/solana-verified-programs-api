@@ -27,7 +27,7 @@ pub async fn process_verification_request(
     match execute_verification(payload, &uid, &random_file_id).await {
         Ok(res) => {
             let insertion_count = db.insert_or_update_verified_build(&res).await?;
-            info!("Inserted {} verified builds", insertion_count);
+            info!(target: LOG_TARGET, "Inserted {} verified builds", insertion_count);
             if let Err(e) = db.update_build_status(&uid, JobStatus::Completed).await {
                 error!(target: LOG_TARGET, "Failed to update build status to completed: {:?}", e);
             }
@@ -112,6 +112,7 @@ pub async fn execute_verification(
     random_file_id: &str,
 ) -> Result<VerifiedProgram> {
     info!(
+        target: LOG_TARGET,
         "Starting build verification for program: {}",
         payload.program_id
     );
@@ -119,20 +120,20 @@ pub async fn execute_verification(
     let mut cmd = build_verify_command(&payload)?;
 
     let mut child = cmd.spawn().map_err(|e| {
-        error!("Failed to spawn solana-verify command: {}", e);
+        error!(target: LOG_TARGET, "Failed to spawn solana-verify command: {}", e);
         ApiError::Build("Failed to start verification process".to_string())
     })?;
 
     // Handle stdin for the process
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(b"n\n").await.map_err(|e| {
-            error!("Failed to write to stdin: {}", e);
+            error!(target: LOG_TARGET, "Failed to write to stdin: {}", e);
             ApiError::Build("Failed to communicate with verification process".to_string())
         })?;
     }
 
     let output = child.wait_with_output().await.map_err(|e| {
-        error!("Failed to get command output: {}", e);
+        error!(target: LOG_TARGET, "Failed to get command output: {}", e);
         ApiError::Build("Failed to complete verification process".to_string())
     })?;
 
@@ -178,7 +179,7 @@ fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Command> {
         cmd.arg("--").args(cargo_args);
     }
 
-    info!("Prepared command: {:?}", cmd);
+    info!(target: LOG_TARGET, "Prepared command: {:?}", cmd);
     Ok(cmd)
 }
 
@@ -203,7 +204,7 @@ fn process_verification_output(
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr).unwrap_or_default();
         if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id) {
-            error!("Failed to write logs: {:?}", e);
+            error!(target: LOG_TARGET, "Failed to write logs: {:?}", e);
         }
         return Err(ApiError::Build(stdout));
     }
@@ -214,6 +215,7 @@ fn process_verification_output(
         extract_hash_with_prefix(&stdout, "Executable Program Hash from repo:").unwrap_or_default();
 
     info!(
+        target: LOG_TARGET,
         "Verification complete - Program: {}, Build hash: {}, On-chain hash: {}",
         payload.program_id, build_hash, onchain_hash
     );
