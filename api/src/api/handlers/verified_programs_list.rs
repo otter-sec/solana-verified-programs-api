@@ -1,5 +1,5 @@
 use crate::db::{models::VerifiedProgramListResponse, DbClient};
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::{Path, State}, http::StatusCode, Json};
 use tracing::{error, info};
 
 /// Handler for retrieving a list of all verified programs
@@ -15,7 +15,7 @@ pub(crate) async fn get_verified_programs_list(
     State(db): State<DbClient>,
 ) -> (StatusCode, Json<VerifiedProgramListResponse>) {
     info!("Fetching list of verified programs");
-    get_verified_programs_list_paginated(State(db), "1".to_string()).await
+    get_verified_programs_list_paginated(State(db), Path(1)).await
 }
 
 /// Handler for retrieving a paginated list of verified programs
@@ -26,11 +26,10 @@ pub(crate) async fn get_verified_programs_list(
 /// * `(StatusCode, Json<VerifiedProgramListResponse>)` - Status code and list of verified program addresses
 pub(crate) async fn get_verified_programs_list_paginated(
     State(db): State<DbClient>,
-    page: String,
+    Path(page): Path<i64>,
 ) -> (StatusCode, Json<VerifiedProgramListResponse>) {
     // Parse page to i64
-    let page = page.parse::<i64>().unwrap_or(1);
-
+    let page = page.max(1);
     let verified_programs = match db.get_verified_program_ids_page(page).await {
         Ok(programs) => {
             info!("Found {} verified programs", programs.len());

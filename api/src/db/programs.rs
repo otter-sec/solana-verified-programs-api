@@ -7,6 +7,7 @@ use crate::{
 };
 use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
+use diesel::ExpressionMethods;
 use tracing::{error, info};
 
 const PER_PAGE: i64 = 20;
@@ -42,13 +43,23 @@ impl DbClient {
         // Ensure page is valid
         let page = if page > 0 { page } else { 1 };
         let offset = (page - 1) * PER_PAGE;
-
+        
         let conn = &mut self.get_db_conn().await?;
 
+        let total_count = verified_programs
+            .filter(is_verified.eq(true))
+            .distinct_on(program_id)
+            .count()
+            .get_result::<i64>(conn)
+            .await?;
+        tracing::info!("Total count of verified programs: {}", total_count);
+
+        
         verified_programs
+            .filter(is_verified.eq(true))
             .select(program_id)
-            .distinct()
-            .order_by(id)
+            .distinct_on(program_id)
+            .order_by((program_id, id))
             .limit(PER_PAGE)
             .offset(offset)
             .load::<String>(conn)
