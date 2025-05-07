@@ -5,7 +5,7 @@ use r2d2_redis::redis::{Commands, FromRedisValue, Value};
 use tracing::{error, info};
 
 /// Redis cache expiry time in seconds
-const CACHE_EXPIRY_SECONDS: u64 = 60;
+const CACHE_EXPIRY_SECONDS: u64 = 5 * 60;
 
 /// DbClient helper functions for Redis cache to set and retrieve cache values
 impl DbClient {
