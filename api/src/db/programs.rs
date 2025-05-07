@@ -47,6 +47,7 @@ impl DbClient {
 
         verified_programs
             .select(program_id)
+            .distinct()
             .order_by(id)
             .limit(PER_PAGE)
             .offset(offset)
