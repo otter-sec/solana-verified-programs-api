@@ -43,30 +43,29 @@ impl DbClient {
         // Ensure page is valid
         let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
-
+    
         let conn = &mut self.get_db_conn().await?;
-
-        let total_count = verified_programs
+    
+        // Fetch distinct program IDs first
+        let all_program_ids = verified_programs
             .filter(is_verified.eq(true))
             .select(program_id)
             .distinct()
-            .count()
-            .get_result::<i64>(conn)
-            .await?;
-        tracing::info!("Total count of verified programs: {}", total_count);
-
-        let programs = verified_programs
-            .filter(is_verified.eq(true))
-            .select(program_id)
-            .distinct_on(program_id)
-            .order_by((program_id, id))
-            .limit(PER_PAGE)
-            .offset(offset)
+            .order_by(program_id)
             .load::<String>(conn)
             .await?;
-
-        Ok((programs, total_count))
-    }
+    
+        let total_count = all_program_ids.len() as i64;
+    
+        // Slice based on page
+        let paginated_programs = all_program_ids
+            .into_iter()
+            .skip(offset as usize)
+            .take(PER_PAGE as usize)
+            .collect::<Vec<String>>();
+    
+        Ok((paginated_programs, total_count))
+    }    
 
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
         let all_verified_programs = self.get_verified_programs().await?;
