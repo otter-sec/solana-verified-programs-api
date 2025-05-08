@@ -1,6 +1,5 @@
 use crate::db::{
-    models::{PaginationMeta, VerifiedProgramListResponse},
-    DbClient,
+    models::{PaginationMeta, VerifiedProgramListResponse}, programs::PER_PAGE, DbClient
 };
 use axum::{
     extract::{Path, State},
@@ -36,8 +35,6 @@ pub(crate) async fn get_verified_programs_list_paginated(
     Path(page): Path<i64>,
 ) -> (StatusCode, Json<VerifiedProgramListResponse>) {
     let page = page.max(1);
-    /// per page records
-    const PER_PAGE: i64 = 20;
 
     let (verified_programs, total) = match db.get_verified_program_ids_page(page).await {
         Ok(result) => result,

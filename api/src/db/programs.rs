@@ -11,7 +11,7 @@ use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use tracing::{error, info};
 
-const PER_PAGE: i64 = 20;
+pub const PER_PAGE: i64 = 20;
 
 /// DbClient helper functions for VerifiedPrograms table to retrieve verified programs
 impl DbClient {
