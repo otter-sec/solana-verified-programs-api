@@ -122,6 +122,28 @@ impl DbClient {
                 ApiError::Diesel(e)
             })
     }
+
+    /// Checks if a program is frozen in the database.
+    /// Returns `false` if no record is found.
+    pub async fn is_program_frozen(&self, program_address: &str) -> Result<bool> {
+        use crate::schema::program_authority::dsl::*;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        match program_authority
+            .select(is_frozen)
+            .filter(program_id.eq(program_address))
+            .first::<bool>(conn)
+            .await
+        {
+            Ok(frozen) => Ok(frozen),
+            Err(diesel::result::Error::NotFound) => Ok(false),
+            Err(e) => {
+                error!("Failed to check if program is frozen: {}", e);
+                Err(ApiError::Diesel(e))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

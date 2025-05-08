@@ -157,7 +157,19 @@ pub struct JobVerificationResponse {
 /// Used when retrieving all verified programs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramListResponse {
+    pub meta: PaginationMeta,
     pub verified_programs: Vec<String>,
+}
+
+/// Pagination metadata
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationMeta {
+    pub total: i64,
+    pub page: i64,
+    pub total_pages: i64,
+    pub items_per_page: i64,
+    pub has_next_page: bool,
+    pub has_prev_page: bool,
 }
 
 /// Response structure for individual program status

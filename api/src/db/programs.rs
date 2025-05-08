@@ -38,24 +38,24 @@ impl DbClient {
     /// Returns a list of VerifiedProgram structs
     ///
     ///  
-    pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<Vec<String>> {
+    pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<(Vec<String>, i64)> {
         use crate::schema::verified_programs::dsl::*;
-
         // Ensure page is valid
-        let page = if page > 0 { page } else { 1 };
+        let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
 
         let conn = &mut self.get_db_conn().await?;
 
         let total_count = verified_programs
             .filter(is_verified.eq(true))
-            .distinct_on(program_id)
+            .select(program_id)
+            .distinct()
             .count()
             .get_result::<i64>(conn)
             .await?;
         tracing::info!("Total count of verified programs: {}", total_count);
 
-        verified_programs
+        let programs = verified_programs
             .filter(is_verified.eq(true))
             .select(program_id)
             .distinct_on(program_id)
@@ -63,11 +63,9 @@ impl DbClient {
             .limit(PER_PAGE)
             .offset(offset)
             .load::<String>(conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to fetch verified programs: {}", e);
-                e.into()
-            })
+            .await?;
+
+        Ok((programs, total_count))
     }
 
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {

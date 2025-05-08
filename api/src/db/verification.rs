@@ -25,13 +25,15 @@ impl DbClient {
         signer: Option<String>,
     ) -> Result<VerificationResponse> {
         // Run get_verified_build and get_build_params in parallel to reduce total latency
-        let (res_result, build_params_result) = tokio::join!(
+        let (res_result, build_params_result, program_frozen_result) = tokio::join!(
             self.get_verified_build(&program_address, signer.clone()),
-            self.get_build_params(&program_address)
+            self.get_build_params(&program_address),
+            self.is_program_frozen(&program_address)
         );
 
         let res = res_result?;
         let build_params = build_params_result?;
+        let program_frozen = program_frozen_result?;
 
         // Check cache first
         if let Ok(matched) = self
@@ -49,6 +51,17 @@ impl DbClient {
                     commit: build_params.commit_hash.unwrap_or_default(),
                 });
             }
+        }
+        if program_frozen {
+            info!("Program is frozen and not upgradable.");
+            return Ok(VerificationResponse {
+                is_verified: res.on_chain_hash == res.executable_hash,
+                on_chain_hash: res.on_chain_hash,
+                executable_hash: res.executable_hash,
+                repo_url: build_repository_url(&build_params),
+                last_verified_at: Some(res.verified_at),
+                commit: build_params.commit_hash.unwrap_or_default(),
+            });
         }
 
         // Get on-chain hash and update cache
