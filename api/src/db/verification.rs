@@ -24,8 +24,14 @@ impl DbClient {
         program_address: String,
         signer: Option<String>,
     ) -> Result<VerificationResponse> {
-        let res = self.get_verified_build(&program_address, signer).await?;
-        let build_params = self.get_build_params(&program_address).await?;
+        // Run get_verified_build and get_build_params in parallel to reduce total latency
+        let (res_result, build_params_result) = tokio::join!(
+            self.get_verified_build(&program_address, signer.clone()),
+            self.get_build_params(&program_address)
+        );
+
+        let res = res_result?;
+        let build_params = build_params_result?;
 
         // Check cache first
         if let Ok(matched) = self

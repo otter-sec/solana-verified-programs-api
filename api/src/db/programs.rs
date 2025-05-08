@@ -5,9 +5,10 @@ use crate::{
     },
     Result,
 };
+use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
-use diesel::ExpressionMethods;
+use futures::stream::{self, StreamExt};
 use tracing::{error, info};
 
 const PER_PAGE: i64 = 20;
@@ -43,7 +44,7 @@ impl DbClient {
         // Ensure page is valid
         let page = if page > 0 { page } else { 1 };
         let offset = (page - 1) * PER_PAGE;
-        
+
         let conn = &mut self.get_db_conn().await?;
 
         let total_count = verified_programs
@@ -54,7 +55,6 @@ impl DbClient {
             .await?;
         tracing::info!("Total count of verified programs: {}", total_count);
 
-        
         verified_programs
             .filter(is_verified.eq(true))
             .select(program_id)
@@ -73,47 +73,42 @@ impl DbClient {
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
         let all_verified_programs = self.get_verified_programs().await?;
 
-        let mut programs_status_all = Vec::new();
-
-        for program in all_verified_programs {
-            info!(
-                "Checking verification status for program: {}",
-                program.program_id
-            );
-            match self
-                .clone()
-                .check_is_verified(program.program_id.to_owned(), None)
-                .await
-            {
-                Ok(result) => {
-                    let status_message = if result.is_verified {
-                        "On chain program verified"
-                    } else {
-                        "On chain program not verified"
-                    };
-
-                    info!("Program {} status: {}", program.program_id, status_message);
-                    programs_status_all.push(VerifiedProgramStatusResponse {
-                        program_id: program.program_id.to_owned(),
-                        is_verified: result.is_verified,
-                        message: status_message.to_string(),
-                        on_chain_hash: result.on_chain_hash,
-                        executable_hash: result.executable_hash,
-                        last_verified_at: result.last_verified_at,
-                        repo_url: result.repo_url,
-                        commit: result.commit,
-                    });
-                }
-                Err(err) => {
-                    error!(
-                        "Failed to get verification status for program {}: {}",
-                        program.program_id, err
-                    );
+        let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
+            let service = self.clone();
+            async move {
+                let program_id = program.program_id.clone();
+                match service.check_is_verified(program_id.clone(), None).await {
+                    Ok(result) => {
+                        let status_message = if result.is_verified {
+                            "On chain program verified"
+                        } else {
+                            "On chain program not verified"
+                        };
+                        Some(VerifiedProgramStatusResponse {
+                            program_id,
+                            is_verified: result.is_verified,
+                            message: status_message.to_string(),
+                            on_chain_hash: result.on_chain_hash,
+                            executable_hash: result.executable_hash,
+                            last_verified_at: result.last_verified_at,
+                            repo_url: result.repo_url,
+                            commit: result.commit,
+                        })
+                    }
+                    Err(err) => {
+                        error!("Failed to verify program: {}", err);
+                        None
+                    }
                 }
             }
-        }
+        }))
+        // Run up to 10 verification checks in parallel
+        .buffer_unordered(10);
 
-        Ok(programs_status_all)
+        let results: Vec<VerifiedProgramStatusResponse> =
+            stream.filter_map(|res| async move { res }).collect().await;
+
+        Ok(results)
     }
 }
 

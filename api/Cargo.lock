@@ -5716,6 +5716,7 @@ dependencies = [
  "diesel-async",
  "dotenv",
  "envy",
+ "futures",
  "once_cell",
  "r2d2_redis",
  "redis 0.23.3",

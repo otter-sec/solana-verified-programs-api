@@ -1,5 +1,9 @@
 use crate::db::{models::VerifiedProgramListResponse, DbClient};
-use axum::{extract::{Path, State}, http::StatusCode, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use tracing::{error, info};
 
 /// Handler for retrieving a list of all verified programs
