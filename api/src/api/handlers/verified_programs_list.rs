@@ -1,5 +1,7 @@
 use crate::db::{
-    models::{PaginationMeta, VerifiedProgramListResponse}, programs::PER_PAGE, DbClient
+    models::{PaginationMeta, VerifiedProgramListResponse},
+    programs::PER_PAGE,
+    DbClient,
 };
 use axum::{
     extract::{Path, State},
