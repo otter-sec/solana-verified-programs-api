@@ -442,4 +442,23 @@ impl DbClient {
                 e.into()
             })
     }
+    /// Mark a program as unverified without modifying the on-chain hash.
+    pub async fn mark_program_unverified(&self, program_address: &str) -> Result<usize> {
+        use crate::schema::verified_programs::dsl::*;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        diesel::update(verified_programs)
+            .filter(program_id.eq(program_address))
+            .set((
+                is_verified.eq(false),
+                verified_at.eq(chrono::Utc::now().naive_utc()),
+            ))
+            .execute(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to mark program as unverified: {}", e);
+                e.into()
+            })
+    }
 }

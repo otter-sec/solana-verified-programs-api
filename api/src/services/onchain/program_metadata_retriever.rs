@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{errors::ApiError, Result, CONFIG};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_sdk::{bpf_loader_upgradeable, pubkey::Pubkey};
 
 #[cfg(feature = "use-external-pdas")]
 use {
@@ -166,6 +166,30 @@ pub async fn get_otter_verify_params(
     ))
 }
 
+/// Returns `false` if program buffer account exists
+/// Returns `true` only if the buffer account is missing (AccountNotFound)
+pub async fn is_program_buffer_missing(program_id: &str) -> bool {
+    let program_id_pubkey = match Pubkey::from_str(program_id) {
+        Ok(pubkey) => pubkey,
+        Err(_) => return false,
+    };
+    let client = RpcClient::new(CONFIG.rpc_url.clone());
+
+    let program_buffer =
+        Pubkey::find_program_address(&[program_id_pubkey.as_ref()], &bpf_loader_upgradeable::id())
+            .0;
+
+    match client.get_account(&program_buffer).await {
+        Ok(_) => false, // Account exists
+        Err(err) => {
+            if err.to_string().contains("AccountNotFound") {
+                true
+            } else {
+                false // Ignore other errors and continue
+            }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +224,12 @@ mod tests {
         assert_eq!(build_params.program_id, program_id);
         assert!(build_params.lib_name.unwrap() == "squads_mpl");
         assert!(build_params.bpf_flag.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_program_buffer_missing() {
+        let program_id = "2gFsaXeN9jngaKbQvZsLwxqfUrT2n4WRMraMpeL8NwZM";
+        let result = is_program_buffer_missing(program_id).await;
+        assert!(result);
     }
 }
