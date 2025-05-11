@@ -75,6 +75,14 @@ pub struct StatusResponse {
     pub last_verified_at: Option<NaiveDateTime>,
 }
 
+/// Extended StatusResponse struct to return program frozen status
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtendedStatusResponse {
+    #[serde(flatten)]
+    pub status: StatusResponse,
+    pub is_frozen: bool,
+}
+
 /// Response structure for verification job status
 /// Used when checking the status of a verification job
 #[derive(Debug, Serialize, Deserialize)]
