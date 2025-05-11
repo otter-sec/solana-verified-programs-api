@@ -84,6 +84,7 @@ impl DbClient {
             .do_update()
             .set((
                 authority_id.eq(authority_value.map(|val| val.to_string())),
+                is_frozen.eq(program_is_frozen),
                 last_updated.eq(current_time),
             ))
             .execute(conn)

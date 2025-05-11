@@ -13,8 +13,16 @@ use diesel::{
     sql_query, Table,
 };
 use diesel_async::RunQueryDsl;
+use std::str::FromStr;
 
+use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
+
+#[derive(Clone)]
+pub struct ProgramAuthorityParams {
+    pub authority: Option<String>,
+    pub frozen: bool,
+}
 
 /// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
@@ -132,9 +140,16 @@ impl DbClient {
         let mut is_verification_needed = false;
         let mut verification_responses = vec![];
 
+        let mut is_frozen_status_update_needed = false;
+        let mut is_frozen_status_update_data = ProgramAuthorityParams {
+            authority: None,
+            frozen: false,
+        };
+
         for verified_build_with_signer in res {
             let build = verified_build_with_signer.solana_program_build;
             let verified_build = verified_build_with_signer.verified_program;
+            let mut is_program_frozen;
 
             if let Some(verified_build) = verified_build {
                 let is_verified = if let Some(ref hash) = hash {
@@ -153,6 +168,23 @@ impl DbClient {
                     verified_build.executable_hash == verified_build.on_chain_hash
                 };
 
+                is_program_frozen = verified_build_with_signer.is_frozen.unwrap_or_default();
+
+                if !is_program_frozen {
+                    let (current_authority, current_frozen_status) =
+                        get_program_authority(&program_address)
+                            .await
+                            .unwrap_or((None, false));
+
+                    if current_frozen_status != is_program_frozen {
+                        is_frozen_status_update_needed = true;
+                        is_frozen_status_update_data.authority = current_authority;
+                        is_frozen_status_update_data.frozen = current_frozen_status;
+                    }
+
+                    is_program_frozen = current_frozen_status;
+                }
+
                 verification_responses.push(VerificationResponseWithSigner {
                     verification_response: VerificationResponse {
                         is_verified,
@@ -163,9 +195,19 @@ impl DbClient {
                         commit: build.commit_hash.unwrap_or_default(),
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
-                    is_frozen: verified_build_with_signer.is_frozen.unwrap_or_default(),
+                    is_frozen: is_program_frozen,
                 });
             }
+        }
+
+        if is_frozen_status_update_needed {
+            let program_id_pubkey = Pubkey::from_str(&program_address)?;
+            self.insert_or_update_program_authority(
+                &program_id_pubkey,
+                is_frozen_status_update_data.authority.as_deref(),
+                is_frozen_status_update_data.frozen,
+            )
+            .await?;
         }
 
         if is_verification_needed {
