@@ -19,6 +19,8 @@ pub struct VerificationResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+    /// Public key of the signer who verified the program
+    pub is_frozen: bool,
 }
 
 /// Extends VerificationResponse with signer information
@@ -27,8 +29,6 @@ pub struct VerificationResponse {
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
     pub signer: String,
-    /// Public key of the signer who verified the program
-    pub is_frozen: bool,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,

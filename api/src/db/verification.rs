@@ -36,12 +36,12 @@ impl DbClient {
         let (res_result, build_params_result, program_frozen_result) = tokio::join!(
             self.get_verified_build(&program_address, signer.clone()),
             self.get_build_params(&program_address),
-            self.is_program_frozen(&program_address)
+            get_program_authority(&program_address)
         );
 
         let res = res_result?;
         let build_params = build_params_result?;
-        let program_frozen = program_frozen_result?;
+        let (program_authority, program_frozen) = program_frozen_result?;
 
         // Check cache first
         if let Ok(matched) = self
@@ -57,10 +57,18 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    is_frozen: program_frozen,
                 });
             }
         }
         if program_frozen {
+            let program_id_pubkey = Pubkey::from_str(&program_address)?;
+            self.insert_or_update_program_authority(
+                &program_id_pubkey,
+                program_authority.as_deref(),
+                program_frozen,
+            )
+            .await?;
             info!("Program is frozen and not upgradable.");
             return Ok(VerificationResponse {
                 is_verified: res.on_chain_hash == res.executable_hash,
@@ -69,6 +77,7 @@ impl DbClient {
                 repo_url: build_repository_url(&build_params),
                 last_verified_at: Some(res.verified_at),
                 commit: build_params.commit_hash.unwrap_or_default(),
+                is_frozen: program_frozen,
             });
         }
 
@@ -100,6 +109,7 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    is_frozen: program_frozen,
                 })
             }
             Err(_) => {
@@ -111,6 +121,7 @@ impl DbClient {
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
+                    is_frozen: program_frozen,
                 })
             }
         }
@@ -193,9 +204,9 @@ impl DbClient {
                         repo_url: build_repository_url(&build),
                         last_verified_at: Some(verified_build.verified_at),
                         commit: build.commit_hash.unwrap_or_default(),
+                        is_frozen: is_program_frozen,
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
-                    is_frozen: is_program_frozen,
                 });
             }
         }
