@@ -66,39 +66,48 @@ impl DbClient {
             .map(|pid| {
                 let client = Arc::clone(&client);
                 async move {
-                    // Cache key for this program ID
                     let cache_key = format!("valid_program:{}", pid);
 
-                    // Try cache
+                    // Try cache first
                     match self.get_cache(&cache_key).await {
-                        Ok(cached) if cached == "1" => {
-                            Some(pid) // cache hit: valid
-                        }
-                        Ok(_) => {
-                            None // cache hit: invalid
-                        }
-                        Err(_) => {
-                            // Cache miss, do actual check
-                            let (program_authority_opt, _) =
-                                get_program_authority(&pid).await.unwrap_or((None, false));
-                            if let Some(program_authority) = program_authority_opt {
-                                if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
-                                    Pubkey::try_from(pid.as_str()),
-                                    Pubkey::try_from(program_authority.as_str()),
-                                ) {
-                                    if get_otter_pda(&client, &authority_pubkey, &program_pubkey)
-                                        .await
-                                        .is_ok()
-                                    {
-                                        _ = self.set_cache(&cache_key, "1").await;
-                                        return Some(pid); // valid, cached
-                                    }
-                                }
+                        Ok(cached) if cached == "1" => return Some(pid),
+                        Ok(_) => return None,
+                        Err(_) => {}
+                    }
+
+                    // Check DB for saved authority
+                    let saved_authority = self
+                        .get_program_authority_from_db(&pid)
+                        .await
+                        .ok()
+                        .flatten();
+
+                    // Fallback to RPC if not in DB
+                    let authority = match saved_authority {
+                        Some(a) => Some(a),
+                        None => get_program_authority(&pid)
+                            .await
+                            .ok()
+                            .and_then(|(auth, _)| auth),
+                    };
+
+                    if let Some(program_authority) = authority {
+                        if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
+                            Pubkey::try_from(pid.as_str()),
+                            Pubkey::try_from(program_authority.as_str()),
+                        ) {
+                            if get_otter_pda(&client, &authority_pubkey, &program_pubkey)
+                                .await
+                                .is_ok()
+                            {
+                                _ = self.set_cache(&cache_key, "1").await;
+                                return Some(pid);
                             }
-                            _ = self.set_cache(&cache_key, "0").await; // mark as invalid
-                            None
                         }
                     }
+
+                    _ = self.set_cache(&cache_key, "0").await;
+                    None
                 }
             })
             .buffer_unordered(10)
