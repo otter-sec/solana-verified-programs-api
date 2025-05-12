@@ -128,12 +128,52 @@ impl DbClient {
 
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
         let all_verified_programs = self.get_verified_programs().await?;
+        let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
+        let this = self.clone();
 
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
-            let service = self.clone();
+            let this = this.clone();
+            let client = Arc::clone(&client);
             async move {
                 let program_id = program.program_id.clone();
-                match service.check_is_verified(program_id.clone(), None).await {
+
+                // Try to get authority from DB first
+                let saved_authority = this
+                    .get_program_authority_from_db(&program_id)
+                    .await
+                    .ok()
+                    .flatten();
+
+                // Fallback to RPC if not found
+                let authority = match saved_authority {
+                    Some(a) => Some(a),
+                    None => get_program_authority(&program_id)
+                        .await
+                        .ok()
+                        .and_then(|(auth, _)| auth),
+                };
+
+                // Validate using PDA logic
+                let is_valid = if let Some(program_authority) = authority {
+                    if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
+                        Pubkey::try_from(program_id.as_str()),
+                        Pubkey::try_from(program_authority.as_str()),
+                    ) {
+                        get_otter_pda(&client, &authority_pubkey, &program_pubkey)
+                            .await
+                            .is_ok()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if !is_valid {
+                    return None;
+                }
+
+                match this.check_is_verified(program_id.clone(), None).await {
                     Ok(result) => {
                         let status_message = if result.is_verified {
                             "On chain program verified"
