@@ -8,6 +8,7 @@ use crate::{
     services::onchain::{get_program_authority, program_metadata_retriever::get_otter_pda},
     Result, CONFIG,
 };
+use diesel::sql_query;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
@@ -24,16 +25,22 @@ impl DbClient {
     ///
     /// Returns a list of VerifiedProgram structs
     pub async fn get_verified_programs(&self) -> Result<Vec<VerifiedProgram>> {
-        use crate::schema::verified_programs::dsl::*;
-
         let conn = &mut self.get_db_conn().await?;
 
-        info!("Fetching list of verified programs");
-        verified_programs
+        info!("Fetching distinct verified programs by program_id");
+
+        // This query selects the first row per unique program_id based on the order of verified_at (latest first)
+        let query = r#"
+            SELECT DISTINCT ON (program_id) *
+            FROM verified_programs
+            ORDER BY program_id, verified_at DESC
+        "#;
+
+        sql_query(query)
             .load::<VerifiedProgram>(conn)
             .await
             .map_err(|e| {
-                error!("Failed to fetch verified programs: {}", e);
+                error!("Failed to fetch distinct verified programs: {}", e);
                 e.into()
             })
     }
