@@ -52,3 +52,9 @@ pub(crate) struct VerificationStatusParams {
     /// Program address to check
     pub address: String,
 }
+
+#[derive(Clone)]
+pub struct ProgramAuthorityParams {
+    pub authority: Option<String>,
+    pub frozen: bool,
+}

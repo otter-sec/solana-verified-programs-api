@@ -15,7 +15,7 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info, warn};
 
-use super::models::VerificationResponse;
+use super::models::{ProgramAuthorityParams, VerificationResponse};
 
 pub const PER_PAGE: i64 = 20;
 
@@ -159,6 +159,9 @@ impl DbClient {
                 warn!("Cache found but failed to deserialize, falling back...");
             }
         }
+        // Saving get_program_authority result and passing to check_is_verified
+        // To avoid multiple time
+        let mut onchain_authoriry: Option<ProgramAuthorityParams> = None;
 
         let mut authority = self
             .get_program_authority_from_db(program_id)
@@ -170,6 +173,10 @@ impl DbClient {
         if authority.is_none() {
             if let Ok((auth_opt, frozen)) = get_program_authority(program_id).await {
                 authority = auth_opt.clone();
+                onchain_authoriry = Some(ProgramAuthorityParams {
+                    authority: auth_opt.clone(),
+                    frozen,
+                });
                 if frozen {
                     if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
                         let _ = self
@@ -205,7 +212,10 @@ impl DbClient {
             return Ok(None);
         }
 
-        match self.check_is_verified(program_id.to_string(), None).await {
+        match self
+            .check_is_verified(program_id.to_string(), None, onchain_authoriry)
+            .await
+        {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
                     let _ = self.set_cache(&cache_key, &serialized).await;

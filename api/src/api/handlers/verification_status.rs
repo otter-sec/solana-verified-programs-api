@@ -23,7 +23,7 @@ pub(crate) async fn get_verification_status(
 ) -> Json<ExtendedStatusResponse> {
     info!("Checking verification status for program: {}", address);
 
-    match db.check_is_verified(address, None).await {
+    match db.check_is_verified(address, None, None).await {
         Ok(result) => {
             let status_message = if result.is_verified {
                 "On chain program verified"

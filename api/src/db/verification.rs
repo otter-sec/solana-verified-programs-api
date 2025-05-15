@@ -1,4 +1,4 @@
-use super::models::VerificationResponseWithSigner;
+use super::models::{ProgramAuthorityParams, VerificationResponseWithSigner};
 use super::DbClient;
 use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse,
@@ -18,12 +18,6 @@ use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info, warn};
 
-#[derive(Clone)]
-pub struct ProgramAuthorityParams {
-    pub authority: Option<String>,
-    pub frozen: bool,
-}
-
 /// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
     /// Check if a program is already verified
@@ -31,6 +25,7 @@ impl DbClient {
         &self,
         program_address: String,
         signer: Option<String>,
+        authority_info: Option<ProgramAuthorityParams>,
     ) -> Result<VerificationResponse> {
         let cache_key = format!("check_is_verified:{}", program_address);
 
@@ -48,7 +43,13 @@ impl DbClient {
             self.get_verified_build(&program_address, signer.clone()),
             self.get_build_params(&program_address),
             self.is_program_frozen(&program_address),
-            get_program_authority(&program_address)
+            async {
+                if let Some(info) = &authority_info {
+                    Ok((info.authority.clone(), info.frozen)) // use provided info
+                } else {
+                    get_program_authority(&program_address).await // fallback to RPC
+                }
+            }
         );
 
         let res = res_result?;
