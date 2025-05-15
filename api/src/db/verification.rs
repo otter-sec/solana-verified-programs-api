@@ -28,7 +28,7 @@ pub struct ProgramAuthorityParams {
 impl DbClient {
     /// Check if a program is already verified
     pub async fn check_is_verified(
-        self,
+        &self,
         program_address: String,
         signer: Option<String>,
     ) -> Result<VerificationResponse> {

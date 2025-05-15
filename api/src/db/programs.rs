@@ -9,13 +9,13 @@ use crate::{
     Result, CONFIG,
 };
 use diesel::sql_query;
-use diesel::ExpressionMethods;
-use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
+
+use super::models::VerificationResponse;
 
 pub const PER_PAGE: i64 = 20;
 
@@ -29,10 +29,11 @@ impl DbClient {
 
         info!("Fetching distinct verified programs by program_id");
 
-        // This query selects the first row per unique program_id based on the order of verified_at (latest first)
+        // Select only verified rows and get the latest per program_id
         let query = r#"
             SELECT DISTINCT ON (program_id) *
             FROM verified_programs
+            WHERE is_verified = true
             ORDER BY program_id, verified_at DESC
         "#;
 
@@ -51,70 +52,33 @@ impl DbClient {
     ///
     ///  
     pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<(Vec<String>, i64)> {
-        use crate::schema::verified_programs::dsl::*;
         // Ensure page is valid
         let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
 
-        let conn = &mut self.get_db_conn().await?;
-
-        let all_program_ids = verified_programs
-            .filter(is_verified.eq(true))
-            .select(program_id)
-            .distinct()
-            .order_by(program_id)
-            .load::<String>(conn)
-            .await?;
+        let all_verified_programs = self.get_verified_programs().await?;
+        let all_program_ids: Vec<String> = all_verified_programs
+            .into_iter()
+            .map(|p| p.program_id)
+            .collect();
 
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
+
+        let this = Arc::new(self.clone());
 
         // Return only programs where the verification PDA signer is the program upgrade authority, with caching for validation
         let valid_programs: Vec<String> = stream::iter(all_program_ids)
             .map(|pid| {
                 let client = Arc::clone(&client);
+                let this = Arc::clone(&this);
                 async move {
-                    let cache_key = format!("valid_program:{}", pid);
-
-                    // Try cache first
-                    match self.get_cache(&cache_key).await {
-                        Ok(cached) if cached == "1" => return Some(pid),
-                        Ok(_) => return None,
-                        Err(_) => {}
-                    }
-
-                    // Check DB for saved authority
-                    let saved_authority = self
-                        .get_program_authority_from_db(&pid)
+                    match this
+                        .is_program_valid_and_verified(&pid, client.clone())
                         .await
-                        .ok()
-                        .flatten();
-
-                    // Fallback to RPC if not in DB
-                    let authority = match saved_authority {
-                        Some(a) => Some(a),
-                        None => get_program_authority(&pid)
-                            .await
-                            .ok()
-                            .and_then(|(auth, _)| auth),
-                    };
-
-                    if let Some(program_authority) = authority {
-                        if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
-                            Pubkey::try_from(pid.as_str()),
-                            Pubkey::try_from(program_authority.as_str()),
-                        ) {
-                            if get_otter_pda(&client, &authority_pubkey, &program_pubkey)
-                                .await
-                                .is_ok()
-                            {
-                                _ = self.set_cache(&cache_key, "1").await;
-                                return Some(pid);
-                            }
-                        }
+                    {
+                        Ok(Some(_)) => Some(pid), // Valid and verified
+                        _ => None,                // Invalid or error
                     }
-
-                    _ = self.set_cache(&cache_key, "0").await;
-                    None
                 }
             })
             .buffer_unordered(10)
@@ -134,84 +98,89 @@ impl DbClient {
     }
 
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
-        let all_verified_programs = self.get_verified_programs().await?;
+        let all_verified_programs: Vec<VerifiedProgram> = self.get_verified_programs().await?;
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
-        let this = self.clone();
+        let this = Arc::new(self.clone());
 
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
-            let this = this.clone();
+            let this = Arc::clone(&this);
             let client = Arc::clone(&client);
             async move {
                 let program_id = program.program_id.clone();
 
-                // Try to get authority from DB first
-                let saved_authority = this
-                    .get_program_authority_from_db(&program_id)
+                match this
+                    .clone()
+                    .is_program_valid_and_verified(&program_id, client.clone())
                     .await
-                    .ok()
-                    .flatten();
-
-                // Fallback to RPC if not found
-                let authority = match saved_authority {
-                    Some(a) => Some(a),
-                    None => get_program_authority(&program_id)
-                        .await
-                        .ok()
-                        .and_then(|(auth, _)| auth),
-                };
-
-                // Validate using PDA logic
-                let is_valid = if let Some(program_authority) = authority {
-                    if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
-                        Pubkey::try_from(program_id.as_str()),
-                        Pubkey::try_from(program_authority.as_str()),
-                    ) {
-                        get_otter_pda(&client, &authority_pubkey, &program_pubkey)
-                            .await
-                            .is_ok()
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                };
-
-                if !is_valid {
-                    return None;
-                }
-
-                match this.check_is_verified(program_id.clone(), None).await {
-                    Ok(result) => {
-                        let status_message = if result.is_verified {
-                            "On chain program verified"
-                        } else {
-                            "On chain program not verified"
-                        };
-                        Some(VerifiedProgramStatusResponse {
-                            program_id,
-                            is_verified: result.is_verified,
-                            message: status_message.to_string(),
-                            on_chain_hash: result.on_chain_hash,
-                            executable_hash: result.executable_hash,
-                            last_verified_at: result.last_verified_at,
-                            repo_url: result.repo_url,
-                            commit: result.commit,
-                        })
-                    }
+                {
+                    Ok(Some(result)) => Some(VerifiedProgramStatusResponse {
+                        program_id,
+                        is_verified: result.is_verified,
+                        message: "On chain program verified".to_string(),
+                        on_chain_hash: result.on_chain_hash,
+                        executable_hash: result.executable_hash,
+                        last_verified_at: result.last_verified_at,
+                        repo_url: result.repo_url,
+                        commit: result.commit,
+                    }),
+                    Ok(None) => None,
                     Err(err) => {
-                        error!("Failed to verify program: {}", err);
+                        error!("Failed to verify program {}: {}", program_id, err);
                         None
                     }
                 }
             }
         }))
-        // Run up to 10 verification checks in parallel
         .buffer_unordered(10);
 
         let results: Vec<VerifiedProgramStatusResponse> =
             stream.filter_map(|res| async move { res }).collect().await;
 
         Ok(results)
+    }
+
+    pub async fn is_program_valid_and_verified(
+        self: Arc<Self>,
+        program_id: &str,
+        client: Arc<RpcClient>,
+    ) -> Result<Option<VerificationResponse>> {
+        let saved_authority = self
+            .get_program_authority_from_db(program_id)
+            .await
+            .ok()
+            .flatten();
+
+        let authority = match saved_authority {
+            Some(a) => Some(a),
+            None => get_program_authority(program_id)
+                .await
+                .ok()
+                .and_then(|(auth, _)| auth),
+        };
+
+        let is_valid = if let Some(program_authority) = authority {
+            if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
+                Pubkey::try_from(program_id),
+                Pubkey::try_from(program_authority.as_str()),
+            ) {
+                get_otter_pda(&client, &authority_pubkey, &program_pubkey)
+                    .await
+                    .is_ok()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !is_valid {
+            return Ok(None);
+        }
+
+        match self.check_is_verified(program_id.to_string(), None).await {
+            Ok(res) if res.is_verified => Ok(Some(res)),
+            _ => Ok(None),
+        }
     }
 }
 
