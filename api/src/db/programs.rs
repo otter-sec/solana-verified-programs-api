@@ -13,7 +13,7 @@ use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::models::VerificationResponse;
 
@@ -144,6 +144,18 @@ impl DbClient {
         program_id: &str,
         client: Arc<RpcClient>,
     ) -> Result<Option<VerificationResponse>> {
+        let cache_key = format!("is_program_valid_and_verified:{}", program_id);
+
+        // Try to get from cache
+        if let Ok(cached_str) = self.get_cache(&cache_key).await {
+            if let Ok(cached) = serde_json::from_str::<VerificationResponse>(&cached_str) {
+                info!("Cache hit for program {}", program_id);
+                return Ok(Some(cached));
+            } else {
+                warn!("Cache found but failed to deserialize, falling back...");
+            }
+        }
+
         let saved_authority = self
             .get_program_authority_from_db(program_id)
             .await
@@ -178,7 +190,14 @@ impl DbClient {
         }
 
         match self.check_is_verified(program_id.to_string(), None).await {
-            Ok(res) if res.is_verified => Ok(Some(res)),
+            Ok(res) if res.is_verified => {
+                if let Ok(serialized) = serde_json::to_string(&res) {
+                    let _ = self.set_cache(&cache_key, &serialized).await;
+                } else {
+                    warn!("Failed to serialize verification response for cache.");
+                }
+                Ok(Some(res))
+            }
             _ => Ok(None),
         }
     }
