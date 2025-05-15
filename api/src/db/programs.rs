@@ -145,9 +145,13 @@ impl DbClient {
         client: Arc<RpcClient>,
     ) -> Result<Option<VerificationResponse>> {
         let cache_key = format!("is_program_valid_and_verified:{}", program_id);
-
+    
         // Try to get from cache
         if let Ok(cached_str) = self.get_cache(&cache_key).await {
+            if cached_str == "NOT_VERIFIED" {
+                info!("Cache hit (NOT_VERIFIED) for program {}", program_id);
+                return Ok(None);
+            }
             if let Ok(cached) = serde_json::from_str::<VerificationResponse>(&cached_str) {
                 info!("Cache hit for program {}", program_id);
                 return Ok(Some(cached));
@@ -155,13 +159,13 @@ impl DbClient {
                 warn!("Cache found but failed to deserialize, falling back...");
             }
         }
-
+    
         let saved_authority = self
             .get_program_authority_from_db(program_id)
             .await
             .ok()
             .flatten();
-
+    
         let authority = match saved_authority {
             Some(a) => Some(a),
             None => get_program_authority(program_id)
@@ -169,7 +173,7 @@ impl DbClient {
                 .ok()
                 .and_then(|(auth, _)| auth),
         };
-
+    
         let is_valid = if let Some(program_authority) = authority {
             if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
                 Pubkey::try_from(program_id),
@@ -184,11 +188,13 @@ impl DbClient {
         } else {
             false
         };
-
+    
         if !is_valid {
+            warn!("Invalid program: {}", program_id);
+            let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
             return Ok(None);
         }
-
+    
         match self.check_is_verified(program_id.to_string(), None).await {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
@@ -198,9 +204,18 @@ impl DbClient {
                 }
                 Ok(Some(res))
             }
-            _ => Ok(None),
+            Ok(_) => {
+                warn!("Program {} is not verified", program_id);
+                let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
+                Ok(None)
+            }
+            Err(e) => {
+                error!("Verification error for {}: {}", program_id, e);
+                let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
+                Ok(None)
+            }
         }
-    }
+    }    
 }
 
 #[cfg(test)]
