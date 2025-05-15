@@ -64,18 +64,15 @@ impl DbClient {
 
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
 
-        let this = Arc::new(self.clone());
+        let this = self.clone();
 
         // Return only programs where the verification PDA signer is the program upgrade authority, with caching for validation
         let valid_programs: Vec<String> = stream::iter(all_program_ids)
             .map(|pid| {
                 let client = Arc::clone(&client);
-                let this = Arc::clone(&this);
+                let this = this.clone();
                 async move {
-                    match this
-                        .is_program_valid_and_verified(&pid, client.clone())
-                        .await
-                    {
+                    match this.is_program_valid_and_verified(&pid, client).await {
                         Ok(Some(_)) => Some(pid), // Valid and verified
                         _ => None,                // Invalid or error
                     }
@@ -100,17 +97,17 @@ impl DbClient {
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
         let all_verified_programs: Vec<VerifiedProgram> = self.get_verified_programs().await?;
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
-        let this = Arc::new(self.clone());
+        let this = self.clone();
 
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
-            let this = Arc::clone(&this);
+            let this = this.clone();
             let client = Arc::clone(&client);
             async move {
                 let program_id = program.program_id.clone();
 
                 match this
                     .clone()
-                    .is_program_valid_and_verified(&program_id, client.clone())
+                    .is_program_valid_and_verified(&program_id, client)
                     .await
                 {
                     Ok(Some(result)) => Some(VerifiedProgramStatusResponse {
@@ -140,7 +137,7 @@ impl DbClient {
     }
 
     pub async fn is_program_valid_and_verified(
-        self: Arc<Self>,
+        &self,
         program_id: &str,
         client: Arc<RpcClient>,
     ) -> Result<Option<VerificationResponse>> {
