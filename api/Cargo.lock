@@ -5707,7 +5707,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "verified_programs_api"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "axum",
  "borsh 1.5.1",
@@ -5716,6 +5716,7 @@ dependencies = [
  "diesel-async",
  "dotenv",
  "envy",
+ "futures",
  "once_cell",
  "r2d2_redis",
  "redis 0.23.3",

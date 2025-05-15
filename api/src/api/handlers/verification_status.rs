@@ -1,5 +1,6 @@
 use crate::db::models::{
-    ApiResponse, ErrorResponse, Status, StatusResponse, SuccessResponse, VerificationStatusParams,
+    ApiResponse, ErrorResponse, ExtendedStatusResponse, Status, StatusResponse, SuccessResponse,
+    VerificationStatusParams,
 };
 use crate::db::DbClient;
 use axum::extract::{Path, State};
@@ -15,14 +16,14 @@ use tracing::{error, info};
 /// * `address` - Program address to check verification status
 ///
 /// # Returns
-/// * `Json<ApiResponse>` - Verification status and details of the program
+/// * `Json<ExtendedStatusResponse>` - Verification status and details of the program
 pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
-) -> Json<ApiResponse> {
+) -> Json<ExtendedStatusResponse> {
     info!("Checking verification status for program: {}", address);
 
-    match db.check_is_verified(address, None).await {
+    match db.check_is_verified(address, None, None).await {
         Ok(result) => {
             let status_message = if result.is_verified {
                 "On chain program verified"
@@ -35,8 +36,8 @@ pub(crate) async fn get_verification_status(
                 result.on_chain_hash, status_message, result.is_verified
             );
 
-            Json(
-                StatusResponse {
+            Json(ExtendedStatusResponse {
+                status: StatusResponse {
                     is_verified: result.is_verified,
                     message: status_message.to_string(),
                     on_chain_hash: result.on_chain_hash,
@@ -44,12 +45,12 @@ pub(crate) async fn get_verification_status(
                     executable_hash: result.executable_hash,
                     repo_url: result.repo_url,
                     commit: result.commit,
-                }
-                .into(),
-            )
+                },
+                is_frozen: result.is_frozen,
+            })
         }
-        Err(_) => Json(
-            StatusResponse {
+        Err(_) => Json(ExtendedStatusResponse {
+            status: StatusResponse {
                 is_verified: false,
                 message: "On chain program not verified".to_string(),
                 on_chain_hash: String::new(),
@@ -57,9 +58,9 @@ pub(crate) async fn get_verification_status(
                 executable_hash: String::new(),
                 repo_url: String::new(),
                 commit: String::new(),
-            }
-            .into(),
-        ),
+            },
+            is_frozen: false,
+        }),
     }
 }
 

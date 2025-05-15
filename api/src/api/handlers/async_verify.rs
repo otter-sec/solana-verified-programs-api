@@ -8,7 +8,9 @@ use crate::{
     },
     errors::ErrorMessages,
     services::{
-        onchain::{self, get_program_authority},
+        onchain::{
+            self, get_program_authority, program_metadata_retriever::is_program_buffer_missing,
+        },
         verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
@@ -131,6 +133,7 @@ pub async fn process_verification(
 
     // Check for existing verification
     if let Some(response) = check_and_handle_duplicates(&payload, signer.clone(), &db).await {
+        check_program_closed(&db, &payload.program_id).await;
         return (StatusCode::OK, Json(response.into()));
     }
 
@@ -192,4 +195,22 @@ pub async fn process_verification(
             .into(),
         ),
     )
+}
+
+/// Checks if the program's buffer account is missing, and if so,
+/// marks the program as unverified in the database.
+pub async fn check_program_closed(db: &DbClient, program_id: &str) {
+    if is_program_buffer_missing(program_id).await {
+        info!(
+            "Program {} buffer missing. Marking as unverified.",
+            program_id
+        );
+
+        if let Err(e) = db.mark_program_unverified(program_id).await {
+            error!(
+                "Program {} buffer missing. failed to mark as unverified: {:?}",
+                program_id, e
+            );
+        }
+    }
 }

@@ -19,6 +19,8 @@ pub struct VerificationResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+    /// Public key of the signer who verified the program
+    pub is_frozen: bool,
 }
 
 /// Extends VerificationResponse with signer information
@@ -27,8 +29,6 @@ pub struct VerificationResponse {
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
     pub signer: String,
-    /// Public key of the signer who verified the program
-    pub is_frozen: bool,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,
@@ -73,6 +73,14 @@ pub struct StatusResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
+}
+
+/// Extended StatusResponse struct to return program frozen status
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtendedStatusResponse {
+    #[serde(flatten)]
+    pub status: StatusResponse,
+    pub is_frozen: bool,
 }
 
 /// Response structure for verification job status
@@ -157,7 +165,19 @@ pub struct JobVerificationResponse {
 /// Used when retrieving all verified programs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramListResponse {
+    pub meta: PaginationMeta,
     pub verified_programs: Vec<String>,
+}
+
+/// Pagination metadata
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationMeta {
+    pub total: i64,
+    pub page: i64,
+    pub total_pages: i64,
+    pub items_per_page: i64,
+    pub has_next_page: bool,
+    pub has_prev_page: bool,
 }
 
 /// Response structure for individual program status

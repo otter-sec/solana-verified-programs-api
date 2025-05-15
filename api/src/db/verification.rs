@@ -1,4 +1,4 @@
-use super::models::VerificationResponseWithSigner;
+use super::models::{ProgramAuthorityParams, VerificationResponseWithSigner};
 use super::DbClient;
 use crate::db::models::{
     JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse,
@@ -13,36 +13,99 @@ use diesel::{
     sql_query, Table,
 };
 use diesel_async::RunQueryDsl;
+use std::str::FromStr;
 
-use tracing::{error, info};
+use solana_sdk::pubkey::Pubkey;
+use tracing::{error, info, warn};
 
 /// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
     /// Check if a program is already verified
     pub async fn check_is_verified(
-        self,
+        &self,
         program_address: String,
         signer: Option<String>,
+        authority_info: Option<ProgramAuthorityParams>,
     ) -> Result<VerificationResponse> {
-        let res = self.get_verified_build(&program_address, signer).await?;
-        let build_params = self.get_build_params(&program_address).await?;
+        let cache_key = format!("check_is_verified:{}", program_address);
 
-        // Check cache first
+        // Try to get from cache
+        if let Ok(cached_str) = self.get_cache(&cache_key).await {
+            if let Ok(cached) = serde_json::from_str::<VerificationResponse>(&cached_str) {
+                info!("Cache hit for program {}", program_address);
+                return Ok(cached);
+            } else {
+                warn!("Cache found but failed to deserialize, falling back...");
+            }
+        }
+
+        let (res_result, build_params_result, saved_program_authority, program_frozen_result) = tokio::join!(
+            self.get_verified_build(&program_address, signer.clone()),
+            self.get_build_params(&program_address),
+            self.is_program_frozen(&program_address),
+            async {
+                if let Some(info) = &authority_info {
+                    Ok((info.authority.clone(), info.frozen)) // use provided info
+                } else {
+                    get_program_authority(&program_address).await // fallback to RPC
+                }
+            }
+        );
+
+        let res = res_result?;
+        let build_params = build_params_result?;
+        let (program_authority, program_frozen) = program_frozen_result?;
+        let saved_program_frozen = saved_program_authority?;
+
+        let return_response = |response: VerificationResponse| async {
+            if let Ok(serialized) = serde_json::to_string(&response) {
+                let _ = self.set_cache(&cache_key, &serialized).await;
+            } else {
+                warn!("Failed to serialize verification response for cache.");
+            }
+            Ok(response)
+        };
+
         if let Ok(matched) = self
             .check_cache(&res.executable_hash, &program_address)
             .await
         {
             if matched {
                 info!("Cache matched for program: {}", program_address);
-                return Ok(VerificationResponse {
+                let response = VerificationResponse {
                     is_verified: true,
                     on_chain_hash: res.on_chain_hash,
                     executable_hash: res.executable_hash,
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
-                });
+                    is_frozen: program_frozen,
+                };
+                return return_response(response).await;
             }
+        }
+
+        if program_frozen {
+            if !saved_program_frozen {
+                let program_id_pubkey = Pubkey::from_str(&program_address)?;
+                self.insert_or_update_program_authority(
+                    &program_id_pubkey,
+                    program_authority.as_deref(),
+                    program_frozen,
+                )
+                .await?;
+            }
+            info!("Program is frozen and not upgradable.");
+            let response = VerificationResponse {
+                is_verified: res.on_chain_hash == res.executable_hash,
+                on_chain_hash: res.on_chain_hash,
+                executable_hash: res.executable_hash,
+                repo_url: build_repository_url(&build_params),
+                last_verified_at: Some(res.verified_at),
+                commit: build_params.commit_hash.unwrap_or_default(),
+                is_frozen: program_frozen,
+            };
+            return return_response(response).await;
         }
 
         // Get on-chain hash and update cache
@@ -61,30 +124,35 @@ impl DbClient {
 
                     // Spawn re-verification task
                     let params_cloned = build_params.clone();
+                    let this = self.clone();
                     tokio::spawn(async move {
-                        self.reverify_program(params_cloned).await;
+                        let _ = this.reverify_program(params_cloned).await;
                     });
                 }
 
-                Ok(VerificationResponse {
+                let response = VerificationResponse {
                     is_verified: on_chain_hash == res.executable_hash,
                     on_chain_hash,
                     executable_hash: res.executable_hash,
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
-                })
+                    is_frozen: program_frozen,
+                };
+                return return_response(response).await;
             }
             Err(_) => {
                 info!("Failed to get on-chain hash. Using cached value.");
-                Ok(VerificationResponse {
+                let response = VerificationResponse {
                     is_verified: res.on_chain_hash == res.executable_hash,
                     on_chain_hash: res.on_chain_hash,
                     executable_hash: res.executable_hash,
                     repo_url: build_repository_url(&build_params),
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
-                })
+                    is_frozen: program_frozen,
+                };
+                return return_response(response).await;
             }
         }
     }
@@ -94,6 +162,20 @@ impl DbClient {
         self,
         program_address: String,
     ) -> Result<Vec<VerificationResponseWithSigner>> {
+        let cache_key = format!("get_all_verification_info:{}", program_address);
+
+        // Try fetching from cache
+        if let Ok(cached_str) = self.get_cache(&cache_key).await {
+            if let Ok(cached_data) =
+                serde_json::from_str::<Vec<VerificationResponseWithSigner>>(&cached_str)
+            {
+                info!("Cache hit for all verification info: {}", program_address);
+                return Ok(cached_data);
+            } else {
+                warn!("Cache found for all verification info but failed to deserialize, proceeding...");
+            }
+        }
+
         let res = self
             .get_verified_builds_with_signer(&program_address)
             .await?;
@@ -113,9 +195,16 @@ impl DbClient {
         let mut is_verification_needed = false;
         let mut verification_responses = vec![];
 
+        let mut is_frozen_status_update_needed = false;
+        let mut is_frozen_status_update_data = ProgramAuthorityParams {
+            authority: None,
+            frozen: false,
+        };
+
         for verified_build_with_signer in res {
             let build = verified_build_with_signer.solana_program_build;
             let verified_build = verified_build_with_signer.verified_program;
+            let mut is_program_frozen;
 
             if let Some(verified_build) = verified_build {
                 let is_verified = if let Some(ref hash) = hash {
@@ -134,6 +223,23 @@ impl DbClient {
                     verified_build.executable_hash == verified_build.on_chain_hash
                 };
 
+                is_program_frozen = verified_build_with_signer.is_frozen.unwrap_or_default();
+
+                if !is_program_frozen {
+                    let (current_authority, current_frozen_status) =
+                        get_program_authority(&program_address)
+                            .await
+                            .unwrap_or((None, false));
+
+                    if current_frozen_status != is_program_frozen {
+                        is_frozen_status_update_needed = true;
+                        is_frozen_status_update_data.authority = current_authority;
+                        is_frozen_status_update_data.frozen = current_frozen_status;
+                    }
+
+                    is_program_frozen = current_frozen_status;
+                }
+
                 verification_responses.push(VerificationResponseWithSigner {
                     verification_response: VerificationResponse {
                         is_verified,
@@ -142,18 +248,34 @@ impl DbClient {
                         repo_url: build_repository_url(&build),
                         last_verified_at: Some(verified_build.verified_at),
                         commit: build.commit_hash.unwrap_or_default(),
+                        is_frozen: is_program_frozen,
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
-                    is_frozen: verified_build_with_signer.is_frozen.unwrap_or_default(),
                 });
             }
         }
 
+        if is_frozen_status_update_needed {
+            let program_id_pubkey = Pubkey::from_str(&program_address)?;
+            self.insert_or_update_program_authority(
+                &program_id_pubkey,
+                is_frozen_status_update_data.authority.as_deref(),
+                is_frozen_status_update_data.frozen,
+            )
+            .await?;
+        }
+
         if is_verification_needed {
             let params = self.get_build_params(&program_address).await?;
+            let this = self.clone();
             tokio::spawn(async move {
-                self.reverify_program(params).await;
+                let _ = this.reverify_program(params).await;
             });
+        }
+
+        // Cache the result
+        if let Ok(serialized) = serde_json::to_string(&verification_responses) {
+            self.set_cache(&cache_key, &serialized).await.ok();
         }
 
         Ok(verification_responses)
@@ -420,6 +542,25 @@ impl DbClient {
             .await
             .map_err(|e| {
                 error!("Failed to unverify program: {}", e);
+                e.into()
+            })
+    }
+    /// Mark a program as unverified without modifying the on-chain hash.
+    pub async fn mark_program_unverified(&self, program_address: &str) -> Result<usize> {
+        use crate::schema::verified_programs::dsl::*;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        diesel::update(verified_programs)
+            .filter(program_id.eq(program_address))
+            .set((
+                is_verified.eq(false),
+                verified_at.eq(chrono::Utc::now().naive_utc()),
+            ))
+            .execute(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to mark program as unverified: {}", e);
                 e.into()
             })
     }
