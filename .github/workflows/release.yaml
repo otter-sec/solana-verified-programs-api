@@ -1,0 +1,34 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+    - '**'
+
+jobs:
+  build:
+    uses: otter-eng/workflows/.github/workflows/build-image.yaml@main
+    with:
+      environment: prod
+      name: ${{ matrix.image.name }}
+      tag: ${{ github.ref_name }}
+      dockerfile: ${{ matrix.image.dockerfile }}
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+        - { name: 'api', dockerfile: 'api/Dockerfile' }
+        - { name: 'db-init', dockerfile: 'api/Dockerfile.db-init' }
+    permissions:
+      contents: read
+      id-token: write
+
+  release:
+    needs: build
+    uses: otter-eng/workflows/.github/workflows/deploy-to-gke.yaml@main
+    with:
+      environment: prod
+      containers: "api=api:${{ github.ref_name }} db-init=db-init:{{ github.ref_name }}"
+    permissions:
+      contents: read
+      id-token: write

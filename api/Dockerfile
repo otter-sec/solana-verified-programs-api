@@ -1,11 +1,9 @@
-FROM --platform=linux/amd64 rust:1.84 AS api_build
+FROM --platform=linux/amd64 rust:1.87 AS api_build
 
 WORKDIR /solana_verified_program_api
 
 # Copy the entire project directory to the Docker image
 COPY api ./api
-
-COPY .env .
 
 WORKDIR /solana_verified_program_api/api
 
@@ -13,7 +11,7 @@ RUN cargo build --release
 
 RUN cargo install solana-verify --git https://github.com/Ellipsis-Labs/solana-verifiable-build
 
-FROM --platform=linux/amd64 rust:1.84 AS api_final
+FROM --platform=linux/amd64 rust:1.87 AS api_final
 
 WORKDIR /solana_verified_program_api
 
