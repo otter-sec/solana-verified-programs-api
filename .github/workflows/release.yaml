@@ -28,7 +28,7 @@ jobs:
     uses: otter-eng/workflows/.github/workflows/deploy-to-gke.yaml@main
     with:
       environment: prod
-      containers: "api=api:${{ github.ref_name }} db-init=db-init:{{ github.ref_name }}"
+      containers: "api=api:${{ github.ref_name }} db-init=db-init:${{ github.ref_name }}"
     permissions:
       contents: read
       id-token: write
