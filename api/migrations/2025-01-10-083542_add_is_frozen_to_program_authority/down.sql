@@ -1,1 +1,1 @@
-ALTER TABLE program_authority DROP COLUMN is_frozen;
+ALTER TABLE program_authority DROP COLUMN IF EXISTS is_frozen;
