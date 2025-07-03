@@ -1,6 +1,12 @@
-FROM --platform=linux/amd64 rust:1.87 AS api_build
+FROM rust:1.87 AS api_build
 
 WORKDIR /solana_verified_program_api
+
+# Install system dependencies required by hidapi/solana-verify
+RUN apt-get update && apt-get install -y \
+    libudev-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire project directory to the Docker image
 COPY api ./api
@@ -11,7 +17,7 @@ RUN cargo build --release
 
 RUN cargo install solana-verify --git https://github.com/Ellipsis-Labs/solana-verifiable-build
 
-FROM --platform=linux/amd64 rust:1.87 AS api_final
+FROM debian:stable-slim AS api_final
 
 WORKDIR /solana_verified_program_api
 
