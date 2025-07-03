@@ -35,7 +35,7 @@ pub(crate) async fn get_build_logs(
         }
     };
 
-    let logs = read_logs(&file_id);
+    let logs = read_logs(&file_id).await;
     info!("Successfully retrieved logs for program: {}", address);
 
     Json(logs)

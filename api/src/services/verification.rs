@@ -140,7 +140,7 @@ pub async fn execute_verification(
         ApiError::Build("Failed to complete verification process".to_string())
     })?;
 
-    process_verification_output(output, &payload, build_id, random_file_id)
+    process_verification_output(output, &payload, build_id, random_file_id).await
 }
 
 /// Builds the solana-verify command with appropriate arguments
@@ -196,7 +196,7 @@ fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Command> {
 ///
 /// # Returns
 /// * `Result<VerifiedProgram>` - Verification result if successful
-fn process_verification_output(
+async fn process_verification_output(
     output: std::process::Output,
     payload: &SolanaProgramBuildParams,
     build_id: &str,
@@ -206,7 +206,7 @@ fn process_verification_output(
 
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-        if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id) {
+        if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id).await {
             error!("Failed to write logs: {:?}", e);
         }
         return Err(ApiError::Build(stdout));

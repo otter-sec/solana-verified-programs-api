@@ -1,10 +1,8 @@
 use crate::Result;
 use serde_json::{json, Value};
-use std::{
-    fs::OpenOptions,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
 /// The directory where logs are stored
@@ -23,7 +21,7 @@ const LOGS_DIR: &str = "/logs";
 /// Creates two files:
 /// - `{file_name}_err.log` for stderr
 /// - `{file_name}_out.log` for stdout
-pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
+pub async fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
     let logs_dir = Path::new(LOGS_DIR);
 
     // Ensure logs directory exists
@@ -36,14 +34,14 @@ pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
 
     // Write stderr log
     let err_path = get_log_path(file_name, "err");
-    write_log_file(&err_path, std_err).map_err(|e| {
+    write_log_file(&err_path, std_err).await.map_err(|e| {
         error!("Failed to write stderr log: {}", e);
         e
     })?;
 
     // Write stdout log
     let out_path = get_log_path(file_name, "out");
-    write_log_file(&out_path, std_out).map_err(|e| {
+    write_log_file(&out_path, std_out).await.map_err(|e| {
         error!("Failed to write stdout log: {}", e);
         e
     })?;
@@ -59,17 +57,17 @@ pub fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
 ///
 /// # Returns
 /// * `Value` - JSON object containing logs or error message
-pub fn read_logs(file_name: &str) -> Value {
+pub async fn read_logs(file_name: &str) -> Value {
     let err_path = get_log_path(file_name, "err");
     let out_path = get_log_path(file_name, "out");
 
     // Read log contents
-    let std_err = std::fs::read_to_string(&err_path).unwrap_or_else(|e| {
+    let std_err = fs::read_to_string(&err_path).await.unwrap_or_else(|e| {
         error!("Failed to read stderr log: {}", e);
         String::new()
     });
 
-    let std_out = std::fs::read_to_string(&out_path).unwrap_or_else(|e| {
+    let std_out = fs::read_to_string(&out_path).await.unwrap_or_else(|e| {
         error!("Failed to read stdout log: {}", e);
         String::new()
     });
@@ -94,14 +92,15 @@ fn get_log_path(file_name: &str, log_type: &str) -> PathBuf {
 }
 
 /// Writes content to a log file
-fn write_log_file(path: &Path, content: &str) -> Result<()> {
-    let mut file = OpenOptions::new()
+async fn write_log_file(path: &Path, content: &str) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open(path)?;
+        .open(path)
+        .await?;
 
-    file.write_all(content.as_bytes())?;
+    file.write_all(content.as_bytes()).await?;
     Ok(())
 }
 
@@ -127,11 +126,11 @@ mod tests {
         let err_path = test_logs_dir.join(format!("{}_err.log", file_name));
         let out_path = test_logs_dir.join(format!("{}_out.log", file_name));
 
-        write_log_file(&err_path, std_err).unwrap();
-        write_log_file(&out_path, std_out).unwrap();
+        tokio_test::block_on(write_log_file(&err_path, std_err)).unwrap();
+        tokio_test::block_on(write_log_file(&out_path, std_out)).unwrap();
 
         // Verify file contents
-        assert_eq!(fs::read_to_string(&err_path).unwrap(), std_err);
-        assert_eq!(fs::read_to_string(&out_path).unwrap(), std_out);
+        assert_eq!(std::fs::read_to_string(&err_path).unwrap(), std_err);
+        assert_eq!(std::fs::read_to_string(&out_path).unwrap(), std_out);
     }
 }
