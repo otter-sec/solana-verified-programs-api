@@ -10,7 +10,7 @@ use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEnco
 use std::str::FromStr;
 use tracing::{error, info};
 
-/// Retrieves the upgrade authority for a Solana program
+/// Retrieves the upgrade authority for a Solana program from the blockchain
 ///
 /// # Arguments
 /// * `program_id` - Public key of the program to check

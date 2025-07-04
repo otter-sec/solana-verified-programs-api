@@ -13,7 +13,7 @@ use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use super::models::{ProgramAuthorityParams, VerificationResponse};
 
@@ -181,37 +181,35 @@ impl DbClient {
     ) -> Result<Option<VerificationResponse>> {
         let cache_key = format!("is_program_valid_and_verified:{}", program_id);
 
-        // Try to get from cache
+        // Try to get from cache first
         if let Ok(cached_str) = self.get_cache(&cache_key).await {
             if cached_str == "NOT_VERIFIED" {
-                info!("Cache hit (NOT_VERIFIED) for program {}", program_id);
                 return Ok(None);
             }
             if let Ok(cached) = serde_json::from_str::<VerificationResponse>(&cached_str) {
-                info!("Cache hit for program {}", program_id);
                 return Ok(Some(cached));
-            } else {
-                warn!("Cache found but failed to deserialize, falling back...");
             }
         }
-        // Saving get_program_authority result and passing to check_is_verified
-        // To avoid multiple time
-        let mut onchain_authoriry: Option<ProgramAuthorityParams> = None;
 
+        // Authority lookup
         let mut authority = self
             .get_program_authority_from_db(program_id)
             .await
             .ok()
             .flatten();
 
-        // Fetch and save authority if not in DB
+        let mut onchain_authority: Option<ProgramAuthorityParams> = None;
+
+        // Only fetch from chain if not in DB cache
         if authority.is_none() {
             if let Ok((auth_opt, frozen)) = get_program_authority(program_id).await {
                 authority = auth_opt.clone();
-                onchain_authoriry = Some(ProgramAuthorityParams {
+                onchain_authority = Some(ProgramAuthorityParams {
                     authority: auth_opt.clone(),
                     frozen,
                 });
+                
+                // Insert authority data
                 if frozen {
                     if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
                         let _ = self
@@ -226,46 +224,49 @@ impl DbClient {
             }
         }
 
-        let is_valid = if let Some(program_authority) = authority {
-            if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
-                Pubkey::try_from(program_id),
-                Pubkey::try_from(program_authority.as_str()),
-            ) {
+        // Early exit if no authority found
+        let program_authority = match authority {
+            Some(auth) => auth,
+            None => {
+                let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
+                return Ok(None);
+            }
+        };
+
+        // Validate program authority efficiently
+        let is_valid = match (
+            Pubkey::try_from(program_id),
+            Pubkey::try_from(program_authority.as_str()),
+        ) {
+            (Ok(program_pubkey), Ok(authority_pubkey)) => {
                 get_otter_pda(&client, &authority_pubkey, &program_pubkey)
                     .await
                     .is_ok()
-            } else {
-                false
             }
-        } else {
-            false
+            _ => false,
         };
 
         if !is_valid {
-            warn!("Invalid program: {}", program_id);
             let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
             return Ok(None);
         }
 
+        // Check verification status
         match self
-            .check_is_verified(program_id.to_string(), None, onchain_authoriry)
+            .check_is_verified(program_id.to_string(), None, onchain_authority)
             .await
         {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
                     let _ = self.set_cache(&cache_key, &serialized).await;
-                } else {
-                    warn!("Failed to serialize verification response for cache.");
                 }
                 Ok(Some(res))
             }
             Ok(_) => {
-                warn!("Program {} is not verified", program_id);
                 let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
                 Ok(None)
             }
-            Err(e) => {
-                error!("Verification error for {}: {}", program_id, e);
+            Err(_) => {
                 let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
                 Ok(None)
             }
