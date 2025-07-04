@@ -2,8 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use crate::{
     db::{
-        models::{VerifiedProgram, VerifiedProgramStatusResponse},
-        DbClient,
+        models::{VerifiedProgram, VerifiedProgramStatusResponse}, redis::VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS, DbClient
     },
     services::onchain::{get_program_authority, program_metadata_retriever::get_otter_pda},
     Result, CONFIG,
@@ -271,7 +270,7 @@ impl DbClient {
         {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
-                    let _ = self.set_cache(&cache_key, &serialized).await;
+                    let _ = self.set_cache_with_expiry(&cache_key, &serialized, VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS).await;
                 }
                 Ok(Some(res))
             }
