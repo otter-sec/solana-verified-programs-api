@@ -122,23 +122,36 @@ pub async fn execute_verification(
 
     let mut cmd = build_verify_command(&payload)?;
 
-    let mut child = cmd.spawn().map_err(|e| {
-        error!("Failed to spawn solana-verify command: {}", e);
-        ApiError::Build("Failed to start verification process".to_string())
-    })?;
-
-    // Handle stdin for the process
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(b"n\n").await.map_err(|e| {
-            error!("Failed to write to stdin: {}", e);
-            ApiError::Build("Failed to communicate with verification process".to_string())
+    // Spawn the verification process in a separate task to avoid blocking the async runtime
+    let verification_task = async {
+        let mut child = cmd.spawn().map_err(|e| {
+            error!("Failed to spawn solana-verify command: {}", e);
+            ApiError::Build("Failed to start verification process".to_string())
         })?;
-    }
 
-    let output = child.wait_with_output().await.map_err(|e| {
-        error!("Failed to get command output: {}", e);
-        ApiError::Build("Failed to complete verification process".to_string())
-    })?;
+        // Handle stdin for the process
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(b"n\n").await.map_err(|e| {
+                error!("Failed to write to stdin: {}", e);
+                ApiError::Build("Failed to communicate with verification process".to_string())
+            })?;
+        }
+
+        let output = child.wait_with_output().await.map_err(|e| {
+            error!("Failed to get command output: {}", e);
+            ApiError::Build("Failed to complete verification process".to_string())
+        })?;
+
+        Ok::<std::process::Output, crate::errors::ApiError>(output)
+    };
+
+    // Wait for verification to complete (no timeout)
+    let output = verification_task
+        .await
+        .map_err(|e| {
+            error!("Verification failed for program: {}: {}", payload.program_id, e);
+            e
+        })?;
 
     process_verification_output(output, &payload, build_id, random_file_id).await
 }
