@@ -109,22 +109,29 @@ impl DbClient {
             .map(|result| result.program_id)
             .collect();
 
-        // Now validate programs in batches with increased concurrency
+        // Now validate programs in batches with proper concurrency control
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
         let this = self.clone();
 
+        // Use a semaphore to limit concurrent RPC calls and prevent overwhelming the RPC endpoint
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        
         let valid_programs: Vec<String> = stream::iter(program_ids)
             .map(|pid| {
                 let client = Arc::clone(&client);
                 let this = this.clone();
+                let semaphore = Arc::clone(&semaphore);
                 async move {
+                    // Acquire semaphore permit before making RPC calls
+                    let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
+                    
                     match this.is_program_valid_and_verified(&pid, client).await {
                         Ok(Some(_)) => Some(pid), // Valid and verified
                         _ => None,                // Invalid or error
                     }
                 }
             })
-            .buffer_unordered(20) // Increased concurrency for better performance
+            .buffer_unordered(25) // Allow more tasks to be queued while respecting semaphore limit
             .filter_map(|x| async move { x })
             .collect()
             .await;
@@ -137,14 +144,20 @@ impl DbClient {
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
         let this = self.clone();
 
+        // Use semaphore to control concurrent RPC calls
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
             let this = this.clone();
             let client = Arc::clone(&client);
+            let semaphore = Arc::clone(&semaphore);
             async move {
                 let program_id = program.program_id.clone();
 
+                // Acquire semaphore permit before making RPC calls
+                let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
+
                 match this
-                    .clone()
                     .is_program_valid_and_verified(&program_id, client)
                     .await
                 {
@@ -166,7 +179,7 @@ impl DbClient {
                 }
             }
         }))
-        .buffer_unordered(10);
+        .buffer_unordered(20);
 
         let results: Vec<VerifiedProgramStatusResponse> =
             stream.filter_map(|res| async move { res }).collect().await;

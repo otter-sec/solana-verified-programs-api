@@ -46,7 +46,9 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
                     attempt, program_id, e
                 );
                 if attempt < 3 {
-                    sleep(Duration::from_secs(5)).await;
+                    // Exponential backoff: 2^attempt seconds (2, 4, 8...)
+                    let delay = Duration::from_secs(2_u64.pow(attempt));
+                    sleep(delay).await;
                 }
             }
         }
