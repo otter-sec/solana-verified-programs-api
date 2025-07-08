@@ -1,5 +1,5 @@
 use super::DbClient;
-use crate::{errors::ApiError, Result};
+use crate::{db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS, errors::ApiError, Result};
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 use solana_sdk::pubkey::Pubkey;
@@ -96,7 +96,7 @@ impl DbClient {
 
         // Invalidate cache after successful update
         let cache_key = format!("program_authority:{}", program_id_str);
-        let _ = self.set_cache_with_expiry(&cache_key, &authority_value.unwrap_or("NULL"), crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+        let _ = self.set_cache_with_expiry(&cache_key, authority_value.unwrap_or("NULL"), PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
 
         info!(
             "Successfully updated authority for program: {}",
