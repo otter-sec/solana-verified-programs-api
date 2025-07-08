@@ -17,7 +17,7 @@ use tracing::{error, info};
 /// # Returns
 /// * `Result<String>` - Program hash if successful
 ///
-/// Makes up to 3 attempts to retrieve the hash, with 5-second delays between attempts.
+/// Makes up to 3 attempts to retrieve the hash, with exponential backoff delays (2, 4, 8 seconds).
 pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
     let rpc_url = CONFIG.rpc_url.clone();
     let mut cmd = Command::new("solana-verify");
