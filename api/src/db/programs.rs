@@ -2,22 +2,33 @@ use std::{str::FromStr, sync::Arc};
 
 use crate::{
     db::{
-        models::{VerifiedProgram, VerifiedProgramStatusResponse},
-        DbClient,
+        models::{VerifiedProgram, VerifiedProgramStatusResponse}, redis::VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS, DbClient
     },
     services::onchain::{get_program_authority, program_metadata_retriever::get_otter_pda},
     Result, CONFIG,
 };
-use diesel::sql_query;
+use diesel::{sql_query, QueryableByName, sql_types::BigInt};
 use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use super::models::{ProgramAuthorityParams, VerificationResponse};
 
 pub const PER_PAGE: i64 = 20;
+
+#[derive(QueryableByName)]
+struct CountResult {
+    #[diesel(sql_type = BigInt)]
+    total: i64,
+}
+
+#[derive(QueryableByName)]
+struct ProgramIdResult {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    program_id: String,
+}
 
 /// DbClient helper functions for VerifiedPrograms table to retrieve verified programs
 impl DbClient {
@@ -56,42 +67,75 @@ impl DbClient {
         let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
 
-        let all_verified_programs = self.get_verified_programs().await?;
-        let all_program_ids: Vec<String> = all_verified_programs
+        // Use a single query to get verified programs with pagination
+        let conn = &mut self.get_db_conn().await?;
+        
+        // First get the total count of verified programs
+        let count_query = r#"
+            SELECT COUNT(DISTINCT program_id) as total
+            FROM verified_programs
+            WHERE is_verified = true
+        "#;
+        
+        let total_count: i64 = sql_query(count_query)
+            .get_result::<CountResult>(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to get total count of verified programs: {}", e);
+                e
+            })?
+            .total;
+
+        // Get paginated verified programs
+        let query = r#"
+            SELECT DISTINCT program_id
+            FROM verified_programs
+            WHERE is_verified = true
+            ORDER BY program_id
+            LIMIT $1 OFFSET $2
+        "#;
+
+        let program_ids: Vec<String> = sql_query(query)
+            .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
+            .bind::<diesel::sql_types::BigInt, _>(offset)
+            .get_results::<ProgramIdResult>(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch paginated verified programs: {}", e);
+                e
+            })?
             .into_iter()
-            .map(|p| p.program_id)
+            .map(|result| result.program_id)
             .collect();
 
+        // Now validate programs in batches with proper concurrency control
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
-
         let this = self.clone();
 
-        // Return only programs where the verification PDA signer is the program upgrade authority, with caching for validation
-        let valid_programs: Vec<String> = stream::iter(all_program_ids)
+        // Use a semaphore to limit concurrent RPC calls and prevent overwhelming the RPC endpoint
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        
+        let valid_programs: Vec<String> = stream::iter(program_ids)
             .map(|pid| {
                 let client = Arc::clone(&client);
                 let this = this.clone();
+                let semaphore = Arc::clone(&semaphore);
                 async move {
+                    // Acquire semaphore permit before making RPC calls
+                    let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
+                    
                     match this.is_program_valid_and_verified(&pid, client).await {
                         Ok(Some(_)) => Some(pid), // Valid and verified
                         _ => None,                // Invalid or error
                     }
                 }
             })
-            .buffer_unordered(10)
+            .buffer_unordered(25) // Allow more tasks to be queued while respecting semaphore limit
             .filter_map(|x| async move { x })
             .collect()
             .await;
 
-        let total_count = valid_programs.len() as i64;
-
-        let paginated_programs = valid_programs
-            .into_iter()
-            .skip(offset as usize)
-            .take(PER_PAGE as usize)
-            .collect();
-
-        Ok((paginated_programs, total_count))
+        Ok((valid_programs, total_count))
     }
 
     pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
@@ -99,14 +143,20 @@ impl DbClient {
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
         let this = self.clone();
 
+        // Use semaphore to control concurrent RPC calls
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
             let this = this.clone();
             let client = Arc::clone(&client);
+            let semaphore = Arc::clone(&semaphore);
             async move {
                 let program_id = program.program_id.clone();
 
+                // Acquire semaphore permit before making RPC calls
+                let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
+
                 match this
-                    .clone()
                     .is_program_valid_and_verified(&program_id, client)
                     .await
                 {
@@ -128,7 +178,7 @@ impl DbClient {
                 }
             }
         }))
-        .buffer_unordered(10);
+        .buffer_unordered(20);
 
         let results: Vec<VerifiedProgramStatusResponse> =
             stream.filter_map(|res| async move { res }).collect().await;
@@ -143,37 +193,35 @@ impl DbClient {
     ) -> Result<Option<VerificationResponse>> {
         let cache_key = format!("is_program_valid_and_verified:{}", program_id);
 
-        // Try to get from cache
+        // Try to get from cache first
         if let Ok(cached_str) = self.get_cache(&cache_key).await {
             if cached_str == "NOT_VERIFIED" {
-                info!("Cache hit (NOT_VERIFIED) for program {}", program_id);
                 return Ok(None);
             }
             if let Ok(cached) = serde_json::from_str::<VerificationResponse>(&cached_str) {
-                info!("Cache hit for program {}", program_id);
                 return Ok(Some(cached));
-            } else {
-                warn!("Cache found but failed to deserialize, falling back...");
             }
         }
-        // Saving get_program_authority result and passing to check_is_verified
-        // To avoid multiple time
-        let mut onchain_authoriry: Option<ProgramAuthorityParams> = None;
 
+        // Authority lookup
         let mut authority = self
             .get_program_authority_from_db(program_id)
             .await
             .ok()
             .flatten();
 
-        // Fetch and save authority if not in DB
+        let mut onchain_authority: Option<ProgramAuthorityParams> = None;
+
+        // Only fetch from chain if not in DB cache
         if authority.is_none() {
             if let Ok((auth_opt, frozen)) = get_program_authority(program_id).await {
                 authority = auth_opt.clone();
-                onchain_authoriry = Some(ProgramAuthorityParams {
+                onchain_authority = Some(ProgramAuthorityParams {
                     authority: auth_opt.clone(),
                     frozen,
                 });
+                
+                // Insert authority data
                 if frozen {
                     if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
                         let _ = self
@@ -188,46 +236,49 @@ impl DbClient {
             }
         }
 
-        let is_valid = if let Some(program_authority) = authority {
-            if let (Ok(program_pubkey), Ok(authority_pubkey)) = (
-                Pubkey::try_from(program_id),
-                Pubkey::try_from(program_authority.as_str()),
-            ) {
+        // Early exit if no authority found
+        let program_authority = match authority {
+            Some(auth) => auth,
+            None => {
+                let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
+                return Ok(None);
+            }
+        };
+
+        // Validate program authority efficiently
+        let is_valid = match (
+            Pubkey::try_from(program_id),
+            Pubkey::try_from(program_authority.as_str()),
+        ) {
+            (Ok(program_pubkey), Ok(authority_pubkey)) => {
                 get_otter_pda(&client, &authority_pubkey, &program_pubkey)
                     .await
                     .is_ok()
-            } else {
-                false
             }
-        } else {
-            false
+            _ => false,
         };
 
         if !is_valid {
-            warn!("Invalid program: {}", program_id);
             let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
             return Ok(None);
         }
 
+        // Check verification status
         match self
-            .check_is_verified(program_id.to_string(), None, onchain_authoriry)
+            .check_is_verified(program_id.to_string(), None, onchain_authority)
             .await
         {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
-                    let _ = self.set_cache(&cache_key, &serialized).await;
-                } else {
-                    warn!("Failed to serialize verification response for cache.");
+                    let _ = self.set_cache_with_expiry(&cache_key, &serialized, VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS).await;
                 }
                 Ok(Some(res))
             }
             Ok(_) => {
-                warn!("Program {} is not verified", program_id);
                 let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
                 Ok(None)
             }
-            Err(e) => {
-                error!("Verification error for {}: {}", program_id, e);
+            Err(_) => {
                 let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
                 Ok(None)
             }

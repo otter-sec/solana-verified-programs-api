@@ -1,5 +1,5 @@
 use super::DbClient;
-use crate::{errors::ApiError, Result};
+use crate::{db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS, errors::ApiError, Result};
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 use solana_sdk::pubkey::Pubkey;
@@ -94,6 +94,10 @@ impl DbClient {
                 ApiError::Diesel(e)
             })?;
 
+        // Invalidate cache after successful update
+        let cache_key = format!("program_authority:{}", program_id_str);
+        let _ = self.set_cache_with_expiry(&cache_key, authority_value.unwrap_or("NULL"), PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+
         info!(
             "Successfully updated authority for program: {}",
             program_id_str
@@ -101,16 +105,25 @@ impl DbClient {
         Ok(result)
     }
 
-    /// Retrieves the authority of a program from the database
+    /// Retrieves the authority of a program from the database with caching
     pub async fn get_program_authority_from_db(
         &self,
         program_address: &str,
     ) -> Result<Option<String>> {
-        use crate::schema::program_authority::dsl::*;
+        let cache_key = format!("program_authority:{}", program_address);
 
+        // Try to get from cache first
+        if let Ok(cached_value) = self.get_cache(&cache_key).await {
+            if cached_value == "NULL" {
+                return Ok(None);
+            }
+            return Ok(Some(cached_value));
+        }
+
+        use crate::schema::program_authority::dsl::*;
         let conn = &mut self.get_db_conn().await?;
 
-        program_authority
+        let result = program_authority
             .select(authority_id)
             .filter(program_id.eq(program_address))
             .first::<Option<String>>(conn)
@@ -121,7 +134,19 @@ impl DbClient {
                     program_address, e
                 );
                 ApiError::Diesel(e)
-            })
+            })?;
+
+        // Cache the result with longer expiry for program authorities
+        match &result {
+            Some(authority) => {
+                let _ = self.set_cache_with_expiry(&cache_key, authority, crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+            }
+            None => {
+                let _ = self.set_cache_with_expiry(&cache_key, "NULL", crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+            }
+        }
+
+        Ok(result)
     }
     /// Checks if a program is frozen in the database.
     /// Returns `false` if no record is found.

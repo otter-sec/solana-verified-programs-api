@@ -4,8 +4,10 @@ use diesel_async::AsyncPgConnection;
 use r2d2_redis::{r2d2, RedisConnectionManager};
 use std::time::Duration;
 
-const DEFAULT_POOL_SIZE: usize = 10;
+const DEFAULT_POOL_SIZE: usize = 20;
+const DEFAULT_MIN_IDLE: u32 = 5;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
+const DEFAULT_CONNECTION_TIMEOUT_SECONDS: u64 = 10;
 
 #[derive(Clone)]
 pub struct DbClient {
@@ -29,20 +31,22 @@ impl DbClient {
         pool_size: usize,
         timeout_seconds: u64,
     ) -> Self {
-        // Configure PostgreSQL connection
+        // Configure PostgreSQL connection with pool settings
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
         let postgres_pool = Pool::builder(config)
+            .max_size(pool_size)
             .build()
             .expect("Failed to create DB Pool");
 
-        // Configure Redis connection
+        // Configure Redis connection with optimized pool settings
         let redis_manager = RedisConnectionManager::new(redis_url)
             .expect("Failed to create Redis connection manager");
 
         let redis_pool = r2d2::Pool::builder()
             .max_size(pool_size as u32)
-            .min_idle(Some(1))
+            .min_idle(Some(DEFAULT_MIN_IDLE))
             .max_lifetime(Some(Duration::from_secs(timeout_seconds)))
+            .connection_timeout(Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECONDS))
             .build(redis_manager)
             .expect("Failed to create Redis connection pool");
 
