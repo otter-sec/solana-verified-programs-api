@@ -13,10 +13,10 @@ pub enum ApiError {
     Custom(String),
 
     #[error(transparent)]
-    ClientError(#[from] solana_client::client_error::ClientError),
+    ClientError(Box<solana_client::client_error::ClientError>),
 
     #[error(transparent)]
-    ParseAccountError(#[from] solana_account_decoder::parse_account_data::ParseAccountError),
+    ParseAccountError(Box<solana_account_decoder::parse_account_data::ParseAccountError>),
 
     #[error(transparent)]
     ParsePubkeyError(#[from] solana_sdk::pubkey::ParsePubkeyError),
@@ -59,5 +59,18 @@ impl fmt::Display for ErrorMessages {
             ErrorMessages::NoPDA => "The PDA associated with the given signer was not found. Please try again with a valid signer.",
         };
         write!(f, "{}", message)
+    }
+}
+
+// Manual From implementations for boxed error types to reduce enum size
+impl From<solana_client::client_error::ClientError> for ApiError {
+    fn from(err: solana_client::client_error::ClientError) -> Self {
+        ApiError::ClientError(Box::new(err))
+    }
+}
+
+impl From<solana_account_decoder::parse_account_data::ParseAccountError> for ApiError {
+    fn from(err: solana_account_decoder::parse_account_data::ParseAccountError) -> Self {
+        ApiError::ParseAccountError(Box::new(err))
     }
 }
