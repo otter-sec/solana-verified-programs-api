@@ -1,18 +1,18 @@
 use diesel_async::pooled_connection::deadpool::{self, PoolError};
 use diesel_async::pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager};
 use diesel_async::AsyncPgConnection;
-use redis_r2d2::{r2d2, RedisConnectionManager};
-use std::time::Duration;
+use redis::aio::MultiplexedConnection;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 const DEFAULT_POOL_SIZE: usize = 20;
-const DEFAULT_MIN_IDLE: u32 = 5;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
-const DEFAULT_CONNECTION_TIMEOUT_SECONDS: u64 = 10;
 
 #[derive(Clone)]
 pub struct DbClient {
     pub db_pool: Pool<AsyncPgConnection>,
-    pub redis_pool: r2d2::Pool<RedisConnectionManager>,
+    pub async_redis_conn: Arc<Mutex<Option<MultiplexedConnection>>>, // New async Redis connection
+    redis_url: String, // Store Redis URL for async connection
 }
 
 impl DbClient {
@@ -29,7 +29,7 @@ impl DbClient {
         db_url: &str,
         redis_url: &str,
         pool_size: usize,
-        timeout_seconds: u64,
+        _timeout_seconds: u64,
     ) -> Self {
         // Configure PostgreSQL connection with pool settings
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
@@ -38,21 +38,10 @@ impl DbClient {
             .build()
             .expect("Failed to create DB Pool");
 
-        // Configure Redis connection with optimized pool settings
-        let redis_manager = RedisConnectionManager::new(redis_url)
-            .expect("Failed to create Redis connection manager");
-
-        let redis_pool = r2d2::Pool::builder()
-            .max_size(pool_size as u32)
-            .min_idle(Some(DEFAULT_MIN_IDLE))
-            .max_lifetime(Some(Duration::from_secs(timeout_seconds)))
-            .connection_timeout(Duration::from_secs(DEFAULT_CONNECTION_TIMEOUT_SECONDS))
-            .build(redis_manager)
-            .expect("Failed to create Redis connection pool");
-
         Self {
             db_pool: postgres_pool,
-            redis_pool,
+            async_redis_conn: Arc::new(Mutex::new(None)),
+            redis_url: redis_url.to_string(),
         }
     }
 
@@ -61,11 +50,18 @@ impl DbClient {
         self.db_pool.get().await
     }
 
-    /// Get a connection from the Redis pool with timeout
-    pub fn get_redis_conn(
-        &self,
-    ) -> Result<r2d2::PooledConnection<RedisConnectionManager>, r2d2::Error> {
-        self.redis_pool.get()
+    /// Get async Redis connection (creates one if it doesn't exist)
+    pub async fn get_async_redis_conn(&self) -> Result<MultiplexedConnection, redis::RedisError> {
+        let mut conn_guard = self.async_redis_conn.lock().await;
+
+        if conn_guard.is_none() {
+            let client = redis::Client::open(self.redis_url.as_str())?;
+            let multiplexed_conn = client.get_multiplexed_async_connection().await?;
+            *conn_guard = Some(multiplexed_conn);
+        }
+
+        // Clone the connection (it's designed to be cloned)
+        Ok(conn_guard.as_ref().unwrap().clone())
     }
 }
 
@@ -81,7 +77,7 @@ mod tests {
         let client = DbClient::new(&db_url, &redis_url);
 
         let postgres_conn = client.get_db_conn().await;
-        let redis_conn = client.get_redis_conn();
+        let redis_conn = client.get_async_redis_conn().await;
 
         assert!(postgres_conn.is_ok());
         assert!(redis_conn.is_ok());

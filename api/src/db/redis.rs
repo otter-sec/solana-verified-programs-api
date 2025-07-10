@@ -1,7 +1,7 @@
 use super::DbClient;
 use crate::errors::ApiError;
 use crate::Result;
-use redis_r2d2::redis::{Commands, FromRedisValue, Value};
+use redis::{AsyncCommands, FromRedisValue, Value};
 use tracing::{error, info};
 
 /// Redis cache expiry times in seconds
@@ -24,13 +24,14 @@ impl DbClient {
         value: &str,
         expiry_seconds: u64,
     ) -> Result<()> {
-        let mut redis_conn = self.get_redis_conn().map_err(|err| {
+        let mut redis_conn = self.get_async_redis_conn().await.map_err(|err| {
             error!("Redis connection error: {}", err);
             ApiError::from(err)
         })?;
 
         let _: () = redis_conn
-            .set_ex(key, value, expiry_seconds as usize)
+            .set_ex(key, value, expiry_seconds)
+            .await
             .map_err(|err| {
                 error!("Redis SET failed: {}", err);
                 ApiError::from(err)
@@ -45,12 +46,12 @@ impl DbClient {
 
     /// Retrieves a value from Redis cache
     pub async fn get_cache(&self, program_address: &str) -> Result<String> {
-        let mut redis_conn = self.get_redis_conn().map_err(|err| {
+        let mut redis_conn = self.get_async_redis_conn().await.map_err(|err| {
             error!("Redis connection error: {}", err);
             ApiError::from(err)
         })?;
 
-        let value: Value = redis_conn.get(program_address).map_err(|err| {
+        let value: Value = redis_conn.get(program_address).await.map_err(|err| {
             error!("Redis GET failed: {}", err);
             ApiError::from(err)
         })?;
