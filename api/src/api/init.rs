@@ -1,4 +1,5 @@
 use crate::db::DbClient;
+use axum::http::Request;
 use axum::{
     error_handling::HandleErrorLayer,
     http::{Method, StatusCode},
@@ -17,7 +18,6 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing::Span;
-use axum::http::Request;
 
 use super::{handlers::*, index::index};
 
@@ -78,13 +78,15 @@ pub fn initialize_router(db: DbClient) -> Router {
                 "started processing request"
             );
         })
-        .on_response(|response: &Response, latency: std::time::Duration, _span: &Span| {
-            tracing::info!(
-                latency = ?latency,
-                status = response.status().as_u16(),
-                "finished processing request"
-            );
-        });
+        .on_response(
+            |response: &Response, latency: std::time::Duration, _span: &Span| {
+                tracing::info!(
+                    latency = ?latency,
+                    status = response.status().as_u16(),
+                    "finished processing request"
+                );
+            },
+        );
 
     // Define routes with their rate limits
     Router::new()

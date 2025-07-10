@@ -2,12 +2,14 @@ use std::{str::FromStr, sync::Arc};
 
 use crate::{
     db::{
-        models::{VerifiedProgram, VerifiedProgramStatusResponse}, redis::VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS, DbClient
+        models::{VerifiedProgram, VerifiedProgramStatusResponse},
+        redis::VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS,
+        DbClient,
     },
     services::onchain::{get_program_authority, program_metadata_retriever::get_otter_pda},
     Result, CONFIG,
 };
-use diesel::{sql_query, QueryableByName, sql_types::BigInt};
+use diesel::{sql_query, sql_types::BigInt, QueryableByName};
 use diesel_async::RunQueryDsl;
 use futures::stream::{self, StreamExt};
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -69,14 +71,14 @@ impl DbClient {
 
         // Use a single query to get verified programs with pagination
         let conn = &mut self.get_db_conn().await?;
-        
+
         // First get the total count of verified programs
         let count_query = r#"
             SELECT COUNT(DISTINCT program_id) as total
             FROM verified_programs
             WHERE is_verified = true
         "#;
-        
+
         let total_count: i64 = sql_query(count_query)
             .get_result::<CountResult>(conn)
             .await
@@ -114,7 +116,7 @@ impl DbClient {
 
         // Use a semaphore to limit concurrent RPC calls and prevent overwhelming the RPC endpoint
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
-        
+
         let valid_programs: Vec<String> = stream::iter(program_ids)
             .map(|pid| {
                 let client = Arc::clone(&client);
@@ -122,8 +124,11 @@ impl DbClient {
                 let semaphore = Arc::clone(&semaphore);
                 async move {
                     // Acquire semaphore permit before making RPC calls
-                    let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
-                    
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .expect("Semaphore should not be closed");
+
                     match this.is_program_valid_and_verified(&pid, client).await {
                         Ok(Some(_)) => Some(pid), // Valid and verified
                         _ => None,                // Invalid or error
@@ -145,7 +150,7 @@ impl DbClient {
 
         // Use semaphore to control concurrent RPC calls
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
-        
+
         let stream = stream::iter(all_verified_programs.into_iter().map(|program| {
             let this = this.clone();
             let client = Arc::clone(&client);
@@ -154,7 +159,10 @@ impl DbClient {
                 let program_id = program.program_id.clone();
 
                 // Acquire semaphore permit before making RPC calls
-                let _permit = semaphore.acquire().await.expect("Semaphore should not be closed");
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .expect("Semaphore should not be closed");
 
                 match this
                     .is_program_valid_and_verified(&program_id, client)
@@ -220,7 +228,7 @@ impl DbClient {
                     authority: auth_opt.clone(),
                     frozen,
                 });
-                
+
                 // Insert authority data
                 if frozen {
                     if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
@@ -270,7 +278,13 @@ impl DbClient {
         {
             Ok(res) if res.is_verified => {
                 if let Ok(serialized) = serde_json::to_string(&res) {
-                    let _ = self.set_cache_with_expiry(&cache_key, &serialized, VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS).await;
+                    let _ = self
+                        .set_cache_with_expiry(
+                            &cache_key,
+                            &serialized,
+                            VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS,
+                        )
+                        .await;
                 }
                 Ok(Some(res))
             }

@@ -1,7 +1,7 @@
 use diesel_async::pooled_connection::deadpool::{self, PoolError};
 use diesel_async::pooled_connection::{deadpool::Pool, AsyncDieselConnectionManager};
 use diesel_async::AsyncPgConnection;
-use r2d2_redis::{r2d2, RedisConnectionManager};
+use redis_r2d2::{r2d2, RedisConnectionManager};
 use std::time::Duration;
 
 const DEFAULT_POOL_SIZE: usize = 20;

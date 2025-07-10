@@ -1,3 +1,4 @@
+use super::verify_helpers::{create_and_insert_build, create_internal_error, setup_verification};
 use crate::{
     db::{
         models::{ApiResponse, SolanaProgramBuild, SolanaProgramBuildParams, StatusResponse},
@@ -8,7 +9,6 @@ use crate::{
         verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
-use super::verify_helpers::{create_and_insert_build, create_internal_error, setup_verification};
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
 

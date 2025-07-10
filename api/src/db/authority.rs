@@ -96,7 +96,13 @@ impl DbClient {
 
         // Invalidate cache after successful update
         let cache_key = format!("program_authority:{}", program_id_str);
-        let _ = self.set_cache_with_expiry(&cache_key, authority_value.unwrap_or("NULL"), PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+        let _ = self
+            .set_cache_with_expiry(
+                &cache_key,
+                authority_value.unwrap_or("NULL"),
+                PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS,
+            )
+            .await;
 
         info!(
             "Successfully updated authority for program: {}",
@@ -139,10 +145,22 @@ impl DbClient {
         // Cache the result with longer expiry for program authorities
         match &result {
             Some(authority) => {
-                let _ = self.set_cache_with_expiry(&cache_key, authority, crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+                let _ = self
+                    .set_cache_with_expiry(
+                        &cache_key,
+                        authority,
+                        crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS,
+                    )
+                    .await;
             }
             None => {
-                let _ = self.set_cache_with_expiry(&cache_key, "NULL", crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS).await;
+                let _ = self
+                    .set_cache_with_expiry(
+                        &cache_key,
+                        "NULL",
+                        crate::db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS,
+                    )
+                    .await;
             }
         }
 

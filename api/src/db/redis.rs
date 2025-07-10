@@ -1,23 +1,29 @@
 use super::DbClient;
 use crate::errors::ApiError;
 use crate::Result;
-use r2d2_redis::redis::{Commands, FromRedisValue, Value};
+use redis_r2d2::redis::{Commands, FromRedisValue, Value};
 use tracing::{error, info};
 
 /// Redis cache expiry times in seconds
-const DEFAULT_CACHE_EXPIRY_SECONDS: u64 = 5 * 60;  // 5 minutes for general cache
-pub const VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS: u64 = 30 * 60;  // 30 minutes for verified programs
-pub const PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS: u64 = 60 * 60;  // 1 hour for program authorities
+const DEFAULT_CACHE_EXPIRY_SECONDS: u64 = 5 * 60; // 5 minutes for general cache
+pub const VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS: u64 = 30 * 60; // 30 minutes for verified programs
+pub const PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS: u64 = 60 * 60; // 1 hour for program authorities
 
 /// DbClient helper functions for Redis cache to set and retrieve cache values
 impl DbClient {
     /// Sets a value in Redis cache with default expiry
     pub async fn set_cache(&self, program_address: &str, value: &str) -> Result<()> {
-        self.set_cache_with_expiry(program_address, value, DEFAULT_CACHE_EXPIRY_SECONDS).await
+        self.set_cache_with_expiry(program_address, value, DEFAULT_CACHE_EXPIRY_SECONDS)
+            .await
     }
 
     /// Sets a value in Redis cache with custom expiry
-    pub async fn set_cache_with_expiry(&self, key: &str, value: &str, expiry_seconds: u64) -> Result<()> {
+    pub async fn set_cache_with_expiry(
+        &self,
+        key: &str,
+        value: &str,
+        expiry_seconds: u64,
+    ) -> Result<()> {
         let mut redis_conn = self.get_redis_conn().map_err(|err| {
             error!("Redis connection error: {}", err);
             ApiError::from(err)
@@ -30,10 +36,12 @@ impl DbClient {
                 ApiError::from(err)
             })?;
 
-        info!("Cache set for key: {} with expiry: {}s", key, expiry_seconds);
+        info!(
+            "Cache set for key: {} with expiry: {}s",
+            key, expiry_seconds
+        );
         Ok(())
     }
-
 
     /// Retrieves a value from Redis cache
     pub async fn get_cache(&self, program_address: &str) -> Result<String> {
@@ -111,7 +119,10 @@ mod tests {
         assert!(check_result.unwrap());
 
         // Wait for cache expiry
-        tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_CACHE_EXPIRY_SECONDS + 1)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(
+            DEFAULT_CACHE_EXPIRY_SECONDS + 1,
+        ))
+        .await;
 
         // Test check after expiry
         let check_result_after_expiry = client.check_cache(hash, program).await;

@@ -146,12 +146,13 @@ pub async fn execute_verification(
     };
 
     // Wait for verification to complete (no timeout)
-    let output = verification_task
-        .await
-        .map_err(|e| {
-            error!("Verification failed for program: {}: {}", payload.program_id, e);
-            e
-        })?;
+    let output = verification_task.await.map_err(|e| {
+        error!(
+            "Verification failed for program: {}: {}",
+            payload.program_id, e
+        );
+        e
+    })?;
 
     process_verification_output(output, &payload, build_id, random_file_id).await
 }
@@ -219,7 +220,8 @@ async fn process_verification_output(
 
     if !output.status.success() {
         let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-        if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id).await {
+        if let Err(e) = crate::services::logging::write_logs(&stderr, &stdout, random_file_id).await
+        {
             error!("Failed to write logs: {:?}", e);
         }
         return Err(ApiError::Build(stdout));

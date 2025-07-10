@@ -24,7 +24,7 @@ pub struct VerificationSetup {
 }
 
 /// Common setup logic for verification endpoints
-/// 
+///
 /// Handles:
 /// - Getting program authority from on-chain
 /// - Fetching verification parameters from PDA

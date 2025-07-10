@@ -1,8 +1,9 @@
+use super::verify_helpers::{create_and_insert_build, setup_verification};
 use crate::{
     db::{
         models::{
-            ApiResponse, JobStatus, SolanaProgramBuildParams,
-            SolanaProgramBuildParamsWithSigner, VerifyResponse,
+            ApiResponse, JobStatus, SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner,
+            VerifyResponse,
         },
         DbClient,
     },
@@ -11,7 +12,6 @@ use crate::{
         verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
-use super::verify_helpers::{create_and_insert_build, setup_verification};
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
 
@@ -69,7 +69,10 @@ pub async fn process_verification(
         Err(error_response) => return error_response,
     };
 
-    if let Err(e) = db.update_build_status(&initial_uuid, JobStatus::Completed).await {
+    if let Err(e) = db
+        .update_build_status(&initial_uuid, JobStatus::Completed)
+        .await
+    {
         error!("Failed to update build status to completed: {:?}", e);
     }
 
