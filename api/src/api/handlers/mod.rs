@@ -4,8 +4,9 @@
 // Verification-related handlers
 pub mod async_verify; // Asynchronous program verification
 pub mod sync_verify; // Synchronous program verification
-pub mod unverify;
-pub mod verification_status; // Program verification status // Program unverification
+pub mod unverify; // Program unverification
+pub mod verify_helpers; // Shared verification utilities
+pub mod verification_status; // Program verification status
 
 // Status and information handlers
 pub mod job_status; // Build job status

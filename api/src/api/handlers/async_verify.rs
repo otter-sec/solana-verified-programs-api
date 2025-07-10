@@ -1,19 +1,17 @@
 use crate::{
     db::{
         models::{
-            ApiResponse, ErrorResponse, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams,
-            SolanaProgramBuildParamsWithSigner, Status, VerifyResponse,
+            ApiResponse, JobStatus, SolanaProgramBuildParams,
+            SolanaProgramBuildParamsWithSigner, VerifyResponse,
         },
         DbClient,
     },
-    errors::ErrorMessages,
     services::{
-        onchain::{
-            self, get_program_authority, program_metadata_retriever::is_program_buffer_missing,
-        },
+        onchain::program_metadata_retriever::is_program_buffer_missing,
         verification::{check_and_handle_duplicates, process_verification_request},
     },
 };
+use super::verify_helpers::{create_and_insert_build, setup_verification};
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
 
@@ -29,43 +27,9 @@ pub(crate) async fn process_async_verification(
         payload.program_id
     );
 
-    // get program authority from on-chain
-    let (program_authority, is_frozen) = get_program_authority(&payload.program_id)
-        .await
-        .unwrap_or((None, false));
-
-    match onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
-        .await
-    {
-        Ok((params, signer)) => {
-            if let Err(e) = db
-                .insert_or_update_program_authority(
-                    &params.address,
-                    program_authority.as_deref(),
-                    is_frozen,
-                )
-                .await
-            {
-                error!("Failed to update program authority: {:?}", e);
-            }
-            process_verification(db, SolanaProgramBuildParams::from(params), signer).await
-        }
-        Err(err) => {
-            error!(
-                "Unable to find on-chain PDA for given program id: {:?}",
-                err
-            );
-            (
-                StatusCode::NOT_FOUND,
-                Json(
-                    ErrorResponse {
-                        status: Status::Error,
-                        error: ErrorMessages::NoPDA.to_string(),
-                    }
-                    .into(),
-                ),
-            )
-        }
+    match setup_verification(&db, &payload.program_id, None).await {
+        Ok(setup) => process_verification(db, setup.params, setup.signer).await,
+        Err(error_response) => error_response,
     }
 }
 
@@ -81,43 +45,9 @@ pub(crate) async fn process_async_verification_with_signer(
         payload.program_id, payload.signer
     );
 
-    let (program_authority, is_frozen) = get_program_authority(&payload.program_id)
-        .await
-        .unwrap_or((None, false));
-
-    match onchain::get_otter_verify_params(
-        &payload.program_id,
-        Some(payload.signer.clone()),
-        program_authority.clone(),
-    )
-    .await
-    {
-        Ok((params, signer)) => {
-            if let Err(e) = db
-                .insert_or_update_program_authority(
-                    &params.address,
-                    program_authority.as_deref(),
-                    is_frozen,
-                )
-                .await
-            {
-                error!("Failed to update program authority: {:?}", e);
-            }
-            process_verification(db, SolanaProgramBuildParams::from(params), signer).await
-        }
-        Err(err) => {
-            error!("Error fetching onchain params: {:?}", err);
-            (
-                StatusCode::NOT_FOUND,
-                Json(
-                    ErrorResponse {
-                        status: Status::Error,
-                        error: ErrorMessages::NoPDA.to_string(),
-                    }
-                    .into(),
-                ),
-            )
-        }
+    match setup_verification(&db, &payload.program_id, Some(payload.signer)).await {
+        Ok(setup) => process_verification(db, setup.params, setup.signer).await,
+        Err(error_response) => error_response,
     }
 }
 
@@ -127,74 +57,54 @@ pub async fn process_verification(
     payload: SolanaProgramBuildParams,
     signer: String,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let mut verify_build_data = SolanaProgramBuild::from(&payload);
-    verify_build_data.signer = Some(signer.clone());
-    let uuid = verify_build_data.id.clone();
-
     // Check for existing verification
     if let Some(response) = check_and_handle_duplicates(&payload, signer.clone(), &db).await {
         check_program_closed(&db, &payload.program_id).await;
         return (StatusCode::OK, Json(response.into()));
     }
 
-    // Insert initial build params
-    if let Err(e) = db.insert_build_params(&verify_build_data).await {
-        error!("Error inserting into database: {:?}", e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                ErrorResponse {
-                    status: Status::Error,
-                    error: ErrorMessages::DB.to_string(),
-                }
-                .into(),
-            ),
-        );
-    }
+    // Create initial build record and mark it as completed
+    let initial_uuid = match create_and_insert_build(&db, &payload, &signer).await {
+        Ok(uuid) => uuid,
+        Err(error_response) => return error_response,
+    };
 
-    // Update the build status to completed
-    if let Err(e) = db.update_build_status(&uuid, JobStatus::Completed).await {
+    if let Err(e) = db.update_build_status(&initial_uuid, JobStatus::Completed).await {
         error!("Failed to update build status to completed: {:?}", e);
     }
 
-    // Create and insert new build params
-    let mut new_build = SolanaProgramBuild::from(&payload);
-    new_build.signer = Some(signer);
-    if let Err(e) = db.insert_build_params(&new_build).await {
-        error!("Error inserting into database: {:?}", e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                ErrorResponse {
-                    status: Status::Error,
-                    error: ErrorMessages::DB.to_string(),
-                }
-                .into(),
-            ),
-        );
-    }
+    // Create new build record for the actual verification
+    let verification_uuid = match create_and_insert_build(&db, &payload, &signer).await {
+        Ok(uuid) => uuid,
+        Err(error_response) => return error_response,
+    };
 
-    // Spawn verification task
-    let req_id = new_build.id.clone();
-    tokio::spawn(async move {
-        info!("Spawning verification task with uuid: {:?}", &new_build.id);
-        if let Err(e) = process_verification_request(payload, &new_build.id, &db).await {
-            error!("Verification task failed: {:?}", e);
-        }
-    });
+    // Spawn async verification task
+    spawn_verification_task(db.clone(), payload, verification_uuid.clone()).await;
 
-    info!("Verification task spawned with UUID: {}", req_id);
+    // Return response with request ID
     (
         StatusCode::OK,
         Json(
             VerifyResponse {
                 status: JobStatus::InProgress,
-                request_id: req_id,
+                request_id: verification_uuid,
                 message: "Build verification started".to_string(),
             }
             .into(),
         ),
     )
+}
+
+/// Spawns an asynchronous verification task
+async fn spawn_verification_task(db: DbClient, payload: SolanaProgramBuildParams, uuid: String) {
+    info!("Verification task spawned with UUID: {}", uuid);
+    tokio::spawn(async move {
+        info!("Spawning verification task with uuid: {}", uuid);
+        if let Err(e) = process_verification_request(payload, &uuid, &db).await {
+            error!("Verification task failed: {:?}", e);
+        }
+    });
 }
 
 /// Checks if the program's buffer account is missing, and if so,
