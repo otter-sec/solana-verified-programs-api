@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{Result, CONFIG};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -7,6 +7,9 @@ use tracing::{error, info};
 
 /// The directory where logs are stored
 const LOGS_DIR: &str = "/logs";
+
+/// Solana mainnet RPC URL for replacing sensitive environment values
+const SOLANA_MAINNET_RPC: &str = "https://api.mainnet-beta.solana.com";
 
 /// Writes build logs to separate files for stdout and stderr
 ///
@@ -21,6 +24,8 @@ const LOGS_DIR: &str = "/logs";
 /// Creates two files:
 /// - `{file_name}_err.log` for stderr
 /// - `{file_name}_out.log` for stdout
+///
+/// Note: Replaces any RPC_URL environment variable references with Solana mainnet RPC URL
 pub async fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result<()> {
     let logs_dir = Path::new(LOGS_DIR);
 
@@ -32,19 +37,27 @@ pub async fn write_logs(std_err: &str, std_out: &str, file_name: &str) -> Result
         );
     }
 
+    // Sanitize log content to replace RPC_URL environment values
+    let sanitized_stderr = sanitize_log_content(std_err);
+    let sanitized_stdout = sanitize_log_content(std_out);
+
     // Write stderr log
     let err_path = get_log_path(file_name, "err");
-    write_log_file(&err_path, std_err).await.map_err(|e| {
-        error!("Failed to write stderr log: {}", e);
-        e
-    })?;
+    write_log_file(&err_path, &sanitized_stderr)
+        .await
+        .map_err(|e| {
+            error!("Failed to write stderr log: {}", e);
+            e
+        })?;
 
     // Write stdout log
     let out_path = get_log_path(file_name, "out");
-    write_log_file(&out_path, std_out).await.map_err(|e| {
-        error!("Failed to write stdout log: {}", e);
-        e
-    })?;
+    write_log_file(&out_path, &sanitized_stdout)
+        .await
+        .map_err(|e| {
+            error!("Failed to write stdout log: {}", e);
+            e
+        })?;
 
     info!("Successfully wrote logs for {}", file_name);
     Ok(())
@@ -84,6 +97,13 @@ pub async fn read_logs(file_name: &str) -> Value {
         "std_err": std_err,
         "std_out": std_out,
     })
+}
+
+/// Sanitizes log content by replacing the actual RPC URL from config
+/// with the Solana mainnet RPC URL
+fn sanitize_log_content(content: &str) -> String {
+    // Replace the actual RPC URL from config with Solana mainnet RPC URL
+    content.replace(&CONFIG.rpc_url, SOLANA_MAINNET_RPC)
 }
 
 /// Constructs the full path for a log file
@@ -132,5 +152,19 @@ mod tests {
         // Verify file contents
         assert_eq!(std::fs::read_to_string(&err_path).unwrap(), std_err);
         assert_eq!(std::fs::read_to_string(&out_path).unwrap(), std_out);
+    }
+
+    #[test]
+    fn test_sanitize_log_content() {
+        // Test that actual RPC URL from config gets replaced
+        let test_content = format!("Using RPC URL: {}", crate::CONFIG.rpc_url);
+        let expected = format!("Using RPC URL: {}", SOLANA_MAINNET_RPC);
+        let result = sanitize_log_content(&test_content);
+        assert_eq!(result, expected);
+
+        // Test content without RPC URL remains unchanged
+        let unchanged_content = "Build successful without RPC URL references";
+        let result = sanitize_log_content(unchanged_content);
+        assert_eq!(result, unchanged_content);
     }
 }

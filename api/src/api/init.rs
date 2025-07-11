@@ -1,7 +1,9 @@
 use crate::db::DbClient;
+use axum::http::Request;
 use axum::{
     error_handling::HandleErrorLayer,
     http::{Method, StatusCode},
+    response::Response,
     routing::{get, post},
     BoxError, Router,
 };
@@ -13,9 +15,9 @@ use tower_governor::{
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
-    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
+    trace::TraceLayer,
 };
-use tracing::Level;
+use tracing::Span;
 
 use super::{handlers::*, index::index};
 
@@ -59,9 +61,32 @@ pub fn initialize_router(db: DbClient) -> Router {
     };
 
     let trace_layer = TraceLayer::new_for_http()
-        .make_span_with(DefaultMakeSpan::new().include_headers(true))
-        .on_request(DefaultOnRequest::new().level(Level::INFO))
-        .on_response(DefaultOnResponse::new().level(Level::INFO));
+        .make_span_with(|request: &Request<_>| {
+            let uri = request.uri();
+            let method = request.method();
+            tracing::info_span!(
+                "http_request",
+                method = %method,
+                uri = %uri,
+                path = uri.path(),
+            )
+        })
+        .on_request(|request: &Request<_>, _span: &Span| {
+            tracing::info!(
+                method = %request.method(),
+                path = request.uri().path(),
+                "started processing request"
+            );
+        })
+        .on_response(
+            |response: &Response, latency: std::time::Duration, _span: &Span| {
+                tracing::info!(
+                    latency = ?latency,
+                    status = response.status().as_u16(),
+                    "finished processing request"
+                );
+            },
+        );
 
     // Define routes with their rate limits
     Router::new()
