@@ -3,7 +3,8 @@ use solana_account_decoder::parse_bpf_loader::{
     parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
 };
 use solana_client::{
-    nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config, rpc_config::RpcTransactionConfig,
+    nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
+    rpc_config::RpcTransactionConfig,
 };
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
@@ -122,7 +123,10 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
         let versioned_transaction = transaction_details.transaction.transaction;
         if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
             if let UiMessage::Raw(raw_message) = &ui_transaction.message {
-                if raw_message.account_keys.contains(&"SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf".to_string()) {
+                if raw_message
+                    .account_keys
+                    .contains(&"SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf".to_string())
+                {
                     let authority = raw_message.account_keys[3].clone();
                     return Ok((Some(authority), true));
                 }
