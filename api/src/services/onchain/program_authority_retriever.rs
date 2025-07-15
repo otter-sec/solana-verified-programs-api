@@ -11,6 +11,10 @@ use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEnco
 use std::str::FromStr;
 use tracing::{error, info};
 
+const SQUADS_PROGRAM_ID: &str = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
+const EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA: &str = "ZTNTtVtnvbC";
+const AUTHORITY_ACCOUNT_INDEX: usize = 4;
+
 /// Retrieves the upgrade authority for a Solana program from the blockchain
 ///
 /// # Arguments
@@ -123,12 +127,25 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
         let versioned_transaction = transaction_details.transaction.transaction;
         if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
             if let UiMessage::Raw(raw_message) = &ui_transaction.message {
+                // Handle specific Squads program instruction for authority extraction
+                // The instruction data "ZTNTtVtnvbC" indicates a specific authority-related operation
+                // where the authority is located at the 5th account (index 4) of the instruction
                 if raw_message
                     .account_keys
-                    .contains(&"SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf".to_string())
+                    .contains(&SQUADS_PROGRAM_ID.to_string())
                 {
-                    let authority = raw_message.account_keys[3].clone();
-                    return Ok((Some(authority), true));
+                    let program_id_idx = raw_message
+                        .account_keys
+                        .iter()
+                        .position(|key| key == SQUADS_PROGRAM_ID)
+                        .unwrap() as u8;
+                    for ix in &raw_message.instructions {
+                        if ix.program_id_index == program_id_idx && ix.data == EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA {
+                            let authority_idx = ix.accounts[AUTHORITY_ACCOUNT_INDEX] as usize;
+                            let authority = raw_message.account_keys[authority_idx].clone();
+                            return Ok((Some(authority), true));
+                        }
+                    }
                 }
                 info!(
                     "Successfully retrieved program authority from transaction: {:?}",
