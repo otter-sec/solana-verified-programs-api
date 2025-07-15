@@ -244,12 +244,23 @@ impl DbClient {
             }
         }
 
-        // Early exit if no authority found
+        // Handle programs with no authority (frozen/immutable programs)
         let program_authority = match authority {
             Some(auth) => auth,
             None => {
-                let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
-                return Ok(None);
+                // For programs with no authority, check if they have verified builds
+                match self.check_is_verified(program_id.to_string(), None, onchain_authority).await {
+                    Ok(res) if res.is_verified => {
+                        if let Ok(serialized) = serde_json::to_string(&res) {
+                            let _ = self.set_cache_with_expiry(&cache_key, &serialized, VERIFIED_PROGRAM_CACHE_EXPIRY_SECONDS).await;
+                        }
+                        return Ok(Some(res));
+                    }
+                    _ => {
+                        let _ = self.set_cache(&cache_key, "NOT_VERIFIED").await;
+                        return Ok(None);
+                    }
+                }
             }
         };
 

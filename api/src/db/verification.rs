@@ -39,23 +39,26 @@ impl DbClient {
             }
         }
 
-        let (res_result, build_params_result, saved_program_authority, program_frozen_result) = tokio::join!(
+        let (res_result, build_params_result, frozen_status) = tokio::join!(
             self.get_verified_build(&program_address, signer.clone()),
             self.get_build_params(&program_address),
             self.is_program_frozen(&program_address),
-            async {
-                if let Some(info) = &authority_info {
-                    Ok((info.authority.clone(), info.frozen)) // use provided info
-                } else {
-                    get_program_authority(&program_address).await // fallback to RPC
-                }
-            }
         );
 
         let res = res_result?;
         let build_params = build_params_result?;
-        let (program_authority, program_frozen) = program_frozen_result?;
-        let saved_program_frozen = saved_program_authority?;
+        let saved_program_frozen = frozen_status?;
+
+        // Only fetch program authority if we don't have it provided and program is not frozen
+        let (program_authority, program_frozen) = if let Some(info) = &authority_info {
+            (info.authority.clone(), info.frozen)
+        } else if saved_program_frozen {
+            // If program is already frozen in DB, no need to check authority
+            (None, true)
+        } else {
+            // Only make RPC call if program is not frozen
+            get_program_authority(&program_address).await?
+        };
 
         let return_response = |response: VerificationResponse| async {
             if let Ok(serialized) = serde_json::to_string(&response) {
@@ -85,16 +88,18 @@ impl DbClient {
             }
         }
 
+        // Update database if frozen status changed
+        if program_frozen != saved_program_frozen {
+            let program_id_pubkey = Pubkey::from_str(&program_address)?;
+            self.insert_or_update_program_authority(
+                &program_id_pubkey,
+                program_authority.as_deref(),
+                program_frozen,
+            )
+            .await?;
+        }
+
         if program_frozen {
-            if !saved_program_frozen {
-                let program_id_pubkey = Pubkey::from_str(&program_address)?;
-                self.insert_or_update_program_authority(
-                    &program_id_pubkey,
-                    program_authority.as_deref(),
-                    program_frozen,
-                )
-                .await?;
-            }
             info!("Program is frozen and not upgradable.");
             let response = VerificationResponse {
                 is_verified: res.on_chain_hash == res.executable_hash,
