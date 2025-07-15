@@ -4,6 +4,7 @@ use solana_account_decoder::parse_bpf_loader::{
 };
 use solana_client::{
     nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
+    rpc_config::RpcTransactionConfig,
 };
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
@@ -108,13 +109,27 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
 
         // Fetch the full transaction details using the signature
         let transaction_details = client
-            .get_transaction(&signature, UiTransactionEncoding::Json)
+            .get_transaction_with_config(
+                &signature,
+                RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::Json),
+                    commitment: None,
+                    max_supported_transaction_version: Some(0),
+                },
+            )
             .await?;
 
         // Access and decode the accounts involved
         let versioned_transaction = transaction_details.transaction.transaction;
         if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
             if let UiMessage::Raw(raw_message) = &ui_transaction.message {
+                if raw_message
+                    .account_keys
+                    .contains(&"SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf".to_string())
+                {
+                    let authority = raw_message.account_keys[3].clone();
+                    return Ok((Some(authority), true));
+                }
                 info!(
                     "Successfully retrieved program authority from transaction: {:?}",
                     raw_message.account_keys[0]
@@ -151,6 +166,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_program_authority_for_frozen_program() {
+        let result = get_program_authority("333UA891CYPpAJAthphPT3hg1EkUBLhNFoP9HoWW3nug").await;
+
+        assert!(
+            result.is_ok(),
+            "Failed to get authority: {:?}",
+            result.err()
+        );
+        let authority = result.unwrap();
+
+        assert_eq!(
+            authority.0,
+            Some("FHKkBao61GZt3bkKbfMmd4GmDqQyYudyWQc5RUk4PKuZ".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_program_authority_for_frozen_program_1() {
         let result = get_program_authority("paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR").await;
 
         assert!(
