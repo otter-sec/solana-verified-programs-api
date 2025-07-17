@@ -311,7 +311,7 @@ impl DbClient {
                 .first::<VerifiedProgram>(conn)
                 .await
                 .map_err(|e| {
-                    error!("Failed to get verified build: {}", e);
+                    error!("Failed to get solana_program_builds: {}", e);
                     e.into()
                 }),
             None => {
@@ -348,7 +348,7 @@ impl DbClient {
                     .first::<VerifiedProgram>(conn)
                     .await
                     .map_err(|e| {
-                        error!("Failed to get verified build: {}", e);
+                        error!("Failed to get verified program data: {}", e);
                         e.into()
                     })
             }
