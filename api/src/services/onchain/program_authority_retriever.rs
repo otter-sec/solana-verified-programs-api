@@ -140,7 +140,9 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
                         .position(|key| key == SQUADS_PROGRAM_ID)
                         .unwrap() as u8;
                     for ix in &raw_message.instructions {
-                        if ix.program_id_index == program_id_idx && ix.data == EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA {
+                        if ix.program_id_index == program_id_idx
+                            && ix.data == EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA
+                        {
                             let authority_idx = ix.accounts[AUTHORITY_ACCOUNT_INDEX] as usize;
                             let authority = raw_message.account_keys[authority_idx].clone();
                             return Ok((Some(authority), true));
