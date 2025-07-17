@@ -300,7 +300,7 @@ impl DbClient {
         let conn = &mut self.get_db_conn().await?;
 
         let query = verified_programs
-            .inner_join(crate::schema::solana_program_builds::table)
+            .left_join(crate::schema::solana_program_builds::table)
             .filter(program_id.eq(program_address))
             .select(verified_programs::all_columns())
             .order(verified_at.desc());
