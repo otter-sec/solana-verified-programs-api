@@ -193,8 +193,7 @@ mod tests {
         for error in time_limit_errors {
             assert!(
                 manager.is_time_limit_error(&error),
-                "Should detect time limit error: {}",
-                error
+                "Should detect time limit error: {error}",
             );
         }
 
@@ -208,8 +207,7 @@ mod tests {
         for error in other_errors {
             assert!(
                 !manager.is_time_limit_error(&error),
-                "Should NOT detect as time limit error: {}",
-                error
+                "Should NOT detect as time limit error: {error}",
             );
         }
     }

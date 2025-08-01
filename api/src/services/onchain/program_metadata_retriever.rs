@@ -161,7 +161,7 @@ async fn get_otter_verify_params_with_client(
     if let Some(signer) = signer {
         let signer_pubkey = Pubkey::from_str(&signer)
             .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {signer}")))?;
-        if let Ok(params) = get_otter_pda(&client, &signer_pubkey, &program_id_pubkey).await {
+        if let Ok(params) = get_otter_pda(&client, &signer_pubkey, program_id_pubkey).await {
             return Ok((params, signer_pubkey.to_string()));
         }
         return Err(ApiError::Custom(format!(
@@ -172,14 +172,14 @@ async fn get_otter_verify_params_with_client(
     // Try with program authority
     if let Some(authority) = &program_authority {
         let authority_pubkey = Pubkey::from_str(authority)?;
-        if let Ok(params) = get_otter_pda(&client, &authority_pubkey, &program_id_pubkey).await {
+        if let Ok(params) = get_otter_pda(&client, &authority_pubkey, program_id_pubkey).await {
             return Ok((params, authority_pubkey.to_string()));
         }
     }
 
     // Try with whitelisted signers
     for signer in SIGNER_KEYS.iter() {
-        if let Ok(params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
+        if let Ok(params) = get_otter_pda(&client, signer, program_id_pubkey).await {
             return Ok((params, signer.to_string()));
         }
     }

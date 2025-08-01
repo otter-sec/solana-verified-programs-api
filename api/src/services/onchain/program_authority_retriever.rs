@@ -50,7 +50,7 @@ async fn get_program_authority_with_client(
     program_id: &Pubkey,
 ) -> Result<(Option<String>, bool)> {
     // Get program account data
-    let program_account_bytes = client.get_account_data(&program_id).await.map_err(|e| {
+    let program_account_bytes = client.get_account_data(program_id).await.map_err(|e| {
         error!("Failed to fetch program account data: {}", e);
         ApiError::Custom(format!("Failed to fetch program account: {e}"))
     })?;
