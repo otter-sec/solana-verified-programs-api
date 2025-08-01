@@ -41,6 +41,13 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
                 return Ok(hash);
             }
             Err(e) => {
+                let error_str = e.to_string();
+                // Don't retry if the program appears to be closed - return immediately
+                if error_str.contains("Program appears to be closed") {
+                    error!("Program {} appears to be closed, not retrying", program_id);
+                    return Err(e);
+                }
+                
                 error!(
                     "Attempt {}/3 failed to get on-chain hash for {}: {}",
                     attempt, program_id, e
@@ -68,6 +75,10 @@ async fn execute_command(cmd: &mut Command) -> Result<String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // Check if the error indicates a closed/non-existent program data account
+        if stderr.contains("Could not find program data") {
+            return Err(ApiError::Custom("Program appears to be closed - program data account not found".to_string()));
+        }
         return Err(ApiError::Custom(format!("Command failed: {stderr}")));
     }
 
@@ -92,6 +103,21 @@ mod tests {
         assert_eq!(
             hash, "c117c3610fca94c5be64eed41e4f2f6783a38b493b245207f3d7e3d7a63ae8e0",
             "Unexpected hash value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_on_chain_hash_closed_program() {
+        // This program has been closed - program data account no longer exists
+        let program_id = "2gFsaXeN9jngaKbQvZsLwxqfUrT2n4WRMraMpeL8NwZM";
+        let result = get_on_chain_hash(program_id).await;
+
+        assert!(result.is_err(), "Should return error for closed program");
+        let error = result.err().unwrap();
+        let error_str = error.to_string();
+        assert!(
+            error_str.contains("Program appears to be closed") || error_str.contains("Could not find program data"),
+            "Error should indicate program is closed: {error_str}"
         );
     }
 }

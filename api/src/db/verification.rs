@@ -146,7 +146,33 @@ impl DbClient {
                 };
                 return return_response(response).await;
             }
-            Err(_) => {
+            Err(e) => {
+                let error_str = e.to_string();
+                if error_str.contains("Program appears to be closed") {
+                    info!("Program {} appears to be closed. Marking as unverified and frozen.", program_address);
+                    
+                    // Mark the program as unverified since it's closed
+                    self.mark_program_unverified(&program_address).await?;
+                    
+                    // Update program authority status to frozen in database
+                    let program_id_pubkey = Pubkey::from_str(&program_address)?;
+                    self.insert_or_update_program_authority(
+                        &program_id_pubkey,
+                        None, // No authority for closed programs
+                        true, // Mark as frozen since program is closed
+                    ).await?;
+
+                    let response = VerificationResponse {
+                        is_verified: false, // Program is closed, so not verified
+                        on_chain_hash: res.on_chain_hash, // Keep the last known hash
+                        executable_hash: res.executable_hash,
+                        repo_url: build_repository_url(&build_params),
+                        last_verified_at: Some(res.verified_at),
+                        commit: build_params.commit_hash.unwrap_or_default(),
+                        is_frozen: true, // Mark as frozen since program is closed
+                    };
+                    return return_response(response).await;
+                }
                 info!("Failed to get on-chain hash. Using cached value.");
                 let response = VerificationResponse {
                     is_verified: res.on_chain_hash == res.executable_hash,
@@ -188,11 +214,30 @@ impl DbClient {
         let hash = match self.get_cache(&program_address).await {
             Ok(cache_result) => Some(cache_result),
             Err(_) => {
-                if let Ok(on_chain_hash) = get_on_chain_hash(&program_address).await {
-                    self.set_cache(&program_address, &on_chain_hash).await.ok();
-                    Some(on_chain_hash)
-                } else {
-                    None
+                match get_on_chain_hash(&program_address).await {
+                    Ok(on_chain_hash) => {
+                        self.set_cache(&program_address, &on_chain_hash).await.ok();
+                        Some(on_chain_hash)
+                    }
+                    Err(e) => {
+                        let error_str = e.to_string();
+                        if error_str.contains("Program appears to be closed") {
+                            info!("Program {} appears to be closed during get_all_verification_info. Marking as unverified and frozen.", program_address);
+                            
+                            // Mark all builds for this program as unverified
+                            self.mark_program_unverified(&program_address).await.ok();
+                            
+                            // Update program authority status to frozen in database
+                            if let Ok(program_id_pubkey) = Pubkey::from_str(&program_address) {
+                                self.insert_or_update_program_authority(
+                                    &program_id_pubkey,
+                                    None, // No authority for closed programs
+                                    true, // Mark as frozen since program is closed
+                                ).await.ok();
+                            }
+                        }
+                        None
+                    }
                 }
             }
         };

@@ -35,9 +35,19 @@ pub async fn setup_verification(
     specific_signer: Option<String>,
 ) -> VerificationSetupResult {
     // Get program authority from on-chain
-    let (program_authority, is_frozen) = get_program_authority(program_id)
-        .await
-        .unwrap_or((None, false));
+    let (program_authority, is_frozen) = match get_program_authority(program_id).await {
+        Ok((authority, frozen)) => (authority, frozen),
+        Err(e) => {
+            let error_str = e.to_string();
+            if error_str.contains("Program appears to be closed") {
+                // For closed programs, no authority and frozen=true
+                (None, true)
+            } else {
+                // For other errors, default to no authority and not frozen
+                (None, false)
+            }
+        }
+    };
 
     // Get verification parameters from on-chain PDA
     match onchain::get_otter_verify_params(program_id, specific_signer, program_authority.clone())

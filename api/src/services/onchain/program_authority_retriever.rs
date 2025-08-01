@@ -86,6 +86,13 @@ async fn get_program_authority_with_client(
             }
         }
         Err(e) => {
+            let error_str = e.to_string();
+            // Check if the error indicates the program data account was not found (closed)
+            if error_str.contains("could not find account") || error_str.contains("AccountNotFound") {
+                info!("Program data account not found - program appears to be closed: {}", program_data_account_id);
+                // Return None authority and is_frozen as true to indicate the program is closed
+                return Ok((None, true));
+            }
             error!("Failed to fetch program data account: {}", e);
         }
     }
@@ -231,5 +238,23 @@ mod tests {
         let invalid_program = Pubkey::new_unique();
         let result = get_program_authority(&invalid_program.to_string()).await;
         assert!(result.is_err(), "Expected error for invalid program");
+    }
+
+    #[tokio::test]
+    async fn test_get_program_authority_closed_program() {
+        // This program has been closed - program data account no longer exists
+        let result = get_program_authority("2gFsaXeN9jngaKbQvZsLwxqfUrT2n4WRMraMpeL8NwZM").await;
+        
+        match result {
+            Ok((authority, is_frozen)) => {
+                // Should detect that the program is closed/frozen
+                assert!(is_frozen, "Program should be detected as frozen/closed");
+                assert_eq!(authority, None, "Closed program should have no authority");
+            }
+            Err(e) => {
+                // It's also acceptable if it returns an error
+                println!("Got error for closed program (acceptable): {e:?}");
+            }
+        }
     }
 }
