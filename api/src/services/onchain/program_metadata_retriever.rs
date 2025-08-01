@@ -106,7 +106,7 @@ pub async fn get_otter_pda(
     let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
     let account_data = client.get_account_data(&pda_account).await?;
     OtterBuildParams::try_from_slice(&account_data[8..])
-        .map_err(|e| ApiError::Custom(format!("Failed to deserialize PDA data: {}", e)))
+        .map_err(|e| ApiError::Custom(format!("Failed to deserialize PDA data: {e}")))
 }
 
 /// Retrieves Otter Verify parameters for a program
@@ -135,13 +135,12 @@ pub async fn get_otter_verify_params(
     // Try with provided signer
     if let Some(signer) = signer {
         let signer_pubkey = Pubkey::from_str(&signer)
-            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {}", signer)))?;
+            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {signer}")))?;
         if let Ok(params) = get_otter_pda(&client, &signer_pubkey, &program_id_pubkey).await {
             return Ok((params, signer_pubkey.to_string()));
         }
         return Err(ApiError::Custom(format!(
-            "Otter-Verify PDA not found for signer: {}",
-            signer
+            "Otter-Verify PDA not found for signer: {signer}"
         )));
     }
 

@@ -64,15 +64,15 @@ async fn execute_command(cmd: &mut Command) -> Result<String> {
     let output = cmd
         .output()
         .await
-        .map_err(|e| ApiError::Custom(format!("Failed to execute solana-verify command: {}", e)))?;
+        .map_err(|e| ApiError::Custom(format!("Failed to execute solana-verify command: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(ApiError::Custom(format!("Command failed: {}", stderr)));
+        return Err(ApiError::Custom(format!("Command failed: {stderr}")));
     }
 
     let stdout = String::from_utf8(output.stdout)
-        .map_err(|e| ApiError::Custom(format!("Failed to parse command output: {}", e)))?;
+        .map_err(|e| ApiError::Custom(format!("Failed to parse command output: {e}")))?;
 
     get_last_line(&stdout)
         .ok_or_else(|| ApiError::Custom("Failed to extract hash from command output".to_string()))

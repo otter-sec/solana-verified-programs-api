@@ -32,7 +32,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
     // Parse program ID as Pubkey
     let program_id = Pubkey::from_str(program_id).map_err(|e| {
         error!("Invalid program ID: {}", e);
-        ApiError::Custom(format!("Invalid program ID: {}", e))
+        ApiError::Custom(format!("Invalid program ID: {e}"))
     })?;
 
     let client = RpcClient::new(CONFIG.rpc_url.clone());
@@ -41,7 +41,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
     // Get program account data
     let program_account_bytes = client.get_account_data(&program_id).await.map_err(|e| {
         error!("Failed to fetch program account data: {}", e);
-        ApiError::Custom(format!("Failed to fetch program account: {}", e))
+        ApiError::Custom(format!("Failed to fetch program account: {e}"))
     })?;
 
     // Parse program account to get program data address
@@ -49,14 +49,13 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
         BpfUpgradeableLoaderAccountType::Program(UiProgram { program_data }) => {
             Pubkey::from_str(&program_data).map_err(|e| {
                 error!("Invalid program data address: {}", e);
-                ApiError::Custom(format!("Invalid program data pubkey: {}", e))
+                ApiError::Custom(format!("Invalid program data pubkey: {e}"))
             })?
         }
         unexpected => {
             error!("Unexpected program account type: {:?}", unexpected);
             return Err(ApiError::Custom(format!(
-                "Expected Program account type, found: {:?}",
-                unexpected
+                "Expected Program account type, found: {unexpected:?}"
             )));
         }
     };
@@ -108,7 +107,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
     // Take the latest transaction
     if let Some(latest_transaction) = transactions.first() {
         let signature = Signature::from_str(&latest_transaction.signature).map_err(|e| {
-            ApiError::Custom(format!("Failed to parse transaction signature: {}", e))
+            ApiError::Custom(format!("Failed to parse transaction signature: {e}"))
         })?;
 
         // Fetch the full transaction details using the signature

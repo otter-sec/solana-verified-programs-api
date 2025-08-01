@@ -95,7 +95,7 @@ impl DbClient {
             })?;
 
         // Invalidate cache after successful update
-        let cache_key = format!("program_authority:{}", program_id_str);
+        let cache_key = format!("program_authority:{program_id_str}");
         let _ = self
             .set_cache_with_expiry(
                 &cache_key,
@@ -116,7 +116,7 @@ impl DbClient {
         &self,
         program_address: &str,
     ) -> Result<Option<String>> {
-        let cache_key = format!("program_authority:{}", program_address);
+        let cache_key = format!("program_authority:{program_address}");
 
         // Try to get from cache first
         if let Ok(cached_value) = self.get_cache(&cache_key).await {

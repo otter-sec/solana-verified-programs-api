@@ -27,7 +27,7 @@ impl DbClient {
         signer: Option<String>,
         authority_info: Option<ProgramAuthorityParams>,
     ) -> Result<VerificationResponse> {
-        let cache_key = format!("check_is_verified:{}", program_address);
+        let cache_key = format!("check_is_verified:{program_address}");
 
         // Try to get from cache
         if let Ok(cached_str) = self.get_cache(&cache_key).await {
@@ -167,7 +167,7 @@ impl DbClient {
         self,
         program_address: String,
     ) -> Result<Vec<VerificationResponseWithSigner>> {
-        let cache_key = format!("get_all_verification_info:{}", program_address);
+        let cache_key = format!("get_all_verification_info:{program_address}");
 
         // Try fetching from cache
         if let Ok(cached_str) = self.get_cache(&cache_key).await {

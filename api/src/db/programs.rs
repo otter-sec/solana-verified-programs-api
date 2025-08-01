@@ -199,7 +199,7 @@ impl DbClient {
         program_id: &str,
         client: Arc<RpcClient>,
     ) -> Result<Option<VerificationResponse>> {
-        let cache_key = format!("is_program_valid_and_verified:{}", program_id);
+        let cache_key = format!("is_program_valid_and_verified:{program_id}");
 
         // Try to get from cache first
         if let Ok(cached_str) = self.get_cache(&cache_key).await {

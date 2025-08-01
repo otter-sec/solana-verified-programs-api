@@ -26,7 +26,7 @@ pub fn initialize_router(db: DbClient) -> Router {
         ServiceBuilder::new().layer(HandleErrorLayer::new(|err: BoxError| async move {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Unhandled error: {}", err),
+                format!("Unhandled error: {err}"),
             )
         }))
     };

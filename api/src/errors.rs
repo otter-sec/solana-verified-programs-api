@@ -52,7 +52,7 @@ impl fmt::Display for ErrorMessages {
             ErrorMessages::DB => "An unforeseen database error has occurred, preventing the initiation of the build process. Kindly try again after some time.",
             ErrorMessages::NoPDA => "The PDA associated with the given signer was not found. Please try again with a valid signer.",
         };
-        write!(f, "{}", message)
+        write!(f, "{message}")
     }
 }
 
