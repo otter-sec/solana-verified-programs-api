@@ -8,8 +8,6 @@ use crate::{
     },
     services::{get_on_chain_hash, onchain::OtterBuildParams, rpc_manager::get_rpc_manager},
 };
-use solana_sdk::pubkey::Pubkey;
-use tracing::{error, info, warn};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -17,6 +15,8 @@ use axum::{
 };
 use borsh::BorshDeserialize;
 use serde_json::Value;
+use solana_sdk::pubkey::Pubkey;
+use tracing::{error, info, warn};
 
 pub(crate) async fn handle_pda_updates_creations(
     State(db): State<DbClient>,
@@ -70,11 +70,15 @@ async fn process_otter_verify_instruction(
         Err(e) => {
             let error_str = e.to_string();
             if error_str.contains("Program appears to be closed") {
-                info!("Program {} appears to be closed in pda_worker. Marking as unverified.", program_id);
+                info!(
+                    "Program {} appears to be closed in pda_worker. Marking as unverified.",
+                    program_id
+                );
                 // Mark program as unverified and frozen in database
                 db.mark_program_unverified(program_id).await?;
                 if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
-                    db.insert_or_update_program_authority(&program_pubkey, None, true).await?;
+                    db.insert_or_update_program_authority(&program_pubkey, None, true)
+                        .await?;
                 }
                 return Ok(()); // Exit early for closed programs
             }

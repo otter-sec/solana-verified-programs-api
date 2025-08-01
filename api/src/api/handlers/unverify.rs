@@ -3,14 +3,14 @@ use crate::{
     db::{models::parse_helius_transaction, DbClient},
     services::get_on_chain_hash,
 };
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
     Json,
 };
 use serde_json::Value;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use tracing::{error, info, warn};
 
 /// Constant for the upgrade instruction data identifier
@@ -82,13 +82,20 @@ async fn process_program_upgrade(
         Err(e) => {
             let error_str = e.to_string();
             if error_str.contains("Program appears to be closed") {
-                info!("Program {} appears to be closed in unverify handler. Marking as unverified.", program_id);
+                info!(
+                    "Program {} appears to be closed in unverify handler. Marking as unverified.",
+                    program_id
+                );
                 // Mark program as unverified and frozen in database
                 db.mark_program_unverified(program_id).await?;
                 if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
-                    db.insert_or_update_program_authority(&program_pubkey, None, true).await?;
+                    db.insert_or_update_program_authority(&program_pubkey, None, true)
+                        .await?;
                 }
-                info!("Successfully marked closed program {} as unverified", program_id);
+                info!(
+                    "Successfully marked closed program {} as unverified",
+                    program_id
+                );
                 return Ok(());
             }
             return Err(e.into());

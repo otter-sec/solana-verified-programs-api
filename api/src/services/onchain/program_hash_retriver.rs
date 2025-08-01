@@ -47,7 +47,7 @@ pub async fn get_on_chain_hash(program_id: &str) -> Result<String> {
                     error!("Program {} appears to be closed, not retrying", program_id);
                     return Err(e);
                 }
-                
+
                 error!(
                     "Attempt {}/3 failed to get on-chain hash for {}: {}",
                     attempt, program_id, e
@@ -77,7 +77,9 @@ async fn execute_command(cmd: &mut Command) -> Result<String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         // Check if the error indicates a closed/non-existent program data account
         if stderr.contains("Could not find program data") {
-            return Err(ApiError::Custom("Program appears to be closed - program data account not found".to_string()));
+            return Err(ApiError::Custom(
+                "Program appears to be closed - program data account not found".to_string(),
+            ));
         }
         return Err(ApiError::Custom(format!("Command failed: {stderr}")));
     }
@@ -116,7 +118,8 @@ mod tests {
         let error = result.err().unwrap();
         let error_str = error.to_string();
         assert!(
-            error_str.contains("Program appears to be closed") || error_str.contains("Could not find program data"),
+            error_str.contains("Program appears to be closed")
+                || error_str.contains("Could not find program data"),
             "Error should indicate program is closed: {error_str}"
         );
     }

@@ -149,21 +149,25 @@ impl DbClient {
             Err(e) => {
                 let error_str = e.to_string();
                 if error_str.contains("Program appears to be closed") {
-                    info!("Program {} appears to be closed. Marking as unverified and frozen.", program_address);
-                    
+                    info!(
+                        "Program {} appears to be closed. Marking as unverified and frozen.",
+                        program_address
+                    );
+
                     // Mark the program as unverified since it's closed
                     self.mark_program_unverified(&program_address).await?;
-                    
+
                     // Update program authority status to frozen in database
                     let program_id_pubkey = Pubkey::from_str(&program_address)?;
                     self.insert_or_update_program_authority(
                         &program_id_pubkey,
                         None, // No authority for closed programs
                         true, // Mark as frozen since program is closed
-                    ).await?;
+                    )
+                    .await?;
 
                     let response = VerificationResponse {
-                        is_verified: false, // Program is closed, so not verified
+                        is_verified: false,               // Program is closed, so not verified
                         on_chain_hash: res.on_chain_hash, // Keep the last known hash
                         executable_hash: res.executable_hash,
                         repo_url: build_repository_url(&build_params),
@@ -223,17 +227,19 @@ impl DbClient {
                         let error_str = e.to_string();
                         if error_str.contains("Program appears to be closed") {
                             info!("Program {} appears to be closed during get_all_verification_info. Marking as unverified and frozen.", program_address);
-                            
+
                             // Mark all builds for this program as unverified
                             self.mark_program_unverified(&program_address).await.ok();
-                            
+
                             // Update program authority status to frozen in database
                             if let Ok(program_id_pubkey) = Pubkey::from_str(&program_address) {
                                 self.insert_or_update_program_authority(
                                     &program_id_pubkey,
                                     None, // No authority for closed programs
                                     true, // Mark as frozen since program is closed
-                                ).await.ok();
+                                )
+                                .await
+                                .ok();
                             }
                         }
                         None
