@@ -5,6 +5,7 @@
 //! - Miscellaneous utility functions
 //! - On-chain data retrieval services
 //! - Program verification logic
+//! - RPC client management with key rotation
 
 /// Build log management services
 pub mod logging;
@@ -14,6 +15,9 @@ pub mod misc;
 
 /// On-chain data retrieval services
 pub mod onchain;
+
+/// RPC client management with key rotation
+pub mod rpc_manager;
 
 /// Program verification services
 pub mod verification;

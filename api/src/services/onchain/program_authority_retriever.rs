@@ -1,4 +1,4 @@
-use crate::{errors::ApiError, Result, CONFIG};
+use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
 use solana_account_decoder::parse_bpf_loader::{
     parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
 };
@@ -8,7 +8,7 @@ use solana_client::{
 };
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 use tracing::{error, info};
 
 const SQUADS_PROGRAM_ID: &str = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
@@ -35,9 +35,20 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
         ApiError::Custom(format!("Invalid program ID: {e}"))
     })?;
 
-    let client = RpcClient::new(CONFIG.rpc_url.clone());
     info!("Fetching program authority for: {}", program_id);
 
+    let rpc_manager = get_rpc_manager();
+    rpc_manager
+        .execute_with_retry(|client| async move {
+            get_program_authority_with_client(client, &program_id).await
+        })
+        .await
+}
+
+async fn get_program_authority_with_client(
+    client: Arc<RpcClient>,
+    program_id: &Pubkey,
+) -> Result<(Option<String>, bool)> {
     // Get program account data
     let program_account_bytes = client.get_account_data(&program_id).await.map_err(|e| {
         error!("Failed to fetch program account data: {}", e);
@@ -106,9 +117,8 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
 
     // Take the latest transaction
     if let Some(latest_transaction) = transactions.first() {
-        let signature = Signature::from_str(&latest_transaction.signature).map_err(|e| {
-            ApiError::Custom(format!("Failed to parse transaction signature: {e}"))
-        })?;
+        let signature = Signature::from_str(&latest_transaction.signature)
+            .map_err(|e| ApiError::Custom(format!("Failed to parse transaction signature: {e}")))?;
 
         // Fetch the full transaction details using the signature
         let transaction_details = client

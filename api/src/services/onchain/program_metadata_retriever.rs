@@ -1,6 +1,6 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
-use crate::{errors::ApiError, Result, CONFIG};
+use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{bpf_loader_upgradeable, pubkey::Pubkey};
@@ -129,9 +129,34 @@ pub async fn get_otter_verify_params(
     signer: Option<String>,
     program_authority: Option<String>,
 ) -> Result<(OtterBuildParams, String)> {
-    let client = RpcClient::new(CONFIG.rpc_url.clone());
     let program_id_pubkey = Pubkey::from_str(program_id)?;
 
+    let rpc_manager = get_rpc_manager();
+    let signer_clone = signer.clone();
+    let program_authority_clone = program_authority.clone();
+    rpc_manager
+        .execute_with_retry(move |client| {
+            let signer = signer_clone.clone();
+            let program_authority = program_authority_clone.clone();
+            async move {
+                get_otter_verify_params_with_client(
+                    client,
+                    &program_id_pubkey,
+                    signer,
+                    program_authority,
+                )
+                .await
+            }
+        })
+        .await
+}
+
+async fn get_otter_verify_params_with_client(
+    client: Arc<RpcClient>,
+    program_id_pubkey: &Pubkey,
+    signer: Option<String>,
+    program_authority: Option<String>,
+) -> Result<(OtterBuildParams, String)> {
     // Try with provided signer
     if let Some(signer) = signer {
         let signer_pubkey = Pubkey::from_str(&signer)
@@ -172,19 +197,32 @@ pub async fn is_program_buffer_missing(program_id: &str) -> bool {
         Ok(pubkey) => pubkey,
         Err(_) => return false,
     };
-    let client = RpcClient::new(CONFIG.rpc_url.clone());
 
+    let rpc_manager = get_rpc_manager();
+    let result = rpc_manager
+        .execute_with_retry(|client| async move {
+            is_program_buffer_missing_with_client(client, &program_id_pubkey).await
+        })
+        .await;
+
+    result.unwrap_or(false)
+}
+
+async fn is_program_buffer_missing_with_client(
+    client: Arc<RpcClient>,
+    program_id_pubkey: &Pubkey,
+) -> Result<bool> {
     let program_buffer =
         Pubkey::find_program_address(&[program_id_pubkey.as_ref()], &bpf_loader_upgradeable::id())
             .0;
 
     match client.get_account(&program_buffer).await {
-        Ok(_) => false, // Account exists
+        Ok(_) => Ok(false), // Account exists
         Err(err) => {
             if err.to_string().contains("AccountNotFound") {
-                true
+                Ok(true)
             } else {
-                false // Ignore other errors and continue
+                Ok(false) // Ignore other errors and continue
             }
         }
     }
