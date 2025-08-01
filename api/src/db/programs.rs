@@ -19,6 +19,8 @@ use tracing::{error, info};
 use super::models::{ProgramAuthorityParams, VerificationResponse};
 
 pub const PER_PAGE: i64 = 20;
+// Additional programs to fetch from DB to account for potential invalid/closed programs
+pub const FETCH_BUFFER: i64 = 5;
 
 #[derive(QueryableByName)]
 struct CountResult {
@@ -88,7 +90,15 @@ impl DbClient {
             })?
             .total;
 
-        // Get paginated verified programs
+        // Fetch more programs initially to account for potential invalid/closed programs
+        // We'll fetch PER_PAGE + FETCH_MULTIPLIER to ensure we have enough valid programs
+        let fetch_limit = PER_PAGE + FETCH_BUFFER;
+
+        info!(
+            "Fetching page {} with offset {}, limit {} from DB",
+            page, offset, fetch_limit
+        );
+
         let query = r#"
             SELECT DISTINCT program_id
             FROM verified_programs
@@ -98,7 +108,7 @@ impl DbClient {
         "#;
 
         let program_ids: Vec<String> = sql_query(query)
-            .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
+            .bind::<diesel::sql_types::BigInt, _>(fetch_limit)
             .bind::<diesel::sql_types::BigInt, _>(offset)
             .get_results::<ProgramIdResult>(conn)
             .await
@@ -109,6 +119,19 @@ impl DbClient {
             .into_iter()
             .map(|result| result.program_id)
             .collect();
+        let programs_len = program_ids.len();
+
+        info!(
+            "Fetched {} programs from DB for page {}",
+            program_ids.len(),
+            page
+        );
+
+        // If no programs found in DB, return empty result
+        if program_ids.is_empty() {
+            info!("No programs found in DB for page {}", page);
+            return Ok((vec![], total_count));
+        }
 
         // Now validate programs in batches with proper concurrency control
         let client = Arc::new(RpcClient::new(CONFIG.rpc_url.clone()));
@@ -131,14 +154,29 @@ impl DbClient {
 
                     match this.is_program_valid_and_verified(&pid, client).await {
                         Ok(Some(_)) => Some(pid), // Valid and verified
-                        _ => None,                // Invalid or error
+                        _ => None,                // Invalid, closed, or error
                     }
                 }
             })
             .buffer_unordered(25) // Allow more tasks to be queued while respecting semaphore limit
             .filter_map(|x| async move { x })
+            .take(PER_PAGE as usize) // Take only PER_PAGE valid programs
             .collect()
             .await;
+
+        info!(
+            "Page {}: Found {} valid programs out of {} fetched from DB",
+            page,
+            valid_programs.len(),
+            programs_len
+        );
+
+        // If we got fewer valid programs than PER_PAGE, it might indicate we need to fetch more
+        // This could happen if many programs are closed/invalid
+        if valid_programs.len() < PER_PAGE as usize && programs_len == fetch_limit as usize {
+            info!("Page {}: Got {} valid programs (less than PER_PAGE={}), but fetched maximum from DB. This might indicate many closed/invalid programs.", 
+                  page, valid_programs.len(), PER_PAGE);
+        }
 
         Ok((valid_programs, total_count))
     }
