@@ -57,4 +57,5 @@ pub(crate) struct VerificationStatusParams {
 pub struct ProgramAuthorityParams {
     pub authority: Option<String>,
     pub frozen: bool,
+    pub closed: bool,
 }

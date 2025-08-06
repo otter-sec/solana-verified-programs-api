@@ -260,21 +260,23 @@ impl DbClient {
 
         // Only fetch from chain if not in DB cache
         if authority.is_none() {
-            if let Ok((auth_opt, frozen)) = get_program_authority(program_id).await {
+            if let Ok((auth_opt, frozen, closed)) = get_program_authority(program_id).await {
                 authority = auth_opt.clone();
                 onchain_authority = Some(ProgramAuthorityParams {
                     authority: auth_opt.clone(),
                     frozen,
+                    closed,
                 });
 
-                // Insert authority data
-                if frozen {
+                // Insert authority data if frozen or closed
+                if frozen || closed {
                     if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
                         let _ = self
                             .insert_or_update_program_authority(
                                 &program_pubkey,
                                 auth_opt.as_deref(),
                                 frozen,
+                                Some(closed),
                             )
                             .await;
                     }

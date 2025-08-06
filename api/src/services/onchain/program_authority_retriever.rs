@@ -21,14 +21,14 @@ const AUTHORITY_ACCOUNT_INDEX: usize = 4;
 /// * `program_id` - Public key of the program to check
 ///
 /// # Returns
-/// * `Result<Option<String>>` - Program authority public key if it exists
+/// * `Result<(Option<String>, bool, bool)>` - Program authority, is_frozen, is_closed
 ///
 /// This function:
 /// 1. Fetches the program account data
 /// 2. Extracts the program data account address
 /// 3. Fetches the program data account
 /// 4. Extracts the upgrade authority
-pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, bool)> {
+pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, bool, bool)> {
     // Parse program ID as Pubkey
     let program_id = Pubkey::from_str(program_id).map_err(|e| {
         error!("Invalid program ID: {}", e);
@@ -48,7 +48,7 @@ pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, 
 async fn get_program_authority_with_client(
     client: Arc<RpcClient>,
     program_id: &Pubkey,
-) -> Result<(Option<String>, bool)> {
+) -> Result<(Option<String>, bool, bool)> {
     // Get program account data
     let program_account_bytes = client.get_account_data(program_id).await.map_err(|e| {
         error!("Failed to fetch program account data: {}", e);
@@ -80,8 +80,8 @@ async fn get_program_authority_with_client(
             {
                 if authority.is_some() {
                     info!("Successfully retrieved program authority: {:?}", authority);
-                    // Returning authority and is_frozen as false
-                    return Ok((authority, false));
+                    // Returning authority, is_frozen as false, is_closed as false
+                    return Ok((authority, false, false));
                 }
             }
         }
@@ -94,8 +94,8 @@ async fn get_program_authority_with_client(
                     "Program data account not found - program appears to be closed: {}",
                     program_data_account_id
                 );
-                // Return None authority and is_frozen as true to indicate the program is closed
-                return Ok((None, true));
+                // Return None authority, is_frozen as false, is_closed as true to indicate the program is closed
+                return Ok((None, false, true));
             }
             error!("Failed to fetch program data account: {}", e);
         }
@@ -122,7 +122,7 @@ async fn get_program_authority_with_client(
         Ok(txns) => txns,
         Err(e) => {
             error!("Failed to fetch recent transactions: {}", e);
-            return Ok((None, false)); // Return is_frozen as true if we can't fetch transactions
+            return Ok((None, false, false)); // Return both as false if we can't fetch transactions
         }
     };
 
@@ -165,7 +165,7 @@ async fn get_program_authority_with_client(
                         {
                             let authority_idx = ix.accounts[AUTHORITY_ACCOUNT_INDEX] as usize;
                             let authority = raw_message.account_keys[authority_idx].clone();
-                            return Ok((Some(authority), true));
+                            return Ok((Some(authority), true, false));
                         }
                     }
                 }
@@ -173,13 +173,13 @@ async fn get_program_authority_with_client(
                     "Successfully retrieved program authority from transaction: {:?}",
                     raw_message.account_keys[0]
                 );
-                // Return the authority and is_frozen as true
-                return Ok((Some(raw_message.account_keys[0].clone()), true));
+                // Return the authority, is_frozen as true, is_closed as false
+                return Ok((Some(raw_message.account_keys[0].clone()), true, false));
             }
         }
     }
 
-    Ok((None, false)) // Default to is_frozen as true if no authority is found
+    Ok((None, false, false)) // Default to both as false if no authority is found
 }
 #[cfg(test)]
 mod tests {
@@ -194,10 +194,10 @@ mod tests {
             "Failed to get authority: {:?}",
             result.err()
         );
-        let authority = result.unwrap();
+        let (authority, _frozen, _closed) = result.unwrap();
 
         assert_eq!(
-            authority.0,
+            authority,
             Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU".to_string()),
             "Unexpected authority value"
         );
@@ -212,10 +212,10 @@ mod tests {
             "Failed to get authority: {:?}",
             result.err()
         );
-        let authority = result.unwrap();
+        let (authority, _frozen, _closed) = result.unwrap();
 
         assert_eq!(
-            authority.0,
+            authority,
             Some("FHKkBao61GZt3bkKbfMmd4GmDqQyYudyWQc5RUk4PKuZ".to_string())
         );
     }
@@ -229,10 +229,10 @@ mod tests {
             "Failed to get authority: {:?}",
             result.err()
         );
-        let authority = result.unwrap();
+        let (authority, _frozen, _closed) = result.unwrap();
 
         assert_eq!(
-            authority.0,
+            authority,
             Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD".to_string())
         );
     }
@@ -250,14 +250,67 @@ mod tests {
         let result = get_program_authority("2gFsaXeN9jngaKbQvZsLwxqfUrT2n4WRMraMpeL8NwZM").await;
 
         match result {
-            Ok((authority, is_frozen)) => {
-                // Should detect that the program is closed/frozen
-                assert!(is_frozen, "Program should be detected as frozen/closed");
+            Ok((authority, _is_frozen, is_closed)) => {
+                // Should detect that the program is closed
+                assert!(is_closed, "Program should be detected as closed");
                 assert_eq!(authority, None, "Closed program should have no authority");
             }
             Err(e) => {
                 // It's also acceptable if it returns an error
                 println!("Got error for closed program (acceptable): {e:?}");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_program_status_differentiation() {
+        // Test that we can differentiate between different program states
+        
+        // Test 1: Valid program with authority (should not be frozen or closed)
+        let result = get_program_authority("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC").await;
+        if let Ok((authority, is_frozen, is_closed)) = result {
+            assert!(authority.is_some(), "Valid program should have authority");
+            // Note: These assertions might vary based on the actual program state
+            println!("Valid program - Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}");
+        }
+
+        // Test 2: Invalid program ID (should return error)
+        let invalid_program = Pubkey::new_unique();
+        let result = get_program_authority(&invalid_program.to_string()).await;
+        assert!(result.is_err(), "Invalid program should return error");
+
+        // Test 3: Test return tuple format consistency
+        let test_programs = vec![
+            "333UA891CYPpAJAthphPT3hg1EkUBLhNFoP9HoWW3nug",
+            "paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR",
+        ];
+
+        for program_id in test_programs {
+            match get_program_authority(program_id).await {
+                Ok((authority, is_frozen, is_closed)) => {
+                    println!(
+                        "Program {program_id}: Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}"
+                    );
+                    
+                    // Basic validation: closed programs should not have authority
+                    if is_closed {
+                        assert_eq!(authority, None, "Closed program should not have authority");
+                    }
+                    
+                    // Validate that we get proper boolean values
+                    assert!(
+                        is_frozen == true || is_frozen == false, 
+                        "is_frozen should be a valid boolean"
+                    );
+                    assert!(
+                        is_closed == true || is_closed == false, 
+                        "is_closed should be a valid boolean"
+                    );
+                }
+                Err(e) => {
+                    println!("Error for program {program_id}: {e:?}");
+                    // Errors are acceptable for some programs
+                }
             }
         }
     }

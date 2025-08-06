@@ -39,22 +39,24 @@ impl DbClient {
             }
         }
 
-        let (res_result, build_params_result, frozen_status) = tokio::join!(
+        let (res_result, build_params_result, frozen_status, closed_status) = tokio::join!(
             self.get_verified_build(&program_address, signer.clone()),
             self.get_build_params(&program_address),
             self.is_program_frozen(&program_address),
+            self.is_program_closed(&program_address)
         );
 
         let res = res_result?;
         let build_params = build_params_result?;
         let saved_program_frozen = frozen_status?;
+        let saved_program_closed = closed_status?;
 
         // Only fetch program authority if we don't have it provided and program is not frozen
-        let (program_authority, program_frozen) = if let Some(info) = &authority_info {
-            (info.authority.clone(), info.frozen)
+        let (program_authority, program_frozen, program_closed) = if let Some(info) = &authority_info {
+            (info.authority.clone(), info.frozen, info.closed)
         } else if saved_program_frozen {
             // If program is already frozen in DB, no need to check authority
-            (None, true)
+            (None, true, false)
         } else {
             // Only make RPC call if program is not frozen
             get_program_authority(&program_address).await?
@@ -83,20 +85,37 @@ impl DbClient {
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
+                    is_closed: program_closed,
                 };
                 return return_response(response).await;
             }
         }
 
         // Update database if frozen status changed
-        if program_frozen != saved_program_frozen {
+        if program_frozen != saved_program_frozen || saved_program_closed != program_closed{
             let program_id_pubkey = Pubkey::from_str(&program_address)?;
             self.insert_or_update_program_authority(
                 &program_id_pubkey,
                 program_authority.as_deref(),
                 program_frozen,
+                Some(program_closed),
             )
             .await?;
+        }
+
+        if program_closed {
+            info!("Program is closed and not verifiable.");
+            let response = VerificationResponse {
+                is_verified: false,
+                on_chain_hash: res.on_chain_hash.clone(),
+                executable_hash: res.executable_hash.clone(),
+                last_verified_at: Some(res.verified_at),
+                repo_url: build_params.repository.clone(),
+                commit: build_params.commit_hash.unwrap_or_default(),
+                is_frozen: program_frozen,
+                is_closed: program_closed,
+            };
+            return return_response(response).await;
         }
 
         if program_frozen {
@@ -109,6 +128,7 @@ impl DbClient {
                 last_verified_at: Some(res.verified_at),
                 commit: build_params.commit_hash.unwrap_or_default(),
                 is_frozen: program_frozen,
+                is_closed: program_closed,
             };
             return return_response(response).await;
         }
@@ -143,6 +163,7 @@ impl DbClient {
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
+                    is_closed: program_closed,
                 };
                 return return_response(response).await;
             }
@@ -162,7 +183,8 @@ impl DbClient {
                     self.insert_or_update_program_authority(
                         &program_id_pubkey,
                         None, // No authority for closed programs
-                        true, // Mark as frozen since program is closed
+                        false, // Don't mark as frozen
+                        Some(true), // Mark as closed
                     )
                     .await?;
 
@@ -173,7 +195,8 @@ impl DbClient {
                         repo_url: build_repository_url(&build_params),
                         last_verified_at: Some(res.verified_at),
                         commit: build_params.commit_hash.unwrap_or_default(),
-                        is_frozen: true, // Mark as frozen since program is closed
+                        is_frozen: false, // Don't mark as frozen, mark as closed instead
+                        is_closed: true, // Program is definitely closed in this case
                     };
                     return return_response(response).await;
                 }
@@ -186,6 +209,7 @@ impl DbClient {
                     last_verified_at: Some(res.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
+                    is_closed: program_closed,
                 };
                 return return_response(response).await;
             }
@@ -236,7 +260,8 @@ impl DbClient {
                                 self.insert_or_update_program_authority(
                                     &program_id_pubkey,
                                     None, // No authority for closed programs
-                                    true, // Mark as frozen since program is closed
+                                    false, // Don't mark as frozen
+                                    Some(true), // Mark as closed
                                 )
                                 .await
                                 .ok();
@@ -255,6 +280,7 @@ impl DbClient {
         let mut is_frozen_status_update_data = ProgramAuthorityParams {
             authority: None,
             frozen: false,
+            closed: false,
         };
 
         for verified_build_with_signer in res {
@@ -282,10 +308,10 @@ impl DbClient {
                 is_program_frozen = verified_build_with_signer.is_frozen.unwrap_or_default();
 
                 if !is_program_frozen {
-                    let (current_authority, current_frozen_status) =
+                    let (current_authority, current_frozen_status, _current_closed_status) =
                         get_program_authority(&program_address)
                             .await
-                            .unwrap_or((None, false));
+                            .unwrap_or((None, false, false));
 
                     if current_frozen_status != is_program_frozen {
                         is_frozen_status_update_needed = true;
@@ -305,6 +331,7 @@ impl DbClient {
                         last_verified_at: Some(verified_build.verified_at),
                         commit: build.commit_hash.unwrap_or_default(),
                         is_frozen: is_program_frozen,
+                        is_closed: false, // Default to false for existing verified programs
                     },
                     signer: build.signer.unwrap_or(DEFAULT_SIGNER.to_string()),
                 });
@@ -317,6 +344,7 @@ impl DbClient {
                 &program_id_pubkey,
                 is_frozen_status_update_data.authority.as_deref(),
                 is_frozen_status_update_data.frozen,
+                Some(is_frozen_status_update_data.closed),
             )
             .await?;
         }
@@ -507,7 +535,7 @@ impl DbClient {
         };
 
         // Better error handling for program authority
-        let (program_authority, is_frozen) = match get_program_authority(&payload.program_id).await
+        let (program_authority, is_frozen, is_closed) = match get_program_authority(&payload.program_id).await
         {
             Ok(authority) => authority,
             Err(e) => {
@@ -515,7 +543,7 @@ impl DbClient {
                     "Failed to get program authority for {}: {:?}",
                     payload.program_id, e
                 );
-                (None, false)
+                (None, false, false)
             }
         };
 
@@ -530,6 +558,7 @@ impl DbClient {
                     &params_from_onchain.address,
                     program_authority.as_deref(),
                     is_frozen,
+                    Some(is_closed),
                 )
                 .await
             {
@@ -619,5 +648,91 @@ impl DbClient {
                 error!("Failed to mark program as unverified: {}", e);
                 e.into()
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::models::{ProgramAuthorityParams};
+
+    #[tokio::test]
+    async fn test_verification_response_includes_closed_status() {
+        // Test that VerificationResponse properly includes both is_frozen and is_closed fields
+        
+        let test_response = VerificationResponse {
+            is_verified: true,
+            on_chain_hash: "test_hash".to_string(),
+            executable_hash: "test_hash".to_string(),
+            repo_url: "https://github.com/test/repo".to_string(),
+            commit: "abcd1234".to_string(),
+            last_verified_at: Some(chrono::Utc::now().naive_utc()),
+            is_frozen: false,
+            is_closed: true,
+        };
+
+        // Verify all fields are accessible
+        assert!(test_response.is_verified);
+        assert!(!test_response.is_frozen);
+        assert!(test_response.is_closed);
+        assert_eq!(test_response.repo_url, "https://github.com/test/repo");
+
+        // Test serialization/deserialization
+        let serialized = serde_json::to_string(&test_response).expect("Should serialize");
+        let deserialized: VerificationResponse = serde_json::from_str(&serialized).expect("Should deserialize");
+        
+        assert_eq!(test_response.is_frozen, deserialized.is_frozen);
+        assert_eq!(test_response.is_closed, deserialized.is_closed);
+        assert_eq!(test_response.is_verified, deserialized.is_verified);
+    }
+
+    #[test]
+    fn test_program_authority_params_with_closed_status() {
+        // Test that ProgramAuthorityParams includes closed field
+        let params = ProgramAuthorityParams {
+            authority: Some("test_authority".to_string()),
+            frozen: true,
+            closed: false,
+        };
+
+        assert_eq!(params.authority, Some("test_authority".to_string()));
+        assert!(params.frozen);
+        assert!(!params.closed);
+
+        let closed_params = ProgramAuthorityParams {
+            authority: None,
+            frozen: false,
+            closed: true,
+        };
+
+        assert_eq!(closed_params.authority, None);
+        assert!(!closed_params.frozen);
+        assert!(closed_params.closed);
+    }
+
+    #[test]
+    fn test_verification_response_with_signer_includes_closed_status() {
+        // Test that VerificationResponseWithSigner properly includes closed status
+        let verification_response = VerificationResponse {
+            is_verified: false,
+            on_chain_hash: "hash1".to_string(),
+            executable_hash: "hash2".to_string(),
+            repo_url: "https://github.com/example/repo".to_string(),
+            commit: "commit123".to_string(),
+            last_verified_at: None,
+            is_frozen: true,
+            is_closed: true,
+        };
+
+        let response_with_signer = VerificationResponseWithSigner {
+            verification_response,
+            signer: "test_signer".to_string(),
+        };
+
+        // Verify the nested verification response has the closed status
+        assert!(response_with_signer.verification_response.is_frozen);
+        assert!(response_with_signer.verification_response.is_closed);
+        assert!(!response_with_signer.verification_response.is_verified);
+        assert_eq!(response_with_signer.signer, "test_signer");
     }
 }

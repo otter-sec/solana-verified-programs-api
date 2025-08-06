@@ -13,6 +13,7 @@ impl DbClient {
         program_address: &Pubkey,
         authority_value: Option<&str>,
         program_is_frozen: bool,
+        program_is_closed: Option<bool>,
     ) -> Result<usize> {
         use crate::schema::program_authority::dsl::*;
 
@@ -22,16 +23,16 @@ impl DbClient {
 
         // Fetch the saved record from the database
         let saved_record = program_authority
-            .select((authority_id, is_frozen))
+            .select((authority_id, is_frozen, is_closed))
             .filter(program_id.eq(&program_id_str))
-            .first::<(Option<String>, bool)>(conn)
+            .first::<(Option<String>, bool, bool)>(conn)
             .await;
 
         match saved_record {
-            Ok((existing_authority, existing_is_frozen)) => {
+            Ok((existing_authority, existing_is_frozen, existing_is_closed)) => {
                 info!(
-                    "Program authority found for program_id {}: {:?}, is_frozen: {}",
-                    program_id_str, existing_authority, existing_is_frozen
+                    "Program authority found for program_id {}: {:?}, is_frozen: {}, is_closed: {}",
+                    program_id_str, existing_authority, existing_is_frozen, existing_is_closed
                 );
 
                 // If the record is frozen or the authority hasn't changed, return without updating
@@ -45,6 +46,7 @@ impl DbClient {
 
                 if existing_authority.as_deref() == authority_value
                     && existing_is_frozen == program_is_frozen
+                    && existing_is_closed == program_is_closed.unwrap_or(false)
                 {
                     info!(
                         "Authority for program_id {} is already the same. Skipping update.",
@@ -78,6 +80,7 @@ impl DbClient {
                 program_id.eq(&program_id_str),
                 authority_id.eq(authority_value.map(|val| val.to_string())),
                 is_frozen.eq(program_is_frozen),
+                is_closed.eq(program_is_closed.unwrap_or(false)),
                 last_updated.eq(current_time),
             ))
             .on_conflict(program_id)
@@ -85,6 +88,7 @@ impl DbClient {
             .set((
                 authority_id.eq(authority_value.map(|val| val.to_string())),
                 is_frozen.eq(program_is_frozen),
+                is_closed.eq(program_is_closed.unwrap_or(false)),
                 last_updated.eq(current_time),
             ))
             .execute(conn)
@@ -187,6 +191,28 @@ impl DbClient {
             }
         }
     }
+
+    /// Checks if a program is closed in the database.
+    /// Returns `false` if no record is found.
+    pub async fn is_program_closed(&self, program_address: &str) -> Result<bool> {
+        use crate::schema::program_authority::dsl::*;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        match program_authority
+            .select(is_closed)
+            .filter(program_id.eq(program_address))
+            .first::<bool>(conn)
+            .await
+        {
+            Ok(closed) => Ok(closed),
+            Err(diesel::result::Error::NotFound) => Ok(false),
+            Err(e) => {
+                error!("Failed to check if program is closed: {}", e);
+                Err(ApiError::Diesel(e))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -205,7 +231,7 @@ mod tests {
 
         // Test insert
         let insert_result = client
-            .insert_or_update_program_authority(&program_key, Some(authority), false)
+            .insert_or_update_program_authority(&program_key, Some(authority), false, Some(false))
             .await;
         assert!(insert_result.is_ok());
 
@@ -215,5 +241,125 @@ mod tests {
             .await;
         assert!(get_result.is_ok());
         assert_eq!(get_result.unwrap(), Some(authority.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_program_frozen_and_closed_status() {
+        dotenv::dotenv().ok();
+        let db_url = std::env::var("TEST_DATABASE_URL").unwrap();
+        let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
+        let client = DbClient::new(&db_url, &redis_url);
+
+        // Test Case 1: Normal program (not frozen, not closed)
+        let normal_program = Pubkey::new_unique();
+        let authority = "normal_authority";
+        
+        let insert_result = client
+            .insert_or_update_program_authority(&normal_program, Some(authority), false, Some(false))
+            .await;
+        assert!(insert_result.is_ok(), "Failed to insert normal program");
+
+        let is_frozen = client.is_program_frozen(&normal_program.to_string()).await;
+        assert!(is_frozen.is_ok());
+        assert!(!is_frozen.unwrap(), "Normal program should not be frozen");
+
+        let is_closed = client.is_program_closed(&normal_program.to_string()).await;
+        assert!(is_closed.is_ok());
+        assert!(!is_closed.unwrap(), "Normal program should not be closed");
+
+        // Test Case 2: Frozen program (frozen, not closed)
+        let frozen_program = Pubkey::new_unique();
+        
+        let insert_result = client
+            .insert_or_update_program_authority(&frozen_program, Some(authority), true, Some(false))
+            .await;
+        assert!(insert_result.is_ok(), "Failed to insert frozen program");
+
+        let is_frozen = client.is_program_frozen(&frozen_program.to_string()).await;
+        assert!(is_frozen.is_ok());
+        assert!(is_frozen.unwrap(), "Frozen program should be marked as frozen");
+
+        let is_closed = client.is_program_closed(&frozen_program.to_string()).await;
+        assert!(is_closed.is_ok());
+        assert!(!is_closed.unwrap(), "Frozen program should not be closed");
+
+        // Test Case 3: Closed program (not frozen, closed)
+        let closed_program = Pubkey::new_unique();
+        
+        let insert_result = client
+            .insert_or_update_program_authority(&closed_program, None, false, Some(true))
+            .await;
+        assert!(insert_result.is_ok(), "Failed to insert closed program");
+
+        let is_frozen = client.is_program_frozen(&closed_program.to_string()).await;
+        assert!(is_frozen.is_ok());
+        assert!(!is_frozen.unwrap(), "Closed program should not be marked as frozen");
+
+        let is_closed = client.is_program_closed(&closed_program.to_string()).await;
+        assert!(is_closed.is_ok());
+        assert!(is_closed.unwrap(), "Closed program should be marked as closed");
+
+        // Test Case 4: Both frozen and closed (edge case)
+        let frozen_closed_program = Pubkey::new_unique();
+        
+        let insert_result = client
+            .insert_or_update_program_authority(&frozen_closed_program, None, true, Some(true))
+            .await;
+        assert!(insert_result.is_ok(), "Failed to insert frozen and closed program");
+
+        let is_frozen = client.is_program_frozen(&frozen_closed_program.to_string()).await;
+        assert!(is_frozen.is_ok());
+        assert!(is_frozen.unwrap(), "Frozen and closed program should be marked as frozen");
+
+        let is_closed = client.is_program_closed(&frozen_closed_program.to_string()).await;
+        assert!(is_closed.is_ok());
+        assert!(is_closed.unwrap(), "Frozen and closed program should be marked as closed");
+
+        // Test Case 5: Non-existent program (should return false for both)
+        let nonexistent_program = Pubkey::new_unique();
+        
+        let is_frozen = client.is_program_frozen(&nonexistent_program.to_string()).await;
+        assert!(is_frozen.is_ok());
+        assert!(!is_frozen.unwrap(), "Non-existent program should not be frozen");
+
+        let is_closed = client.is_program_closed(&nonexistent_program.to_string()).await;
+        assert!(is_closed.is_ok());
+        assert!(!is_closed.unwrap(), "Non-existent program should not be closed");
+
+        // Test Case 6: Update existing program status
+        let update_program = Pubkey::new_unique();
+        
+        // Initially insert as normal program
+        let insert_result = client
+            .insert_or_update_program_authority(&update_program, Some(authority), false, Some(false))
+            .await;
+        assert!(insert_result.is_ok(), "Failed to insert program for update test");
+
+        // Verify initial state
+        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
+        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
+        assert!(!is_frozen && !is_closed, "Program should initially be normal");
+
+        // Update to closed
+        let update_result = client
+            .insert_or_update_program_authority(&update_program, None, false, Some(true))
+            .await;
+        assert!(update_result.is_ok(), "Failed to update program to closed");
+
+        // Verify updated state
+        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
+        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
+        assert!(!is_frozen && is_closed, "Program should now be closed");
+
+        // Update to frozen
+        let update_result = client
+            .insert_or_update_program_authority(&update_program, Some(authority), true, Some(false))
+            .await;
+        assert!(update_result.is_ok(), "Failed to update program to frozen");
+
+        // Verify final state
+        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
+        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
+        assert!(is_frozen && !is_closed, "Program should now be frozen but not closed");
     }
 }
