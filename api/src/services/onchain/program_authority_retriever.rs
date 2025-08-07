@@ -296,16 +296,6 @@ mod tests {
                     if is_closed {
                         assert_eq!(authority, None, "Closed program should not have authority");
                     }
-                    
-                    // Validate that we get proper boolean values
-                    assert!(
-                        is_frozen == true || is_frozen == false, 
-                        "is_frozen should be a valid boolean"
-                    );
-                    assert!(
-                        is_closed == true || is_closed == false, 
-                        "is_closed should be a valid boolean"
-                    );
                 }
                 Err(e) => {
                     println!("Error for program {program_id}: {e:?}");
