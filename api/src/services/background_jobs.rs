@@ -297,7 +297,7 @@ async fn check_program_status(program_id: &str) -> Result<ProgramStatusUpdate> {
                 program_id: program_id.to_string(),
                 authority: None,
                 is_frozen: false,
-                is_closed: true, // Assume closed if we can't fetch authority
+                is_closed: false,
                 last_checked: chrono::Utc::now().naive_utc(),
             })
         }

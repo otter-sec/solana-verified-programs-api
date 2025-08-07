@@ -87,17 +87,33 @@ async fn get_program_authority_with_client(
         }
         Err(e) => {
             let error_str = e.to_string();
+
+            // Check if this is an HTTP error (like 429 rate limiting) first
+            if error_str.contains("HTTP status")
+                || error_str.contains("Too Many Requests")
+                || error_str.contains("429")
+            {
+                error!("RPC HTTP error (likely rate limiting): {}", e);
+                return Err(ApiError::Custom(format!("RPC HTTP error: {e}")));
+            }
+
             // Check if the error indicates the program data account was not found (closed)
-            if error_str.contains("could not find account") || error_str.contains("AccountNotFound")
+            // Be more specific - look for actual Solana RPC account not found errors, not HTTP errors
+            if (error_str.contains("could not find account") && !error_str.contains("HTTP"))
+                || (error_str.contains("AccountNotFound") && !error_str.contains("HTTP"))
             {
                 info!(
-                    "Program data account not found - program appears to be closed: {}",
-                    program_data_account_id
+                    "Program data account not found - program appears to be closed: {} Program id: {}",
+                    program_data_account_id, program_id
                 );
                 // Return None authority, is_frozen as false, is_closed as true to indicate the program is closed
                 return Ok((None, false, true));
             }
+
             error!("Failed to fetch program data account: {}", e);
+            return Err(ApiError::Custom(format!(
+                "Failed to fetch program data account: {e}"
+            )));
         }
     }
 
@@ -260,6 +276,40 @@ mod tests {
                 println!("Got error for closed program (acceptable): {e:?}");
             }
         }
+    }
+
+    #[test]
+    fn test_error_string_parsing() {
+        // Test that we correctly distinguish between rate limit errors and actual closed programs
+
+        // Rate limit error (should NOT be treated as closed program)
+        let rate_limit_error = "AccountNotFound: pubkey=33G1UvntzZrQMWfRwP8c8KzsMeZwdUV1enVnnPyZ5dpv: HTTP status client error (429 Too Many Requests)";
+        assert!(rate_limit_error.contains("HTTP status") || rate_limit_error.contains("429"));
+        assert!(!should_treat_as_closed_program(rate_limit_error));
+
+        // Actual closed program error (should be treated as closed program)
+        let closed_program_error =
+            "AccountNotFound: pubkey=FwfEft6xYShpzwTVaXTc7G3Vax8ykefuviC6AhATv97p";
+        assert!(!closed_program_error.contains("HTTP"));
+        assert!(should_treat_as_closed_program(closed_program_error));
+
+        // Another HTTP error variant
+        let http_error = "could not find account: HTTP status server error";
+        assert!(!should_treat_as_closed_program(http_error));
+    }
+
+    fn should_treat_as_closed_program(error_str: &str) -> bool {
+        // Check if this is an HTTP error (like 429 rate limiting) first
+        if error_str.contains("HTTP status")
+            || error_str.contains("Too Many Requests")
+            || error_str.contains("429")
+        {
+            return false;
+        }
+
+        // Check if the error indicates the program data account was not found (closed)
+        (error_str.contains("could not find account") && !error_str.contains("HTTP"))
+            || (error_str.contains("AccountNotFound") && !error_str.contains("HTTP"))
     }
 
     #[tokio::test]
