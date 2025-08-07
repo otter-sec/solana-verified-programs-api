@@ -19,8 +19,6 @@ use tracing::{error, info};
 use super::models::{ProgramAuthorityParams, VerificationResponse};
 
 pub const PER_PAGE: i64 = 20;
-// Additional programs to fetch from DB to account for potential invalid/closed programs
-pub const FETCH_BUFFER: i64 = 5;
 
 #[derive(QueryableByName)]
 struct CountResult {
@@ -61,9 +59,10 @@ impl DbClient {
             })
     }
 
-    /// Retrieves a page of verified programs from the database
+    /// Retrieves a page of verified programs from the database using cached status
     ///
     /// Returns a list of VerifiedProgram structs
+    /// This version uses cached database values for program status instead of real-time RPC checks
     ///
     ///  
     pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<(Vec<String>, i64)> {
@@ -74,7 +73,80 @@ impl DbClient {
         // Use a single query to get verified programs with pagination
         let conn = &mut self.get_db_conn().await?;
 
-        // First get the total count of verified programs
+        // Get count and programs using cached status from database
+        // This query excludes programs that are marked as closed or frozen in the database
+        let count_query = r#"
+            SELECT COUNT(DISTINCT vp.program_id) as total
+            FROM verified_programs vp
+            LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+            WHERE vp.is_verified = true
+            AND (pa.is_closed IS NULL OR pa.is_closed = false)
+            AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+        "#;
+
+        let total_count: i64 = sql_query(count_query)
+            .get_result::<CountResult>(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to get total count of verified programs: {}", e);
+                e
+            })?
+            .total;
+
+        info!(
+            "Fetching page {} with offset {}, limit {} from DB (cached status)",
+            page, offset, PER_PAGE
+        );
+
+        // Fetch programs excluding closed/frozen ones using cached database status
+        let query = r#"
+            SELECT DISTINCT vp.program_id
+            FROM verified_programs vp
+            LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+            WHERE vp.is_verified = true
+            AND (pa.is_closed IS NULL OR pa.is_closed = false)
+            AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+            ORDER BY vp.program_id
+            LIMIT $1 OFFSET $2
+        "#;
+
+        let program_ids: Vec<String> = sql_query(query)
+            .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
+            .bind::<diesel::sql_types::BigInt, _>(offset)
+            .get_results::<ProgramIdResult>(conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch paginated verified programs: {}", e);
+                e
+            })?
+            .into_iter()
+            .map(|result| result.program_id)
+            .collect();
+
+        info!(
+            "Page {}: Found {} programs using cached database status",
+            page,
+            program_ids.len(),
+        );
+
+        Ok((program_ids, total_count))
+    }
+
+    /// Fallback method: Get verified programs with real-time RPC validation
+    /// This is the old implementation kept for comparison or emergency use
+    pub async fn _get_verified_program_ids_page_realtime(
+        &self,
+        page: i64,
+    ) -> Result<(Vec<String>, i64)> {
+        info!("Using REAL-TIME RPC validation (fallback method)");
+
+        // Ensure page is valid
+        let page = page.max(1);
+        let offset = (page - 1) * PER_PAGE;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        // Get total count
         let count_query = r#"
             SELECT COUNT(DISTINCT program_id) as total
             FROM verified_programs
@@ -90,9 +162,8 @@ impl DbClient {
             })?
             .total;
 
-        // Fetch more programs initially to account for potential invalid/closed programs
-        // We'll fetch PER_PAGE + FETCH_MULTIPLIER to ensure we have enough valid programs
-        let fetch_limit = PER_PAGE + FETCH_BUFFER;
+        // Fetch more programs to account for potential invalid/closed programs
+        let fetch_limit = PER_PAGE + 5;
 
         info!(
             "Fetching page {} with offset {}, limit {} from DB",
@@ -146,15 +217,14 @@ impl DbClient {
                 let this = this.clone();
                 let semaphore = Arc::clone(&semaphore);
                 async move {
-                    // Acquire semaphore permit before making RPC calls
                     let _permit = semaphore
                         .acquire()
                         .await
                         .expect("Semaphore should not be closed");
 
                     match this.is_program_valid_and_verified(&pid, client).await {
-                        Ok(Some(_)) => Some(pid), // Valid and verified
-                        _ => None,                // Invalid, closed, or error
+                        Ok(Some(_)) => Some(pid),
+                        _ => None,
                     }
                 }
             })

@@ -265,7 +265,7 @@ mod tests {
     #[tokio::test]
     async fn test_program_status_differentiation() {
         // Test that we can differentiate between different program states
-        
+
         // Test 1: Valid program with authority (should not be frozen or closed)
         let result = get_program_authority("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC").await;
         if let Ok((authority, is_frozen, is_closed)) = result {
@@ -291,7 +291,7 @@ mod tests {
                     println!(
                         "Program {program_id}: Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}"
                     );
-                    
+
                     // Basic validation: closed programs should not have authority
                     if is_closed {
                         assert_eq!(authority, None, "Closed program should not have authority");

@@ -253,9 +253,14 @@ mod tests {
         // Test Case 1: Normal program (not frozen, not closed)
         let normal_program = Pubkey::new_unique();
         let authority = "normal_authority";
-        
+
         let insert_result = client
-            .insert_or_update_program_authority(&normal_program, Some(authority), false, Some(false))
+            .insert_or_update_program_authority(
+                &normal_program,
+                Some(authority),
+                false,
+                Some(false),
+            )
             .await;
         assert!(insert_result.is_ok(), "Failed to insert normal program");
 
@@ -269,7 +274,7 @@ mod tests {
 
         // Test Case 2: Frozen program (frozen, not closed)
         let frozen_program = Pubkey::new_unique();
-        
+
         let insert_result = client
             .insert_or_update_program_authority(&frozen_program, Some(authority), true, Some(false))
             .await;
@@ -277,7 +282,10 @@ mod tests {
 
         let is_frozen = client.is_program_frozen(&frozen_program.to_string()).await;
         assert!(is_frozen.is_ok());
-        assert!(is_frozen.unwrap(), "Frozen program should be marked as frozen");
+        assert!(
+            is_frozen.unwrap(),
+            "Frozen program should be marked as frozen"
+        );
 
         let is_closed = client.is_program_closed(&frozen_program.to_string()).await;
         assert!(is_closed.is_ok());
@@ -285,7 +293,7 @@ mod tests {
 
         // Test Case 3: Closed program (not frozen, closed)
         let closed_program = Pubkey::new_unique();
-        
+
         let insert_result = client
             .insert_or_update_program_authority(&closed_program, None, false, Some(true))
             .await;
@@ -293,52 +301,98 @@ mod tests {
 
         let is_frozen = client.is_program_frozen(&closed_program.to_string()).await;
         assert!(is_frozen.is_ok());
-        assert!(!is_frozen.unwrap(), "Closed program should not be marked as frozen");
+        assert!(
+            !is_frozen.unwrap(),
+            "Closed program should not be marked as frozen"
+        );
 
         let is_closed = client.is_program_closed(&closed_program.to_string()).await;
         assert!(is_closed.is_ok());
-        assert!(is_closed.unwrap(), "Closed program should be marked as closed");
+        assert!(
+            is_closed.unwrap(),
+            "Closed program should be marked as closed"
+        );
 
         // Test Case 4: Both frozen and closed (edge case)
         let frozen_closed_program = Pubkey::new_unique();
-        
+
         let insert_result = client
             .insert_or_update_program_authority(&frozen_closed_program, None, true, Some(true))
             .await;
-        assert!(insert_result.is_ok(), "Failed to insert frozen and closed program");
+        assert!(
+            insert_result.is_ok(),
+            "Failed to insert frozen and closed program"
+        );
 
-        let is_frozen = client.is_program_frozen(&frozen_closed_program.to_string()).await;
+        let is_frozen = client
+            .is_program_frozen(&frozen_closed_program.to_string())
+            .await;
         assert!(is_frozen.is_ok());
-        assert!(is_frozen.unwrap(), "Frozen and closed program should be marked as frozen");
+        assert!(
+            is_frozen.unwrap(),
+            "Frozen and closed program should be marked as frozen"
+        );
 
-        let is_closed = client.is_program_closed(&frozen_closed_program.to_string()).await;
+        let is_closed = client
+            .is_program_closed(&frozen_closed_program.to_string())
+            .await;
         assert!(is_closed.is_ok());
-        assert!(is_closed.unwrap(), "Frozen and closed program should be marked as closed");
+        assert!(
+            is_closed.unwrap(),
+            "Frozen and closed program should be marked as closed"
+        );
 
         // Test Case 5: Non-existent program (should return false for both)
         let nonexistent_program = Pubkey::new_unique();
-        
-        let is_frozen = client.is_program_frozen(&nonexistent_program.to_string()).await;
-        assert!(is_frozen.is_ok());
-        assert!(!is_frozen.unwrap(), "Non-existent program should not be frozen");
 
-        let is_closed = client.is_program_closed(&nonexistent_program.to_string()).await;
+        let is_frozen = client
+            .is_program_frozen(&nonexistent_program.to_string())
+            .await;
+        assert!(is_frozen.is_ok());
+        assert!(
+            !is_frozen.unwrap(),
+            "Non-existent program should not be frozen"
+        );
+
+        let is_closed = client
+            .is_program_closed(&nonexistent_program.to_string())
+            .await;
         assert!(is_closed.is_ok());
-        assert!(!is_closed.unwrap(), "Non-existent program should not be closed");
+        assert!(
+            !is_closed.unwrap(),
+            "Non-existent program should not be closed"
+        );
 
         // Test Case 6: Update existing program status
         let update_program = Pubkey::new_unique();
-        
+
         // Initially insert as normal program
         let insert_result = client
-            .insert_or_update_program_authority(&update_program, Some(authority), false, Some(false))
+            .insert_or_update_program_authority(
+                &update_program,
+                Some(authority),
+                false,
+                Some(false),
+            )
             .await;
-        assert!(insert_result.is_ok(), "Failed to insert program for update test");
+        assert!(
+            insert_result.is_ok(),
+            "Failed to insert program for update test"
+        );
 
         // Verify initial state
-        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
-        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
-        assert!(!is_frozen && !is_closed, "Program should initially be normal");
+        let is_frozen = client
+            .is_program_frozen(&update_program.to_string())
+            .await
+            .unwrap();
+        let is_closed = client
+            .is_program_closed(&update_program.to_string())
+            .await
+            .unwrap();
+        assert!(
+            !is_frozen && !is_closed,
+            "Program should initially be normal"
+        );
 
         // Update to closed
         let update_result = client
@@ -347,8 +401,14 @@ mod tests {
         assert!(update_result.is_ok(), "Failed to update program to closed");
 
         // Verify updated state
-        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
-        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
+        let is_frozen = client
+            .is_program_frozen(&update_program.to_string())
+            .await
+            .unwrap();
+        let is_closed = client
+            .is_program_closed(&update_program.to_string())
+            .await
+            .unwrap();
         assert!(!is_frozen && is_closed, "Program should now be closed");
 
         // Update to frozen
@@ -358,8 +418,17 @@ mod tests {
         assert!(update_result.is_ok(), "Failed to update program to frozen");
 
         // Verify final state
-        let is_frozen = client.is_program_frozen(&update_program.to_string()).await.unwrap();
-        let is_closed = client.is_program_closed(&update_program.to_string()).await.unwrap();
-        assert!(is_frozen && !is_closed, "Program should now be frozen but not closed");
+        let is_frozen = client
+            .is_program_frozen(&update_program.to_string())
+            .await
+            .unwrap();
+        let is_closed = client
+            .is_program_closed(&update_program.to_string())
+            .await
+            .unwrap();
+        assert!(
+            is_frozen && !is_closed,
+            "Program should now be frozen but not closed"
+        );
     }
 }

@@ -1,11 +1,15 @@
 //! Service layer containing core business logic and external integrations
 //!
 //! This module contains:
+//! - Background job management for periodic tasks
 //! - Logging services for build outputs
 //! - Miscellaneous utility functions
 //! - On-chain data retrieval services
 //! - Program verification logic
 //! - RPC client management with key rotation
+
+/// Background job management for periodic tasks
+pub mod background_jobs;
 
 /// Build log management services
 pub mod logging;

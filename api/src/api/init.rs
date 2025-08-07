@@ -132,7 +132,8 @@ pub fn initialize_router(db: DbClient) -> Router {
         )
         // Base route
         .route("/", get(|| async { index() }))
-        .route("/health", get(|| async { StatusCode::OK }))
+        .route("/health", get(health_check))
+        .route("/health/background-jobs", get(background_job_status))
         // Apply common middleware
         .layer(trace_layer)
         .with_state(db)

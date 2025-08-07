@@ -52,15 +52,16 @@ impl DbClient {
         let saved_program_closed = closed_status?;
 
         // Only fetch program authority if we don't have it provided and program is not frozen
-        let (program_authority, program_frozen, program_closed) = if let Some(info) = &authority_info {
-            (info.authority.clone(), info.frozen, info.closed)
-        } else if saved_program_frozen {
-            // If program is already frozen in DB, no need to check authority
-            (None, true, false)
-        } else {
-            // Only make RPC call if program is not frozen
-            get_program_authority(&program_address).await?
-        };
+        let (program_authority, program_frozen, program_closed) =
+            if let Some(info) = &authority_info {
+                (info.authority.clone(), info.frozen, info.closed)
+            } else if saved_program_frozen {
+                // If program is already frozen in DB, no need to check authority
+                (None, true, false)
+            } else {
+                // Only make RPC call if program is not frozen
+                get_program_authority(&program_address).await?
+            };
 
         let return_response = |response: VerificationResponse| async {
             if let Ok(serialized) = serde_json::to_string(&response) {
@@ -92,7 +93,7 @@ impl DbClient {
         }
 
         // Update database if frozen status changed
-        if program_frozen != saved_program_frozen || saved_program_closed != program_closed{
+        if program_frozen != saved_program_frozen || saved_program_closed != program_closed {
             let program_id_pubkey = Pubkey::from_str(&program_address)?;
             self.insert_or_update_program_authority(
                 &program_id_pubkey,
@@ -182,8 +183,8 @@ impl DbClient {
                     let program_id_pubkey = Pubkey::from_str(&program_address)?;
                     self.insert_or_update_program_authority(
                         &program_id_pubkey,
-                        None, // No authority for closed programs
-                        false, // Don't mark as frozen
+                        None,       // No authority for closed programs
+                        false,      // Don't mark as frozen
                         Some(true), // Mark as closed
                     )
                     .await?;
@@ -196,7 +197,7 @@ impl DbClient {
                         last_verified_at: Some(res.verified_at),
                         commit: build_params.commit_hash.unwrap_or_default(),
                         is_frozen: false, // Don't mark as frozen, mark as closed instead
-                        is_closed: true, // Program is definitely closed in this case
+                        is_closed: true,  // Program is definitely closed in this case
                     };
                     return return_response(response).await;
                 }
@@ -259,8 +260,8 @@ impl DbClient {
                             if let Ok(program_id_pubkey) = Pubkey::from_str(&program_address) {
                                 self.insert_or_update_program_authority(
                                     &program_id_pubkey,
-                                    None, // No authority for closed programs
-                                    false, // Don't mark as frozen
+                                    None,       // No authority for closed programs
+                                    false,      // Don't mark as frozen
                                     Some(true), // Mark as closed
                                 )
                                 .await
@@ -535,17 +536,17 @@ impl DbClient {
         };
 
         // Better error handling for program authority
-        let (program_authority, is_frozen, is_closed) = match get_program_authority(&payload.program_id).await
-        {
-            Ok(authority) => authority,
-            Err(e) => {
-                error!(
-                    "Failed to get program authority for {}: {:?}",
-                    payload.program_id, e
-                );
-                (None, false, false)
-            }
-        };
+        let (program_authority, is_frozen, is_closed) =
+            match get_program_authority(&payload.program_id).await {
+                Ok(authority) => authority,
+                Err(e) => {
+                    error!(
+                        "Failed to get program authority for {}: {:?}",
+                        payload.program_id, e
+                    );
+                    (None, false, false)
+                }
+            };
 
         let params_from_onchain =
             onchain::get_otter_verify_params(&payload.program_id, None, program_authority.clone())
@@ -654,12 +655,12 @@ impl DbClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::models::{ProgramAuthorityParams};
+    use crate::db::models::ProgramAuthorityParams;
 
     #[tokio::test]
     async fn test_verification_response_includes_closed_status() {
         // Test that VerificationResponse properly includes both is_frozen and is_closed fields
-        
+
         let test_response = VerificationResponse {
             is_verified: true,
             on_chain_hash: "test_hash".to_string(),
@@ -679,8 +680,9 @@ mod tests {
 
         // Test serialization/deserialization
         let serialized = serde_json::to_string(&test_response).expect("Should serialize");
-        let deserialized: VerificationResponse = serde_json::from_str(&serialized).expect("Should deserialize");
-        
+        let deserialized: VerificationResponse =
+            serde_json::from_str(&serialized).expect("Should deserialize");
+
         assert_eq!(test_response.is_frozen, deserialized.is_frozen);
         assert_eq!(test_response.is_closed, deserialized.is_closed);
         assert_eq!(test_response.is_verified, deserialized.is_verified);
