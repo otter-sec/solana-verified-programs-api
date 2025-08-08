@@ -1,5 +1,9 @@
 use super::DbClient;
-use crate::{db::redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS, errors::ApiError, Result};
+use crate::{
+    db::{models::ProgramAuthorityData, redis::PROGRAM_AUTHORITY_CACHE_EXPIRY_SECONDS},
+    errors::ApiError,
+    Result,
+};
 use diesel::{expression_methods::ExpressionMethods, query_dsl::QueryDsl};
 use diesel_async::RunQueryDsl;
 use solana_sdk::pubkey::Pubkey;
@@ -170,6 +174,38 @@ impl DbClient {
 
         Ok(result)
     }
+    /// Retrieves complete program authority data (authority, frozen, closed) in a single query
+    /// Returns None if no record is found
+    pub async fn get_program_authority_data(
+        &self,
+        program_address: &str,
+    ) -> Result<Option<ProgramAuthorityData>> {
+        use crate::schema::program_authority::dsl::*;
+
+        let conn = &mut self.get_db_conn().await?;
+
+        match program_authority
+            .select((authority_id, is_frozen, is_closed))
+            .filter(program_id.eq(program_address))
+            .first::<(Option<String>, bool, bool)>(conn)
+            .await
+        {
+            Ok((auth, frozen, closed)) => Ok(Some(ProgramAuthorityData {
+                authority: auth,
+                is_frozen: frozen,
+                is_closed: closed,
+            })),
+            Err(diesel::result::Error::NotFound) => Ok(None),
+            Err(e) => {
+                error!(
+                    "Failed to get program authority data for {}: {}",
+                    program_address, e
+                );
+                Err(ApiError::Diesel(e))
+            }
+        }
+    }
+
     /// Checks if a program is frozen in the database.
     /// Returns `false` if no record is found.
     pub async fn is_program_frozen(&self, program_address: &str) -> Result<bool> {

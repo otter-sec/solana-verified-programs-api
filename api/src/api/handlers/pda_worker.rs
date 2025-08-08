@@ -74,7 +74,7 @@ async fn process_otter_verify_instruction(
                     "Program {} appears to be closed in pda_worker. Marking as unverified.",
                     program_id
                 );
-                // Mark program as unverified and frozen in database
+                // Mark program as unverified and closed in database
                 db.mark_program_unverified(program_id).await?;
                 if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
                     db.insert_or_update_program_authority(&program_pubkey, None, false, Some(true))

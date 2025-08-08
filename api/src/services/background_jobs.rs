@@ -337,25 +337,47 @@ async fn update_single_program_status(
 
     let program_pubkey = Pubkey::from_str(&update.program_id)?;
 
-    // Check current status in database
-    let current_frozen = db_client
-        .is_program_frozen(&update.program_id)
-        .await
-        .unwrap_or(false);
-    let current_closed = db_client
-        .is_program_closed(&update.program_id)
-        .await
-        .unwrap_or(false);
+    // Fetch all program authority data in a single database query
+    let current_data = db_client
+        .get_program_authority_data(&update.program_id)
+        .await?;
 
-    // Only update if status has changed
-    if current_frozen != update.is_frozen || current_closed != update.is_closed {
+    let (current_authority, current_frozen, current_closed) = match current_data {
+        Some(data) => (data.authority, data.is_frozen, data.is_closed),
+        None => (None, false, false), // Default values if no record exists
+    };
+
+    // Check if any status or authority has changed
+    let frozen_changed = current_frozen != update.is_frozen;
+    let closed_changed = current_closed != update.is_closed;
+    let authority_changed = current_authority != update.authority;
+
+    if frozen_changed || closed_changed || authority_changed {
+        let mut changes = Vec::new();
+
+        if frozen_changed {
+            changes.push(format!(
+                "frozen: {} -> {}",
+                current_frozen, update.is_frozen
+            ));
+        }
+        if closed_changed {
+            changes.push(format!(
+                "closed: {} -> {}",
+                current_closed, update.is_closed
+            ));
+        }
+        if authority_changed {
+            changes.push(format!(
+                "authority: {:?} -> {:?}",
+                current_authority, update.authority
+            ));
+        }
+
         info!(
-            "Program {} status changed - frozen: {} -> {}, closed: {} -> {} (checked at {})",
+            "Program {} status/authority changed - {} (checked at {})",
             update.program_id,
-            current_frozen,
-            update.is_frozen,
-            current_closed,
-            update.is_closed,
+            changes.join(", "),
             update.last_checked
         );
 

@@ -93,7 +93,7 @@ impl DbClient {
         }
 
         // Update database if frozen status changed
-        if program_frozen != saved_program_frozen || saved_program_closed != program_closed {
+        if program_frozen != saved_program_frozen || program_closed != saved_program_closed {
             let program_id_pubkey = Pubkey::from_str(&program_address)?;
             self.insert_or_update_program_authority(
                 &program_id_pubkey,
