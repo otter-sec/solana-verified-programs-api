@@ -58,8 +58,7 @@ impl DbClient {
 
         match value {
             Value::Nil => Err(ApiError::NotFound(format!(
-                "Cache record not found for program: {}",
-                program_address
+                "Cache record not found for program: {program_address}"
             ))),
             _ => FromRedisValue::from_redis_value(&value).map_err(|err| {
                 error!("Redis value conversion error: {}", err);

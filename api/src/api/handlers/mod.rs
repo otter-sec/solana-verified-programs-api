@@ -9,6 +9,7 @@ pub mod verification_status;
 pub mod verify_helpers; // Shared verification utilities // Program verification status
 
 // Status and information handlers
+pub mod health; // Health check and background job status
 pub mod job_status; // Build job status
 pub mod logs; // Build logs retrieval
 pub mod pda_worker;
@@ -18,6 +19,7 @@ pub mod verified_programs_status; // Status of verified programs // PDA updates/
 // Re-export handlers for easier access
 pub(crate) use async_verify::{process_async_verification, process_async_verification_with_signer};
 use axum::http::HeaderMap;
+pub(crate) use health::{background_job_status, health_check};
 pub(crate) use job_status::get_job_status;
 pub(crate) use logs::get_build_logs;
 pub(crate) use pda_worker::handle_pda_updates_creations;

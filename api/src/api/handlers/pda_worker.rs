@@ -6,8 +6,7 @@ use crate::{
         models::{parse_helius_transaction, SolanaProgramBuildParams},
         DbClient,
     },
-    services::{get_on_chain_hash, onchain::OtterBuildParams},
-    CONFIG,
+    services::{get_on_chain_hash, onchain::OtterBuildParams, rpc_manager::get_rpc_manager},
 };
 use axum::{
     extract::State,
@@ -16,7 +15,6 @@ use axum::{
 };
 use borsh::BorshDeserialize;
 use serde_json::Value;
-use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info, warn};
 
@@ -67,14 +65,40 @@ async fn process_otter_verify_instruction(
         Err(_) => String::default(),
     };
 
-    let onchain_hash = get_on_chain_hash(program_id).await?;
+    let onchain_hash = match get_on_chain_hash(program_id).await {
+        Ok(hash) => hash,
+        Err(e) => {
+            let error_str = e.to_string();
+            if error_str.contains("Program appears to be closed") {
+                info!(
+                    "Program {} appears to be closed in pda_worker. Marking as unverified.",
+                    program_id
+                );
+                // Mark program as unverified and closed in database
+                db.mark_program_unverified(program_id).await?;
+                if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
+                    db.insert_or_update_program_authority(&program_pubkey, None, false, Some(true))
+                        .await?;
+                }
+                return Ok(()); // Exit early for closed programs
+            }
+            return Err(e.into());
+        }
+    };
 
     if onchain_hash != executable_hash {
         db.unverify_program(program_id, &onchain_hash).await?;
         // start new build
-        let rpc_client = RpcClient::new(CONFIG.rpc_url.clone());
         let pda_account_pubkey = Pubkey::from_str(pda_account)?;
-        let params = rpc_client.get_account_data(&pda_account_pubkey).await?;
+        let rpc_manager = get_rpc_manager();
+        let params = rpc_manager
+            .execute_with_retry(|client| async move {
+                client
+                    .get_account_data(&pda_account_pubkey)
+                    .await
+                    .map_err(|e| crate::errors::ApiError::Custom(format!("RPC error: {e}")))
+            })
+            .await?;
         let otter_build_params = match OtterBuildParams::try_from_slice(&params[8..]) {
             Ok(params) => params,
             Err(e) => {

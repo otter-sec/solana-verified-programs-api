@@ -19,8 +19,10 @@ pub struct VerificationResponse {
     pub commit: String,
     /// Timestamp of when the program was last verified
     pub last_verified_at: Option<NaiveDateTime>,
-    /// Public key of the signer who verified the program
+    /// Indicates if the program is frozen (not upgradeable)
     pub is_frozen: bool,
+    /// Indicates if the program is closed (program data account doesn't exist)
+    pub is_closed: bool,
 }
 
 /// Extends VerificationResponse with signer information
@@ -81,6 +83,7 @@ pub struct ExtendedStatusResponse {
     #[serde(flatten)]
     pub status: StatusResponse,
     pub is_frozen: bool,
+    pub is_closed: bool,
 }
 
 /// Response structure for verification job status

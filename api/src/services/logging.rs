@@ -108,7 +108,7 @@ fn sanitize_log_content(content: &str) -> String {
 
 /// Constructs the full path for a log file
 fn get_log_path(file_name: &str, log_type: &str) -> PathBuf {
-    Path::new(LOGS_DIR).join(format!("{}_{}.log", file_name, log_type))
+    Path::new(LOGS_DIR).join(format!("{file_name}_{log_type}.log"))
 }
 
 /// Writes content to a log file
@@ -143,8 +143,8 @@ mod tests {
         let std_err = "Warning: deprecated feature";
 
         // Write logs
-        let err_path = test_logs_dir.join(format!("{}_err.log", file_name));
-        let out_path = test_logs_dir.join(format!("{}_out.log", file_name));
+        let err_path = test_logs_dir.join(format!("{file_name}_err.log"));
+        let out_path = test_logs_dir.join(format!("{file_name}_out.log"));
 
         tokio_test::block_on(write_log_file(&err_path, std_err)).unwrap();
         tokio_test::block_on(write_log_file(&out_path, std_out)).unwrap();
@@ -158,7 +158,7 @@ mod tests {
     fn test_sanitize_log_content() {
         // Test that actual RPC URL from config gets replaced
         let test_content = format!("Using RPC URL: {}", crate::CONFIG.rpc_url);
-        let expected = format!("Using RPC URL: {}", SOLANA_MAINNET_RPC);
+        let expected = format!("Using RPC URL: {SOLANA_MAINNET_RPC}");
         let result = sanitize_log_content(&test_content);
         assert_eq!(result, expected);
 

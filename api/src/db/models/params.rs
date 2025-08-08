@@ -57,4 +57,13 @@ pub(crate) struct VerificationStatusParams {
 pub struct ProgramAuthorityParams {
     pub authority: Option<String>,
     pub frozen: bool,
+    pub closed: bool,
+}
+
+/// Complete program authority data from database
+#[derive(Debug, Clone)]
+pub struct ProgramAuthorityData {
+    pub authority: Option<String>,
+    pub is_frozen: bool,
+    pub is_closed: bool,
 }
