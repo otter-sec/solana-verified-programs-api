@@ -6,7 +6,7 @@ use solana_client::{
     nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
     rpc_config::RpcTransactionConfig,
 };
-use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_sdk::{pubkey::Pubkey, signature::Signature, system_program};
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
 use std::{str::FromStr, sync::Arc};
 use tracing::{error, info};
@@ -88,6 +88,15 @@ async fn get_program_authority_with_client(
         Err(e) => {
             use solana_client::client_error::{ClientError, ClientErrorKind};
             use solana_client::rpc_request::RpcError;
+
+            // Use is_account_closed to check if the program data account is closed
+            if let Ok(true) = is_account_closed(&client, &program_data_account_id).await {
+                info!(
+                    "Program data account is closed - program appears to be closed: {} Program id: {}",
+                    program_data_account_id, program_id
+                );
+                return Ok((None, false, true)); // Closed
+            }
 
             // Check if this is specifically an account not found error using proper error types
             if let ClientError {
@@ -193,9 +202,64 @@ async fn get_program_authority_with_client(
 
     Ok((None, false, false)) // Default to both as false if no authority is found
 }
+
+/// Checks if a Solana account is closed (i.e., does not exist or has lamports = 0 and owned by system program).
+async fn is_account_closed(rpc_client: &RpcClient, pubkey: &Pubkey) -> Result<bool> {
+    match rpc_client.get_account(pubkey).await {
+        Ok(account) => {
+            let is_closed = account.lamports == 0 && account.owner == system_program::ID;
+            Ok(is_closed)
+        }
+        Err(err) => {
+            if err.to_string().contains("AccountNotFound") {
+                // Account is fully closed and no longer exists
+                Ok(true)
+            } else {
+                // Some other RPC error
+                Err(err.into())
+            }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_is_account_closed() {
+        let rpc_manager = get_rpc_manager();
+        let client = rpc_manager.get_client().await;
+
+        // Test with a known closed program (should return true)
+        let closed_program_pubkey =
+            Pubkey::from_str("9fjvZfiAWRVXRHjBEz9mkAkLgK4dgbg7LnwWyPwHvFYB")
+                .expect("Invalid pubkey");
+
+        let result = is_account_closed(&client, &closed_program_pubkey).await;
+        assert!(
+            result.is_ok(),
+            "Failed to check closed account: {:?}",
+            result.err()
+        );
+        let is_closed = result.unwrap();
+        assert!(is_closed, "Closed program should be detected as closed");
+
+        // Test with an active program (should return false)
+        let active_program_pubkey = Pubkey::from_str("wsoGmxQLSvwWpuaidCApxN5kEowLe2HLQLJhCQnj4bE")
+            .expect("Invalid pubkey");
+
+        let result = is_account_closed(&client, &active_program_pubkey).await;
+        assert!(
+            result.is_ok(),
+            "Failed to check active account: {:?}",
+            result.err()
+        );
+        let is_closed = result.unwrap();
+        assert!(
+            !is_closed,
+            "Active program should not be detected as closed"
+        );
+    }
 
     #[tokio::test]
     async fn test_get_program_authority() {
