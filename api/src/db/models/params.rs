@@ -33,10 +33,17 @@ pub struct SolanaProgramBuildParamsWithSigner {
 
 impl From<OtterBuildParams> for SolanaProgramBuildParams {
     fn from(otter: OtterBuildParams) -> Self {
+        // Handle the case where commit is the literal string "None"
+        let commit_hash = if otter.commit == "None" {
+            None
+        } else {
+            Some(otter.commit.clone())
+        };
+        
         SolanaProgramBuildParams {
             repository: otter.git_url.clone(),
             program_id: otter.address.to_string(),
-            commit_hash: Some(otter.commit.clone()),
+            commit_hash,
             lib_name: otter.get_library_name(),
             bpf_flag: Some(otter.is_bpf()),
             base_image: otter.get_base_image(),

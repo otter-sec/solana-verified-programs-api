@@ -39,14 +39,6 @@ impl DbClient {
                     program_id_str, existing_authority, existing_is_frozen, existing_is_closed
                 );
 
-                // If the record is frozen or the authority hasn't changed, return without updating
-                if existing_is_frozen {
-                    info!(
-                        "Program authority for program_id {} is frozen. Skipping update.",
-                        program_id_str
-                    );
-                    return Ok(0); // Return 0 to indicate no update was performed
-                }
 
                 if existing_authority.as_deref() == authority_value
                     && existing_is_frozen == program_is_frozen
