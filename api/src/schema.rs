@@ -19,6 +19,7 @@ diesel::table! {
         authority_id -> Nullable<Varchar>,
         last_updated -> Timestamp,
         is_frozen -> Bool,
+        is_closed -> Bool,
     }
 }
 

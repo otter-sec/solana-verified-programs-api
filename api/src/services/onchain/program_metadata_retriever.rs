@@ -1,6 +1,6 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
-use crate::{errors::ApiError, Result, CONFIG};
+use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{bpf_loader_upgradeable, pubkey::Pubkey};
@@ -106,7 +106,7 @@ pub async fn get_otter_pda(
     let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
     let account_data = client.get_account_data(&pda_account).await?;
     OtterBuildParams::try_from_slice(&account_data[8..])
-        .map_err(|e| ApiError::Custom(format!("Failed to deserialize PDA data: {}", e)))
+        .map_err(|e| ApiError::Custom(format!("Failed to deserialize PDA data: {e}")))
 }
 
 /// Retrieves Otter Verify parameters for a program
@@ -129,33 +129,57 @@ pub async fn get_otter_verify_params(
     signer: Option<String>,
     program_authority: Option<String>,
 ) -> Result<(OtterBuildParams, String)> {
-    let client = RpcClient::new(CONFIG.rpc_url.clone());
     let program_id_pubkey = Pubkey::from_str(program_id)?;
 
+    let rpc_manager = get_rpc_manager();
+    let signer_clone = signer.clone();
+    let program_authority_clone = program_authority.clone();
+    rpc_manager
+        .execute_with_retry(move |client| {
+            let signer = signer_clone.clone();
+            let program_authority = program_authority_clone.clone();
+            async move {
+                get_otter_verify_params_with_client(
+                    client,
+                    &program_id_pubkey,
+                    signer,
+                    program_authority,
+                )
+                .await
+            }
+        })
+        .await
+}
+
+async fn get_otter_verify_params_with_client(
+    client: Arc<RpcClient>,
+    program_id_pubkey: &Pubkey,
+    signer: Option<String>,
+    program_authority: Option<String>,
+) -> Result<(OtterBuildParams, String)> {
     // Try with provided signer
     if let Some(signer) = signer {
         let signer_pubkey = Pubkey::from_str(&signer)
-            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {}", signer)))?;
-        if let Ok(params) = get_otter_pda(&client, &signer_pubkey, &program_id_pubkey).await {
+            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {signer}")))?;
+        if let Ok(params) = get_otter_pda(&client, &signer_pubkey, program_id_pubkey).await {
             return Ok((params, signer_pubkey.to_string()));
         }
         return Err(ApiError::Custom(format!(
-            "Otter-Verify PDA not found for signer: {}",
-            signer
+            "Otter-Verify PDA not found for signer: {signer}"
         )));
     }
 
     // Try with program authority
     if let Some(authority) = &program_authority {
         let authority_pubkey = Pubkey::from_str(authority)?;
-        if let Ok(params) = get_otter_pda(&client, &authority_pubkey, &program_id_pubkey).await {
+        if let Ok(params) = get_otter_pda(&client, &authority_pubkey, program_id_pubkey).await {
             return Ok((params, authority_pubkey.to_string()));
         }
     }
 
     // Try with whitelisted signers
     for signer in SIGNER_KEYS.iter() {
-        if let Ok(params) = get_otter_pda(&client, signer, &program_id_pubkey).await {
+        if let Ok(params) = get_otter_pda(&client, signer, program_id_pubkey).await {
             return Ok((params, signer.to_string()));
         }
     }
@@ -173,19 +197,32 @@ pub async fn is_program_buffer_missing(program_id: &str) -> bool {
         Ok(pubkey) => pubkey,
         Err(_) => return false,
     };
-    let client = RpcClient::new(CONFIG.rpc_url.clone());
 
+    let rpc_manager = get_rpc_manager();
+    let result = rpc_manager
+        .execute_with_retry(|client| async move {
+            is_program_buffer_missing_with_client(client, &program_id_pubkey).await
+        })
+        .await;
+
+    result.unwrap_or(false)
+}
+
+async fn is_program_buffer_missing_with_client(
+    client: Arc<RpcClient>,
+    program_id_pubkey: &Pubkey,
+) -> Result<bool> {
     let program_buffer =
         Pubkey::find_program_address(&[program_id_pubkey.as_ref()], &bpf_loader_upgradeable::id())
             .0;
 
     match client.get_account(&program_buffer).await {
-        Ok(_) => false, // Account exists
+        Ok(_) => Ok(false), // Account exists
         Err(err) => {
             if err.to_string().contains("AccountNotFound") {
-                true
+                Ok(true)
             } else {
-                false // Ignore other errors and continue
+                Ok(false) // Ignore other errors and continue
             }
         }
     }

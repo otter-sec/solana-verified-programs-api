@@ -9,6 +9,8 @@ use axum::{
     Json,
 };
 use serde_json::Value;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use tracing::{error, info, warn};
 
 /// Constant for the upgrade instruction data identifier
@@ -75,7 +77,30 @@ async fn process_program_upgrade(
     let executable_hash = db.get_verified_build(program_id, None).await?;
 
     // Get new on-chain hash
-    let onchain_hash = get_on_chain_hash(program_id).await?;
+    let onchain_hash = match get_on_chain_hash(program_id).await {
+        Ok(hash) => hash,
+        Err(e) => {
+            let error_str = e.to_string();
+            if error_str.contains("Program appears to be closed") {
+                info!(
+                    "Program {} appears to be closed in unverify handler. Marking as unverified.",
+                    program_id
+                );
+                // Mark program as unverified and closed in database
+                db.mark_program_unverified(program_id).await?;
+                if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
+                    db.insert_or_update_program_authority(&program_pubkey, None, false, Some(true))
+                        .await?;
+                }
+                info!(
+                    "Successfully marked closed program {} as unverified",
+                    program_id
+                );
+                return Ok(());
+            }
+            return Err(e.into());
+        }
+    };
 
     // Check if program needs to be unverified
     if onchain_hash != executable_hash.on_chain_hash {

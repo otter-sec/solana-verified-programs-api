@@ -2,20 +2,54 @@
 
 This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellipsis-Labs/solana-verifiable-build/).
 
-## Verification
+## API Endpoints
 
-To verify a program, simply add `--remote` to your verification arguments.
+### Verification
+
+#### Asynchronous Verification
+Submit a program for asynchronous verification:
+
+```bash
+curl -X POST https://verify.osec.io/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repository": "https://github.com/your-org/your-program",
+    "program_id": "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY",
+    "commit_hash": "abc123...",
+    "lib_name": "your_program"
+  }'
+```
+
+#### Synchronous Verification (Legacy)
+To verify a program, simply  add `--remote` to your verification arguments:
 
 ```bash
 solana-verify verify-from-repo --remote -um --program-id PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY https://github.com/Ellipsis-Labs/phoenix-v1
 ```
 
-## Status
-
-The `/status` endpoint is designed to be used to check the status of a verification job. To mitigate against false verification results, we rerun program verification every 24 hours. Note that regardless, verification should not be considered a strict security boundary.
+#### Verification with Specific Signer
+Submit verification with a specific signer:
 
 ```bash
-$ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY' | jq
+curl -X POST https://verify.osec.io/verify-with-signer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signer": "9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU",
+    "program_id": "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY"
+  }'
+```
+
+### Status Checking
+
+#### Program Verification Status
+Check the verification status of a specific program:
+
+```bash
+curl https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY | jq
+```
+
+Response format:
+```json
 {
   "is_verified": true,
   "message": "On chain program verified",
@@ -25,6 +59,47 @@ $ curl --location 'https://verify.osec.io/status/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqL
   "repo_url": "https://github.com/Squads-Protocol/v4/commit/3742e5521a3e833f24a4c6bc024dd1aa5385d010"
 }
 ```
+
+#### Job Status
+Check the status of an asynchronous verification job:
+
+```bash
+curl https://verify.osec.io/job/f65e0e70-d258-4091-94c1-c039de3734fc | jq
+```
+
+#### Build Logs
+Retrieve build logs for a program verification:
+
+```bash
+curl https://verify.osec.io/logs/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY | jq
+```
+
+### Verified Programs Lists
+
+#### Get All Verified Programs
+```bash
+curl https://verify.osec.io/verified-programs | jq
+```
+
+#### Get Verified Programs (Paginated)
+```bash
+curl https://verify.osec.io/verified-programs/1 | jq
+```
+
+#### Get Verified Programs Status
+```bash
+curl https://verify.osec.io/verified-programs-status | jq
+```
+
+### Rate Limits
+
+- **Verification endpoints**: 5 requests/second globally, 1 request per 30 seconds per IP
+- **Status/query endpoints**: 10,000 requests/second globally, 100 requests/second per IP
+- **Unverify endpoint**: 100 requests/second globally
+
+### Security
+
+To mitigate against false verification results, we rerun program verification every 24 hours. Note that verification should not be considered a strict security boundary.
 
 ## Otter Verify PDA Worker
 

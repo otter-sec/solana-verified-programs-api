@@ -47,6 +47,7 @@ pub(crate) async fn get_verification_status(
                     commit: result.commit,
                 },
                 is_frozen: result.is_frozen,
+                is_closed: result.is_closed,
             })
         }
         Err(_) => Json(ExtendedStatusResponse {
@@ -60,6 +61,7 @@ pub(crate) async fn get_verification_status(
                 commit: String::new(),
             },
             is_frozen: false,
+            is_closed: false,
         }),
     }
 }

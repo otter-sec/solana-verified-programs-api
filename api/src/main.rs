@@ -26,6 +26,15 @@ async fn main() {
     // Initialize database and Redis connections
     let db_client = db::DbClient::new(&CONFIG.database_url, &CONFIG.redis_url);
 
+    // Start background jobs
+    let bg_job_manager = services::background_jobs::BackgroundJobManager::new(db_client.clone());
+
+    // Log initial health status
+    let initial_health = bg_job_manager.get_health_status().await;
+    tracing::info!("Background job initial status: {:?}", initial_health);
+
+    bg_job_manager.start_all_jobs().await;
+
     // Setup API router and start server
     let app = api::initialize_router(db_client);
     let addr = SocketAddr::from(([0, 0, 0, 0], CONFIG.port));
