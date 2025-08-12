@@ -39,7 +39,6 @@ impl DbClient {
                     program_id_str, existing_authority, existing_is_frozen, existing_is_closed
                 );
 
-
                 if existing_authority.as_deref() == authority_value
                     && existing_is_frozen == program_is_frozen
                     && existing_is_closed == program_is_closed.unwrap_or(false)
