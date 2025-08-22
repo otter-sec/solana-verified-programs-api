@@ -48,6 +48,8 @@ pub struct SolanaProgramBuild {
     pub status: String,
     /// Signer's public key
     pub signer: Option<String>,
+    /// Architecture target v0,v1,v2,etc.
+    pub arch: Option<String>,
 }
 
 impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
@@ -66,6 +68,7 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
             cargo_args: params.cargo_args.clone(),
             status: JobStatus::InProgress.into(),
             signer: Some(DEFAULT_SIGNER.to_string()),
+            arch: params.arch.clone(),
         }
     }
 }

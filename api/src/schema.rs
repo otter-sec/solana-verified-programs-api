@@ -40,6 +40,8 @@ diesel::table! {
         #[max_length = 20]
         status -> Varchar,
         signer -> Nullable<Varchar>,
+        #[max_length = 3]
+        arch -> Nullable<Varchar>,
     }
 }
 

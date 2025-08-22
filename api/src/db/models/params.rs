@@ -20,6 +20,8 @@ pub struct SolanaProgramBuildParams {
     pub mount_path: Option<String>,
     /// Additional cargo build arguments
     pub cargo_args: Option<Vec<String>>,
+    /// Architecture target
+    pub arch: Option<String>,
 }
 
 /// Build parameters with associated PDA signer
@@ -42,6 +44,7 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
             base_image: otter.get_base_image(),
             mount_path: otter.get_mount_path(),
             cargo_args: otter.get_cargo_args(),
+            arch: otter.get_arch(),
         }
     }
 }

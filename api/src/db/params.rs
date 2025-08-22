@@ -126,6 +126,7 @@ mod tests {
             created_at: Utc::now().naive_utc(),
             status: "in_progress".to_string(),
             signer: Some("test_signer".to_string()),
+            arch: None,
         };
 
         // Test insert

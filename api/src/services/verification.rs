@@ -164,7 +164,7 @@ pub async fn execute_verification(
 ///
 /// # Returns
 /// * `Result<Command>` - solana-verify command to execute verification
-fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Command> {
+pub fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Command> {
     let mut cmd = Command::new("solana-verify");
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -191,6 +191,9 @@ fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Command> {
     }
     if payload.bpf_flag.unwrap_or(false) {
         cmd.arg("--bpf");
+    }
+    if let Some(ref arch) = payload.arch {
+        cmd.arg("--arch").arg(arch);
     }
     if let Some(ref cargo_args) = payload.cargo_args {
         cmd.arg("--").args(cargo_args);
