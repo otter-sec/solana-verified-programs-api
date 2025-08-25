@@ -533,6 +533,7 @@ impl DbClient {
             mount_path: build_params.mount_path,
             bpf_flag: Some(build_params.bpf_flag),
             cargo_args: build_params.cargo_args,
+            arch: build_params.arch,
         };
 
         // Better error handling for program authority

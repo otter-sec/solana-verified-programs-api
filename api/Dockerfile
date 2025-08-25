@@ -15,7 +15,7 @@ WORKDIR /solana_verified_program_api/api
 
 RUN cargo build --release
 
-RUN cargo install solana-verify --git https://github.com/Ellipsis-Labs/solana-verifiable-build --tag v0.4.10
+RUN cargo install solana-verify --git https://github.com/Ellipsis-Labs/solana-verifiable-build --tag v0.4.11
 
 FROM debian:stable-slim AS api_final
 

@@ -76,6 +76,14 @@ impl OtterBuildParams {
             .position(|arg| arg == "--")
             .map(|index| self.args[index + 1..].to_vec())
     }
+
+    /// Gets the architecture from build arguments
+    pub fn get_arch(&self) -> Option<String> {
+        self.args
+            .iter()
+            .position(|arg| arg == "--arch")
+            .map(|index| self.args[index + 1].clone())
+    }
 }
 
 /// Retrieves Otter Verify PDA for a program and signer
