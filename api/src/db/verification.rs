@@ -383,7 +383,7 @@ impl DbClient {
             .left_join(crate::schema::solana_program_builds::table)
             .filter(program_id.eq(program_address))
             .select(verified_programs::all_columns())
-            .order(verified_at.desc());
+            .order((is_verified.desc(), verified_at.desc()));
 
         match signer {
             Some(signer) => query
