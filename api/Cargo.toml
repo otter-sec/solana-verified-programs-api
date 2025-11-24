@@ -1,6 +1,6 @@
 [package]
 name = "verified_programs_api"
-version = "1.4.2"
+version = "1.4.3"
 edition = "2021"
 
 [features]
