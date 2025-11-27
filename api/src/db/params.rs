@@ -45,28 +45,64 @@ impl DbClient {
         query = query.filter(program_id.eq(payload.program_id.to_owned()));
         query = query.filter(repository.eq(payload.repository.to_owned()));
 
-        if let Some(hash) = &payload.commit_hash {
-            query = query.filter(commit_hash.eq(hash));
+        // Handle commit_hash - must match exactly (Some vs Some, None vs None)
+        match &payload.commit_hash {
+            Some(hash) => {
+                query = query.filter(commit_hash.eq(hash));
+            }
+            None => {
+                query = query.filter(commit_hash.is_null());
+            }
         }
 
-        if let Some(lib) = &payload.lib_name {
-            query = query.filter(lib_name.eq(lib));
+        // Handle lib_name - must match exactly
+        match &payload.lib_name {
+            Some(lib) => {
+                query = query.filter(lib_name.eq(lib));
+            }
+            None => {
+                query = query.filter(lib_name.is_null());
+            }
         }
 
-        if let Some(bpf) = &payload.bpf_flag {
-            query = query.filter(bpf_flag.eq(bpf));
+        // Handle bpf_flag - NOT NULL field (use default when None)
+        match &payload.bpf_flag {
+            Some(bpf) => {
+                query = query.filter(bpf_flag.eq(bpf));
+            }
+            None => {
+                query = query.filter(bpf_flag.eq(false));
+            }
         }
 
-        if let Some(base) = &payload.base_image {
-            query = query.filter(base_docker_image.eq(base));
+        // Handle base_image - must match exactly
+        match &payload.base_image {
+            Some(base) => {
+                query = query.filter(base_docker_image.eq(base));
+            }
+            None => {
+                query = query.filter(base_docker_image.is_null());
+            }
         }
 
-        if let Some(mount) = &payload.mount_path {
-            query = query.filter(mount_path.eq(mount));
+        // Handle mount_path - must match exactly
+        match &payload.mount_path {
+            Some(mount) => {
+                query = query.filter(mount_path.eq(mount));
+            }
+            None => {
+                query = query.filter(mount_path.is_null());
+            }
         }
 
-        if let Some(args) = payload.cargo_args.clone() {
-            query = query.filter(cargo_args.eq(args));
+        // Handle cargo_args - must match exactly
+        match &payload.cargo_args {
+            Some(ref args) => {
+                query = query.filter(cargo_args.eq(args.clone()));
+            }
+            None => {
+                query = query.filter(cargo_args.is_null());
+            }
         }
 
         query = query.filter(signer.eq(pda_signer));
@@ -104,6 +140,7 @@ impl DbClient {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use uuid;
 
     #[tokio::test]
     async fn test_build_params_operations() {
