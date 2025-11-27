@@ -140,7 +140,6 @@ impl DbClient {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use uuid;
 
     #[tokio::test]
     async fn test_build_params_operations() {
