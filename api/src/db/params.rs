@@ -105,6 +105,16 @@ impl DbClient {
             }
         }
 
+        // Handle arch - must match exactly
+        match &payload.arch {
+            Some(arch_value) => {
+                query = query.filter(arch.eq(arch_value));
+            }
+            None => {
+                query = query.filter(arch.is_null());
+            }
+        }
+
         query = query.filter(signer.eq(pda_signer));
 
         query
