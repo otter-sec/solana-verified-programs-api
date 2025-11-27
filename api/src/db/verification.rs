@@ -404,6 +404,8 @@ impl DbClient {
                                 .eq(Some(SIGNER_KEYS[0].to_string())))
                             .or(crate::schema::solana_program_builds::signer
                                 .eq(Some(SIGNER_KEYS[1].to_string())))
+                            .or(crate::schema::solana_program_builds::signer
+                                .eq(Some(SIGNER_KEYS[2].to_string())))
                             .or(crate::schema::solana_program_builds::signer.is_null()),
                     )
                     .into_boxed();
@@ -417,6 +419,8 @@ impl DbClient {
                                     .eq(Some(SIGNER_KEYS[0].to_string())))
                                 .or(crate::schema::solana_program_builds::signer
                                     .eq(Some(SIGNER_KEYS[1].to_string())))
+                                .or(crate::schema::solana_program_builds::signer
+                                    .eq(Some(SIGNER_KEYS[2].to_string())))
                                 .or(crate::schema::solana_program_builds::signer
                                     .eq(Some(program_authority)))
                                 .or(crate::schema::solana_program_builds::signer.is_null()),
