@@ -8,7 +8,7 @@ use tracing::{error, info};
 
 /// Handler for retrieving the status of a verification job
 ///
-/// # Endpoint: GET /jobs/:job_id
+/// # Endpoint: GET /job/:job_id
 ///
 /// # Arguments
 /// * `db` - Database client from application state
