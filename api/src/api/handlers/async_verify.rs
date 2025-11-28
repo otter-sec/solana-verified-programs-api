@@ -35,7 +35,7 @@ pub(crate) async fn process_async_verification(
 
 /// Handler for asynchronous program verification with a specific signer
 ///
-/// # Endpoint: POST /verify/with-signer
+/// # Endpoint: POST /verify-with-signer
 pub(crate) async fn process_async_verification_with_signer(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
