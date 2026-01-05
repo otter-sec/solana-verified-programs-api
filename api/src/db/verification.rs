@@ -171,23 +171,8 @@ impl DbClient {
             Err(e) => {
                 let error_str = e.to_string();
                 if error_str.contains("Program appears to be closed") {
-                    info!(
-                        "Program {} appears to be closed. Marking as unverified and frozen.",
-                        program_address
-                    );
-
-                    // Mark the program as unverified since it's closed
-                    self.mark_program_unverified(&program_address).await?;
-
-                    // Update program authority status to frozen in database
-                    let program_id_pubkey = Pubkey::from_str(&program_address)?;
-                    self.insert_or_update_program_authority(
-                        &program_id_pubkey,
-                        None,       // No authority for closed programs
-                        false,      // Don't mark as frozen
-                        Some(true), // Mark as closed
-                    )
-                    .await?;
+                    // Handle closed program using centralized helper
+                    self.handle_closed_program(&program_address).await?;
 
                     let response = VerificationResponse {
                         is_verified: false,               // Program is closed, so not verified
@@ -252,22 +237,8 @@ impl DbClient {
                     Err(e) => {
                         let error_str = e.to_string();
                         if error_str.contains("Program appears to be closed") {
-                            info!("Program {} appears to be closed during get_all_verification_info. Marking as unverified and frozen.", program_address);
-
-                            // Mark all builds for this program as unverified
-                            self.mark_program_unverified(&program_address).await.ok();
-
-                            // Update program authority status to frozen in database
-                            if let Ok(program_id_pubkey) = Pubkey::from_str(&program_address) {
-                                self.insert_or_update_program_authority(
-                                    &program_id_pubkey,
-                                    None,       // No authority for closed programs
-                                    false,      // Don't mark as frozen
-                                    Some(true), // Mark as closed
-                                )
-                                .await
-                                .ok();
-                            }
+                            // Handle closed program using centralized helper
+                            self.handle_closed_program(&program_address).await.ok();
                         }
                         None
                     }
@@ -705,6 +676,35 @@ impl DbClient {
                 error!("Failed to mark program as unverified: {}", e);
                 e.into()
             })
+    }
+
+    /// Handle a closed program by marking it as unverified and updating its authority status
+    /// This is a common operation when detecting that a program has been closed on-chain
+    pub async fn handle_closed_program(&self, program_address: &str) -> Result<()> {
+        info!(
+            "Program {} appears to be closed. Marking as unverified.",
+            program_address
+        );
+
+        // Mark the program as unverified since it's closed
+        self.mark_program_unverified(program_address).await?;
+
+        // Update program authority status to mark as closed in database
+        let program_id_pubkey = Pubkey::from_str(program_address)?;
+        self.insert_or_update_program_authority(
+            &program_id_pubkey,
+            None,       // No authority for closed programs
+            false,      // Don't mark as frozen
+            Some(true), // Mark as closed
+        )
+        .await?;
+
+        info!(
+            "Successfully marked closed program {} as unverified",
+            program_address
+        );
+
+        Ok(())
     }
 }
 

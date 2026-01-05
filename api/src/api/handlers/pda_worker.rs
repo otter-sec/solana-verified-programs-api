@@ -70,16 +70,8 @@ async fn process_otter_verify_instruction(
         Err(e) => {
             let error_str = e.to_string();
             if error_str.contains("Program appears to be closed") {
-                info!(
-                    "Program {} appears to be closed in pda_worker. Marking as unverified.",
-                    program_id
-                );
-                // Mark program as unverified and closed in database
-                db.mark_program_unverified(program_id).await?;
-                if let Ok(program_pubkey) = Pubkey::from_str(program_id) {
-                    db.insert_or_update_program_authority(&program_pubkey, None, false, Some(true))
-                        .await?;
-                }
+                // Handle closed program using centralized helper
+                db.handle_closed_program(program_id).await?;
                 return Ok(()); // Exit early for closed programs
             }
             return Err(e.into());
