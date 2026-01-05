@@ -284,25 +284,40 @@ impl DbClient {
             closed: false,
         };
 
+        // Track if we've already updated the on-chain hash for this program
+        let mut program_on_chain_hash_updated = false;
+
+        // Process each build individually
         for verified_build_with_signer in res {
             let build = verified_build_with_signer.solana_program_build;
             let verified_build = verified_build_with_signer.verified_program;
             let mut is_program_frozen;
 
             if let Some(verified_build) = verified_build {
-                let is_verified = if let Some(ref hash) = hash {
-                    if *hash != verified_build.executable_hash {
-                        info!("On chain hash doesn't match.");
-                        self.update_onchain_hash(
-                            &program_address,
-                            hash,
-                            *hash == verified_build.executable_hash,
-                        )
-                        .await?;
-                        is_verification_needed = true;
+                // Check if on-chain hash has changed once per program, not per build
+                // Since we are updating the on-chain hash for all builds of a program at once
+                if let Some(ref fresh_on_chain_hash) = hash {
+                    if !program_on_chain_hash_updated {
+                        let stored_on_chain_hash = &verified_build.on_chain_hash;
+                        if fresh_on_chain_hash != stored_on_chain_hash {
+                            info!(
+                                "On-chain hash changed from {} to {}. Updating all builds for program.",
+                                stored_on_chain_hash, fresh_on_chain_hash
+                            );
+                            self.update_program_onchain_hash(&program_address, fresh_on_chain_hash)
+                                .await?;
+                            program_on_chain_hash_updated = true;
+                            is_verification_needed = true;
+                        }
                     }
-                    *hash == verified_build.executable_hash
+                }
+
+                // Determine if this specific build is currently verified
+                let is_verified = if let Some(ref fresh_on_chain_hash) = hash {
+                    // Build is verified if current on-chain hash matches this build's executable hash
+                    *fresh_on_chain_hash == verified_build.executable_hash
                 } else {
+                    // No current on-chain hash available, compare stored hashes
                     verified_build.executable_hash == verified_build.on_chain_hash
                 };
 
@@ -523,6 +538,35 @@ impl DbClient {
                 error!("Failed to update on-chain hash: {}", e);
                 e.into()
             })
+    }
+
+    /// Update the on-chain hash and verification status for all builds of a program
+    /// Sets is_verified based on whether executable_hash matches the new on-chain hash
+    pub async fn update_program_onchain_hash(
+        &self,
+        program_address: &str,
+        new_onchain_hash: &str,
+    ) -> Result<usize> {
+        let conn = &mut self.get_db_conn().await?;
+
+        sql_query(
+            r#"
+            UPDATE verified_programs
+            SET
+                on_chain_hash = $1,
+                is_verified = (executable_hash = $1),
+                verified_at = NOW()
+            WHERE program_id = $2
+            "#,
+        )
+        .bind::<diesel::sql_types::Text, _>(new_onchain_hash)
+        .bind::<diesel::sql_types::Text, _>(program_address)
+        .execute(conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to update program on-chain hash: {}", e);
+            e.into()
+        })
     }
 
     /// Re-verify a program using on-chain metadata
