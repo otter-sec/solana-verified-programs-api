@@ -46,7 +46,7 @@ impl DbClient {
             self.is_program_closed(&program_address)
         );
 
-        let res = res_result?;
+        let verified_build = res_result?;
         let build_params = build_params_result?;
         let saved_program_frozen = frozen_status?;
         let saved_program_closed = closed_status?;
@@ -73,17 +73,17 @@ impl DbClient {
         };
 
         if let Ok(matched) = self
-            .check_cache(&res.executable_hash, &program_address)
+            .check_cache(&verified_build.executable_hash, &program_address)
             .await
         {
             if matched {
                 info!("Cache matched for program: {}", program_address);
                 let response = VerificationResponse {
                     is_verified: true,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
+                    on_chain_hash: verified_build.on_chain_hash,
+                    executable_hash: verified_build.executable_hash,
                     repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
+                    last_verified_at: Some(verified_build.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
                     is_closed: program_closed,
@@ -108,9 +108,9 @@ impl DbClient {
             info!("Program is closed and not verifiable.");
             let response = VerificationResponse {
                 is_verified: false,
-                on_chain_hash: res.on_chain_hash.clone(),
-                executable_hash: res.executable_hash.clone(),
-                last_verified_at: Some(res.verified_at),
+                on_chain_hash: verified_build.on_chain_hash.clone(),
+                executable_hash: verified_build.executable_hash.clone(),
+                last_verified_at: Some(verified_build.verified_at),
                 repo_url: build_params.repository.clone(),
                 commit: build_params.commit_hash.unwrap_or_default(),
                 is_frozen: program_frozen,
@@ -122,11 +122,11 @@ impl DbClient {
         if program_frozen {
             info!("Program is frozen and not upgradable.");
             let response = VerificationResponse {
-                is_verified: res.on_chain_hash == res.executable_hash,
-                on_chain_hash: res.on_chain_hash,
-                executable_hash: res.executable_hash,
+                is_verified: verified_build.on_chain_hash == verified_build.executable_hash,
+                on_chain_hash: verified_build.on_chain_hash,
+                executable_hash: verified_build.executable_hash,
                 repo_url: build_repository_url(&build_params),
-                last_verified_at: Some(res.verified_at),
+                last_verified_at: Some(verified_build.verified_at),
                 commit: build_params.commit_hash.unwrap_or_default(),
                 is_frozen: program_frozen,
                 is_closed: program_closed,
@@ -139,29 +139,29 @@ impl DbClient {
             Ok(on_chain_hash) => {
                 self.set_cache(&program_address, &on_chain_hash).await?;
 
-                if on_chain_hash != res.on_chain_hash {
+                if on_chain_hash != verified_build.on_chain_hash {
                     info!("On chain hash doesn't match. Triggering re-verification.");
                     self.update_onchain_hash(
                         &program_address,
                         &on_chain_hash,
-                        on_chain_hash == res.executable_hash,
+                        on_chain_hash == verified_build.executable_hash,
                     )
                     .await?;
 
                     // Spawn re-verification task
                     let params_cloned = build_params.clone();
-                    let this = self.clone();
+                    let db_client = self.clone();
                     tokio::spawn(async move {
-                        let _ = this.reverify_program(params_cloned).await;
+                        let _ = db_client.reverify_program(params_cloned).await;
                     });
                 }
 
                 let response = VerificationResponse {
-                    is_verified: on_chain_hash == res.executable_hash,
+                    is_verified: on_chain_hash == verified_build.executable_hash,
                     on_chain_hash,
-                    executable_hash: res.executable_hash,
+                    executable_hash: verified_build.executable_hash,
                     repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
+                    last_verified_at: Some(verified_build.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
                     is_closed: program_closed,
@@ -191,10 +191,10 @@ impl DbClient {
 
                     let response = VerificationResponse {
                         is_verified: false,               // Program is closed, so not verified
-                        on_chain_hash: res.on_chain_hash, // Keep the last known hash
-                        executable_hash: res.executable_hash,
+                        on_chain_hash: verified_build.on_chain_hash, // Keep the last known hash
+                        executable_hash: verified_build.executable_hash,
                         repo_url: build_repository_url(&build_params),
-                        last_verified_at: Some(res.verified_at),
+                        last_verified_at: Some(verified_build.verified_at),
                         commit: build_params.commit_hash.unwrap_or_default(),
                         is_frozen: false, // Don't mark as frozen, mark as closed instead
                         is_closed: true,  // Program is definitely closed in this case
@@ -203,11 +203,11 @@ impl DbClient {
                 }
                 info!("Failed to get on-chain hash. Using cached value.");
                 let response = VerificationResponse {
-                    is_verified: res.on_chain_hash == res.executable_hash,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
+                    is_verified: verified_build.on_chain_hash == verified_build.executable_hash,
+                    on_chain_hash: verified_build.on_chain_hash,
+                    executable_hash: verified_build.executable_hash,
                     repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
+                    last_verified_at: Some(verified_build.verified_at),
                     commit: build_params.commit_hash.unwrap_or_default(),
                     is_frozen: program_frozen,
                     is_closed: program_closed,
@@ -236,11 +236,12 @@ impl DbClient {
             }
         }
 
-        let res = self
+        let verified_builds = self
             .get_verified_builds_with_signer(&program_address)
             .await?;
 
-        let hash = match self.get_cache(&program_address).await {
+        // Fetch the current on-chain hash (either from cache or fresh from blockchain)
+        let current_on_chain_hash = match self.get_cache(&program_address).await {
             Ok(cache_result) => Some(cache_result),
             Err(_) => {
                 match get_on_chain_hash(&program_address).await {
@@ -288,7 +289,7 @@ impl DbClient {
         let mut program_on_chain_hash_updated = false;
 
         // Process each build individually
-        for verified_build_with_signer in res {
+        for verified_build_with_signer in verified_builds {
             let build = verified_build_with_signer.solana_program_build;
             let verified_build = verified_build_with_signer.verified_program;
             let mut is_program_frozen;
@@ -296,7 +297,7 @@ impl DbClient {
             if let Some(verified_build) = verified_build {
                 // Check if on-chain hash has changed once per program, not per build
                 // Since we are updating the on-chain hash for all builds of a program at once
-                if let Some(ref fresh_on_chain_hash) = hash {
+                if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
                     if !program_on_chain_hash_updated {
                         let stored_on_chain_hash = &verified_build.on_chain_hash;
                         if fresh_on_chain_hash != stored_on_chain_hash {
@@ -313,7 +314,7 @@ impl DbClient {
                 }
 
                 // Determine if this specific build is currently verified
-                let is_verified = if let Some(ref fresh_on_chain_hash) = hash {
+                let build_is_currently_verified = if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
                     // Build is verified if current on-chain hash matches this build's executable hash
                     *fresh_on_chain_hash == verified_build.executable_hash
                 } else {
@@ -338,10 +339,16 @@ impl DbClient {
                     is_program_frozen = current_frozen_status;
                 }
 
+                // Use the fresh on-chain hash if available, otherwise use stored value
+                let response_on_chain_hash = current_on_chain_hash
+                    .as_ref()
+                    .unwrap_or(&verified_build.on_chain_hash)
+                    .clone();
+
                 verification_responses.push(VerificationResponseWithSigner {
                     verification_response: VerificationResponse {
-                        is_verified,
-                        on_chain_hash: verified_build.on_chain_hash,
+                        is_verified: build_is_currently_verified,
+                        on_chain_hash: response_on_chain_hash,
                         executable_hash: verified_build.executable_hash,
                         repo_url: build_repository_url(&build),
                         last_verified_at: Some(verified_build.verified_at),
@@ -367,9 +374,9 @@ impl DbClient {
 
         if is_verification_needed {
             let params = self.get_build_params(&program_address).await?;
-            let this = self.clone();
+            let db_client = self.clone();
             tokio::spawn(async move {
-                let _ = this.reverify_program(params).await;
+                let _ = db_client.reverify_program(params).await;
             });
         }
 
@@ -518,8 +525,8 @@ impl DbClient {
     pub async fn update_onchain_hash(
         &self,
         program_address: &str,
-        on_chainhash: &str,
-        isverified: bool,
+        on_chain_hash_value: &str,
+        is_verified_value: bool,
     ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
 
@@ -528,8 +535,8 @@ impl DbClient {
         diesel::update(verified_programs)
             .filter(program_id.eq(program_address))
             .set((
-                on_chain_hash.eq(on_chainhash),
-                is_verified.eq(isverified),
+                on_chain_hash.eq(on_chain_hash_value),
+                is_verified.eq(is_verified_value),
                 verified_at.eq(chrono::Utc::now().naive_utc()),
             ))
             .execute(conn)
@@ -545,7 +552,7 @@ impl DbClient {
     pub async fn update_program_onchain_hash(
         &self,
         program_address: &str,
-        new_onchain_hash: &str,
+        new_on_chain_hash: &str,
     ) -> Result<usize> {
         let conn = &mut self.get_db_conn().await?;
 
@@ -559,7 +566,7 @@ impl DbClient {
             WHERE program_id = $2
             "#,
         )
-        .bind::<diesel::sql_types::Text, _>(new_onchain_hash)
+        .bind::<diesel::sql_types::Text, _>(new_on_chain_hash)
         .bind::<diesel::sql_types::Text, _>(program_address)
         .execute(conn)
         .await
@@ -660,7 +667,7 @@ impl DbClient {
     pub async fn unverify_program(
         &self,
         program_address: &str,
-        on_chainhash: &str,
+        on_chain_hash_value: &str,
     ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
 
@@ -669,7 +676,7 @@ impl DbClient {
         diesel::update(verified_programs)
             .filter(program_id.eq(program_address))
             .set((
-                on_chain_hash.eq(on_chainhash),
+                on_chain_hash.eq(on_chain_hash_value),
                 is_verified.eq(false),
                 verified_at.eq(chrono::Utc::now().naive_utc()),
             ))
