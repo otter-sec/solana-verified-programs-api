@@ -73,6 +73,26 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
     }
 }
 
+impl From<&VerificationData> for SolanaProgramBuild {
+    fn from(data: &VerificationData) -> Self {
+        SolanaProgramBuild {
+            id: data.solana_build_id.clone(),
+            repository: data.repository.clone(),
+            commit_hash: data.commit_hash.clone(),
+            program_id: data.program_id.clone(),
+            lib_name: data.lib_name.clone(),
+            base_docker_image: data.base_docker_image.clone(),
+            mount_path: data.mount_path.clone(),
+            cargo_args: data.cargo_args.clone(),
+            bpf_flag: data.bpf_flag,
+            created_at: data.verified_at,
+            status: JobStatus::Completed.into(),
+            signer: data.signer.clone(),
+            arch: data.arch.clone(),
+        }
+    }
+}
+
 #[derive(
     Debug,
     Clone,

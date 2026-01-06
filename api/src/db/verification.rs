@@ -24,17 +24,17 @@ impl DbClient {
     /// Reduces code duplication across the check_is_verified function
     fn create_verification_response(
         verification_data: &VerificationData,
-        build_params: &SolanaProgramBuild,
         is_verified: bool,
         on_chain_hash: String,
         is_frozen: bool,
         is_closed: bool,
     ) -> VerificationResponse {
+        let build_params = SolanaProgramBuild::from(verification_data);
         VerificationResponse::builder()
             .with_is_verified(is_verified)
             .with_on_chain_hash(on_chain_hash)
             .with_executable_hash(verification_data.executable_hash.clone())
-            .with_repo_url(build_repository_url(build_params))
+            .with_repo_url(build_repository_url(&build_params))
             .with_commit(build_params.commit_hash.clone().unwrap_or_default())
             .with_last_verified_at(Some(verification_data.verified_at))
             .with_is_frozen(is_frozen)
@@ -151,22 +151,8 @@ impl DbClient {
         let saved_program_frozen = verification_data.is_frozen.unwrap_or(false);
         let saved_program_closed = verification_data.is_closed.unwrap_or(false);
 
-        // Create SolanaProgramBuild for compatibility with existing code
-        let build_params = SolanaProgramBuild {
-            id: verification_data.solana_build_id.clone(),
-            repository: verification_data.repository.clone(),
-            commit_hash: verification_data.commit_hash.clone(),
-            program_id: verification_data.program_id.clone(),
-            lib_name: verification_data.lib_name.clone(), // Already Option<String>
-            bpf_flag: verification_data.bpf_flag,
-            created_at: verification_data.verified_at,
-            base_docker_image: verification_data.base_docker_image.clone(),
-            mount_path: verification_data.mount_path.clone(),
-            cargo_args: verification_data.cargo_args.clone(),
-            status: String::new(), // Not needed for this use case
-            signer: verification_data.signer.clone(),
-            arch: verification_data.arch.clone(),
-        };
+        // Create SolanaProgramBuild using From trait
+        let build_params = SolanaProgramBuild::from(&verification_data);
 
         // Only fetch program authority if we don't have it provided and program is not frozen
         let (program_authority, program_frozen, program_closed) =
@@ -197,7 +183,6 @@ impl DbClient {
                 info!("Cache matched for program: {}", program_address);
                 let response = Self::create_verification_response(
                     &verification_data,
-                    &build_params,
                     true,
                     verification_data.on_chain_hash.clone(),
                     program_frozen,
@@ -223,7 +208,6 @@ impl DbClient {
             info!("Program is closed and not verifiable.");
             let response = Self::create_verification_response(
                 &verification_data,
-                &build_params,
                 false,
                 verification_data.on_chain_hash.clone(),
                 program_frozen,
@@ -237,7 +221,6 @@ impl DbClient {
             let is_verified = verification_data.on_chain_hash == verification_data.executable_hash;
             let response = Self::create_verification_response(
                 &verification_data,
-                &build_params,
                 is_verified,
                 verification_data.on_chain_hash.clone(),
                 program_frozen,
@@ -271,7 +254,6 @@ impl DbClient {
                 let is_verified = on_chain_hash == verification_data.executable_hash;
                 let response = Self::create_verification_response(
                     &verification_data,
-                    &build_params,
                     is_verified,
                     on_chain_hash,
                     program_frozen,
@@ -287,7 +269,6 @@ impl DbClient {
 
                     let response = Self::create_verification_response(
                         &verification_data,
-                        &build_params,
                         false,
                         verification_data.on_chain_hash.clone(),
                         false, // Don't mark as frozen
@@ -299,7 +280,6 @@ impl DbClient {
                 let is_verified = verification_data.on_chain_hash == verification_data.executable_hash;
                 let response = Self::create_verification_response(
                     &verification_data,
-                    &build_params,
                     is_verified,
                     verification_data.on_chain_hash.clone(),
                     program_frozen,
