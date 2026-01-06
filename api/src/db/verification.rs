@@ -175,7 +175,7 @@ impl DbClient {
                     self.handle_closed_program(&program_address).await?;
 
                     let response = VerificationResponse {
-                        is_verified: false,               // Program is closed, so not verified
+                        is_verified: false,                          // Program is closed, so not verified
                         on_chain_hash: verified_build.on_chain_hash, // Keep the last known hash
                         executable_hash: verified_build.executable_hash,
                         repo_url: build_repository_url(&build_params),
@@ -285,13 +285,14 @@ impl DbClient {
                 }
 
                 // Determine if this specific build is currently verified
-                let build_is_currently_verified = if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
-                    // Build is verified if current on-chain hash matches this build's executable hash
-                    *fresh_on_chain_hash == verified_build.executable_hash
-                } else {
-                    // No current on-chain hash available, compare stored hashes
-                    verified_build.executable_hash == verified_build.on_chain_hash
-                };
+                let build_is_currently_verified =
+                    if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
+                        // Build is verified if current on-chain hash matches this build's executable hash
+                        *fresh_on_chain_hash == verified_build.executable_hash
+                    } else {
+                        // No current on-chain hash available, compare stored hashes
+                        verified_build.executable_hash == verified_build.on_chain_hash
+                    };
 
                 is_program_frozen = verified_build_with_signer.is_frozen.unwrap_or_default();
 
