@@ -25,6 +25,81 @@ pub struct VerificationResponse {
     pub is_closed: bool,
 }
 
+impl VerificationResponse {
+    /// Creates a new builder for VerificationResponse
+    pub fn builder() -> VerificationResponseBuilder {
+        VerificationResponseBuilder::default()
+    }
+}
+
+/// Builder for VerificationResponse to reduce repetitive struct initialization
+#[derive(Default)]
+pub struct VerificationResponseBuilder {
+    is_verified: bool,
+    on_chain_hash: String,
+    executable_hash: String,
+    repo_url: String,
+    commit: String,
+    last_verified_at: Option<NaiveDateTime>,
+    is_frozen: bool,
+    is_closed: bool,
+}
+
+impl VerificationResponseBuilder {
+    pub fn with_is_verified(mut self, value: bool) -> Self {
+        self.is_verified = value;
+        self
+    }
+
+    pub fn with_on_chain_hash(mut self, value: impl Into<String>) -> Self {
+        self.on_chain_hash = value.into();
+        self
+    }
+
+    pub fn with_executable_hash(mut self, value: impl Into<String>) -> Self {
+        self.executable_hash = value.into();
+        self
+    }
+
+    pub fn with_repo_url(mut self, value: impl Into<String>) -> Self {
+        self.repo_url = value.into();
+        self
+    }
+
+    pub fn with_commit(mut self, value: impl Into<String>) -> Self {
+        self.commit = value.into();
+        self
+    }
+
+    pub fn with_last_verified_at(mut self, value: Option<NaiveDateTime>) -> Self {
+        self.last_verified_at = value;
+        self
+    }
+
+    pub fn with_is_frozen(mut self, value: bool) -> Self {
+        self.is_frozen = value;
+        self
+    }
+
+    pub fn with_is_closed(mut self, value: bool) -> Self {
+        self.is_closed = value;
+        self
+    }
+
+    pub fn build(self) -> VerificationResponse {
+        VerificationResponse {
+            is_verified: self.is_verified,
+            on_chain_hash: self.on_chain_hash,
+            executable_hash: self.executable_hash,
+            repo_url: self.repo_url,
+            commit: self.commit,
+            last_verified_at: self.last_verified_at,
+            is_frozen: self.is_frozen,
+            is_closed: self.is_closed,
+        }
+    }
+}
+
 /// Extends VerificationResponse with signer information
 /// Used when multiple signers can verify the same program
 #[derive(Debug, Serialize, Deserialize)]
