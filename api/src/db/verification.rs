@@ -68,12 +68,8 @@ impl DbClient {
             // 4. NULL signer
             let program_authority = self.get_program_authority_from_db(program_address).await;
 
-            let mut signers = vec![
-                DEFAULT_SIGNER.to_string(),
-                SIGNER_KEYS[0].to_string(),
-                SIGNER_KEYS[1].to_string(),
-                SIGNER_KEYS[2].to_string(),
-            ];
+            let mut signers = vec![DEFAULT_SIGNER.to_string()];
+            signers.extend(SIGNER_KEYS.iter().map(|k| k.to_string()));
 
             if let Ok(Some(authority)) = program_authority {
                 signers.push(authority);
@@ -277,7 +273,8 @@ impl DbClient {
                     return return_response(response).await;
                 }
                 info!("Failed to get on-chain hash. Using cached value.");
-                let is_verified = verification_data.on_chain_hash == verification_data.executable_hash;
+                let is_verified =
+                    verification_data.on_chain_hash == verification_data.executable_hash;
                 let response = Self::create_verification_response(
                     &verification_data,
                     is_verified,
