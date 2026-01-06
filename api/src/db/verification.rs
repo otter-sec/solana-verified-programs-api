@@ -270,7 +270,7 @@ impl DbClient {
                     self.handle_closed_program(&program_address).await?;
 
                     let response = VerificationResponse {
-                        is_verified: false,                                  // Program is closed, so not verified
+                        is_verified: false, // Program is closed, so not verified
                         on_chain_hash: verification_data.on_chain_hash.clone(), // Keep the last known hash
                         executable_hash: verification_data.executable_hash.clone(),
                         repo_url: build_repository_url(&build_params),
@@ -283,7 +283,8 @@ impl DbClient {
                 }
                 info!("Failed to get on-chain hash. Using cached value.");
                 let response = VerificationResponse {
-                    is_verified: verification_data.on_chain_hash == verification_data.executable_hash,
+                    is_verified: verification_data.on_chain_hash
+                        == verification_data.executable_hash,
                     on_chain_hash: verification_data.on_chain_hash.clone(),
                     executable_hash: verification_data.executable_hash.clone(),
                     repo_url: build_repository_url(&build_params),
