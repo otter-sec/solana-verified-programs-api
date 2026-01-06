@@ -75,7 +75,7 @@ pub(crate) async fn get_verification_status(
 
 /// Handler for retrieving all verification information for a program
 ///
-/// # Endpoint: GET /status/:address/all
+/// # Endpoint: GET /status-all/:address
 ///
 /// # Arguments
 /// * `db` - Database client from application state

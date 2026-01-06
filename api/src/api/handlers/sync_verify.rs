@@ -14,7 +14,7 @@ use tracing::{error, info};
 
 /// Handler for synchronous program verification
 ///
-/// # Endpoint: POST /verify/sync
+/// # Endpoint: POST /verify_sync
 ///
 /// # Arguments
 /// * `db` - Database client from application state
