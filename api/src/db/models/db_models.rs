@@ -103,6 +103,54 @@ pub struct VerifiedProgram {
     pub solana_build_id: String,
 }
 
+/// Used for optimized single-query fetches in check_is_verified
+#[derive(Debug, Clone, QueryableByName)]
+#[allow(dead_code)]
+pub struct VerificationData {
+    // From verified_programs table
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub vp_id: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub program_id: String,
+    #[allow(dead_code)]
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    pub is_verified: bool,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub on_chain_hash: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub executable_hash: String,
+    #[diesel(sql_type = diesel::sql_types::Timestamp)]
+    pub verified_at: NaiveDateTime,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub solana_build_id: String,
+
+    // From solana_program_builds table
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub repository: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub commit_hash: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub lib_name: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    pub bpf_flag: bool,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub base_docker_image: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub mount_path: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Array<diesel::sql_types::Text>>)]
+    pub cargo_args: Option<Vec<String>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub signer: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub arch: Option<String>,
+
+    // From program_authority table (nullable since it's a LEFT JOIN)
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    pub is_frozen: Option<bool>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    pub is_closed: Option<bool>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum JobStatus {
     #[serde(rename = "in_progress")]
