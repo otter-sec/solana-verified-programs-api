@@ -1,6 +1,7 @@
 use crate::{db::DbClient, services::logging::read_logs};
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use serde_json::{json, Value};
@@ -15,11 +16,11 @@ use tracing::{error, info};
 /// * `address` - Program address to fetch logs for
 ///
 /// # Returns
-/// * JSON response containing either the logs or an error message
+/// * `(StatusCode, Json<Value>)` - HTTP status and JSON response containing either the logs or an error message
 pub(crate) async fn get_build_logs(
     State(db): State<DbClient>,
     Path(address): Path<String>,
-) -> Json<Value> {
+) -> (StatusCode, Json<Value>) {
     info!("Fetching build logs for program: {}", address);
 
     let file_id = match db.get_logs_info(&address).await {
@@ -29,14 +30,17 @@ pub(crate) async fn get_build_logs(
         }
         Err(err) => {
             error!("Failed to retrieve logs from database: {}", err);
-            return Json(json!({
-                "error": "We could not find the logs for this program"
-            }));
+            return (
+                StatusCode::OK,
+                Json(json!({
+                    "error": "We could not find the logs for this program"
+                })),
+            );
         }
     };
 
     let logs = read_logs(&file_id).await;
     info!("Successfully retrieved logs for program: {}", address);
 
-    Json(logs)
+    (StatusCode::OK, Json(logs))
 }

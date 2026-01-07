@@ -199,6 +199,7 @@ impl DbClient {
 
     /// Checks if a program is frozen in the database.
     /// Returns `false` if no record is found.
+    #[allow(dead_code)]
     pub async fn is_program_frozen(&self, program_address: &str) -> Result<bool> {
         use crate::schema::program_authority::dsl::*;
 
@@ -221,6 +222,7 @@ impl DbClient {
 
     /// Checks if a program is closed in the database.
     /// Returns `false` if no record is found.
+    #[allow(dead_code)]
     pub async fn is_program_closed(&self, program_address: &str) -> Result<bool> {
         use crate::schema::program_authority::dsl::*;
 

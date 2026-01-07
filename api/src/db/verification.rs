@@ -1,8 +1,8 @@
 use super::models::{ProgramAuthorityParams, VerificationResponseWithSigner};
 use super::DbClient;
 use crate::db::models::{
-    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationResponse,
-    VerifiedBuildWithSigner, VerifiedProgram, DEFAULT_SIGNER,
+    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationData,
+    VerificationResponse, VerifiedBuildWithSigner, VerifiedProgram, DEFAULT_SIGNER,
 };
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
 use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
@@ -20,6 +20,105 @@ use tracing::{error, info, warn};
 
 /// DbClient helper functions for VerifiedPrograms table and Reverification
 impl DbClient {
+    /// Helper to create VerificationResponse from common data
+    /// Reduces code duplication across the check_is_verified function
+    fn create_verification_response(
+        verification_data: &VerificationData,
+        is_verified: bool,
+        on_chain_hash: String,
+        is_frozen: bool,
+        is_closed: bool,
+    ) -> VerificationResponse {
+        let build_params = SolanaProgramBuild::from(verification_data);
+        VerificationResponse::builder()
+            .with_is_verified(is_verified)
+            .with_on_chain_hash(on_chain_hash)
+            .with_executable_hash(verification_data.executable_hash.clone())
+            .with_repo_url(build_repository_url(&build_params))
+            .with_commit(build_params.commit_hash.clone().unwrap_or_default())
+            .with_last_verified_at(Some(verification_data.verified_at))
+            .with_is_frozen(is_frozen)
+            .with_is_closed(is_closed)
+            .build()
+    }
+
+    /// Fetch all verification data in a single optimized query
+    ///
+    /// This function replaces 4 separate database queries with a single JOIN query:
+    /// - get_verified_build() -> verified_programs
+    /// - get_build_params() -> solana_program_builds
+    /// - is_program_frozen() -> program_authority.is_frozen
+    /// - is_program_closed() -> program_authority.is_closed
+    async fn get_verification_data_optimized(
+        &self,
+        program_address: &str,
+        signer: Option<String>,
+    ) -> Result<VerificationData> {
+        let conn = &mut self.get_db_conn().await?;
+
+        // Build the list of allowed signers based on whether a specific signer was provided
+        let allowed_signers = if let Some(signer_value) = signer {
+            // If a specific signer is provided, query only for that signer
+            vec![signer_value]
+        } else {
+            // When no signer is provided, query for ANY of these (in priority order based on ORDER BY):
+            // 1. Program's upgrade authority (from DB)
+            // 2. Any of the whitelisted SIGNER_KEYS
+            // 3. DEFAULT_SIGNER (backward compatibility)
+            // 4. NULL signer
+            let program_authority = self.get_program_authority_from_db(program_address).await;
+
+            let mut signers = vec![DEFAULT_SIGNER.to_string()];
+            signers.extend(SIGNER_KEYS.iter().map(|k| k.to_string()));
+
+            if let Ok(Some(authority)) = program_authority {
+                signers.push(authority);
+            }
+
+            signers
+        };
+
+        // Execute single optimized query
+        sql_query(
+            r#"
+            SELECT
+                vp.id as vp_id,
+                vp.program_id,
+                vp.is_verified,
+                vp.on_chain_hash,
+                vp.executable_hash,
+                vp.verified_at,
+                vp.solana_build_id,
+                sp.repository,
+                sp.commit_hash,
+                sp.lib_name,
+                sp.bpf_flag,
+                sp.base_docker_image,
+                sp.mount_path,
+                sp.cargo_args,
+                sp.signer,
+                sp.arch,
+                pa.is_frozen,
+                pa.is_closed
+            FROM verified_programs vp
+            LEFT JOIN solana_program_builds sp ON sp.id = vp.solana_build_id
+            LEFT JOIN program_authority pa ON pa.program_id = vp.program_id
+            WHERE vp.program_id = $1
+              AND (sp.signer = ANY($2) OR sp.signer IS NULL)
+            ORDER BY vp.is_verified DESC, vp.verified_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind::<diesel::sql_types::Text, _>(program_address)
+        .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&allowed_signers)
+        .get_result::<VerificationData>(conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to get verification data: {}", e);
+            e.into()
+        })
+    }
+
     /// Check if a program is already verified
     pub async fn check_is_verified(
         &self,
@@ -39,17 +138,17 @@ impl DbClient {
             }
         }
 
-        let (res_result, build_params_result, frozen_status, closed_status) = tokio::join!(
-            self.get_verified_build(&program_address, signer.clone()),
-            self.get_build_params(&program_address),
-            self.is_program_frozen(&program_address),
-            self.is_program_closed(&program_address)
-        );
+        // Fetch all verification data in a single optimized query
+        let verification_data = self
+            .get_verification_data_optimized(&program_address, signer.clone())
+            .await?;
 
-        let res = res_result?;
-        let build_params = build_params_result?;
-        let saved_program_frozen = frozen_status?;
-        let saved_program_closed = closed_status?;
+        // Extract data from the combined result
+        let saved_program_frozen = verification_data.is_frozen.unwrap_or(false);
+        let saved_program_closed = verification_data.is_closed.unwrap_or(false);
+
+        // Create SolanaProgramBuild using From trait
+        let build_params = SolanaProgramBuild::from(&verification_data);
 
         // Only fetch program authority if we don't have it provided and program is not frozen
         let (program_authority, program_frozen, program_closed) =
@@ -73,21 +172,18 @@ impl DbClient {
         };
 
         if let Ok(matched) = self
-            .check_cache(&res.executable_hash, &program_address)
+            .check_cache(&verification_data.executable_hash, &program_address)
             .await
         {
             if matched {
                 info!("Cache matched for program: {}", program_address);
-                let response = VerificationResponse {
-                    is_verified: true,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
-                    repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
-                    commit: build_params.commit_hash.unwrap_or_default(),
-                    is_frozen: program_frozen,
-                    is_closed: program_closed,
-                };
+                let response = Self::create_verification_response(
+                    &verification_data,
+                    true,
+                    verification_data.on_chain_hash.clone(),
+                    program_frozen,
+                    program_closed,
+                );
                 return return_response(response).await;
             }
         }
@@ -106,31 +202,26 @@ impl DbClient {
 
         if program_closed {
             info!("Program is closed and not verifiable.");
-            let response = VerificationResponse {
-                is_verified: false,
-                on_chain_hash: res.on_chain_hash.clone(),
-                executable_hash: res.executable_hash.clone(),
-                last_verified_at: Some(res.verified_at),
-                repo_url: build_params.repository.clone(),
-                commit: build_params.commit_hash.unwrap_or_default(),
-                is_frozen: program_frozen,
-                is_closed: program_closed,
-            };
+            let response = Self::create_verification_response(
+                &verification_data,
+                false,
+                verification_data.on_chain_hash.clone(),
+                program_frozen,
+                program_closed,
+            );
             return return_response(response).await;
         }
 
         if program_frozen {
             info!("Program is frozen and not upgradable.");
-            let response = VerificationResponse {
-                is_verified: res.on_chain_hash == res.executable_hash,
-                on_chain_hash: res.on_chain_hash,
-                executable_hash: res.executable_hash,
-                repo_url: build_repository_url(&build_params),
-                last_verified_at: Some(res.verified_at),
-                commit: build_params.commit_hash.unwrap_or_default(),
-                is_frozen: program_frozen,
-                is_closed: program_closed,
-            };
+            let is_verified = verification_data.on_chain_hash == verification_data.executable_hash;
+            let response = Self::create_verification_response(
+                &verification_data,
+                is_verified,
+                verification_data.on_chain_hash.clone(),
+                program_frozen,
+                program_closed,
+            );
             return return_response(response).await;
         }
 
@@ -139,79 +230,58 @@ impl DbClient {
             Ok(on_chain_hash) => {
                 self.set_cache(&program_address, &on_chain_hash).await?;
 
-                if on_chain_hash != res.on_chain_hash {
+                if on_chain_hash != verification_data.on_chain_hash {
                     info!("On chain hash doesn't match. Triggering re-verification.");
                     self.update_onchain_hash(
                         &program_address,
                         &on_chain_hash,
-                        on_chain_hash == res.executable_hash,
+                        on_chain_hash == verification_data.executable_hash,
                     )
                     .await?;
 
                     // Spawn re-verification task
                     let params_cloned = build_params.clone();
-                    let this = self.clone();
+                    let db_client = self.clone();
                     tokio::spawn(async move {
-                        let _ = this.reverify_program(params_cloned).await;
+                        let _ = db_client.reverify_program(params_cloned).await;
                     });
                 }
 
-                let response = VerificationResponse {
-                    is_verified: on_chain_hash == res.executable_hash,
+                let is_verified = on_chain_hash == verification_data.executable_hash;
+                let response = Self::create_verification_response(
+                    &verification_data,
+                    is_verified,
                     on_chain_hash,
-                    executable_hash: res.executable_hash,
-                    repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
-                    commit: build_params.commit_hash.unwrap_or_default(),
-                    is_frozen: program_frozen,
-                    is_closed: program_closed,
-                };
+                    program_frozen,
+                    program_closed,
+                );
                 return return_response(response).await;
             }
             Err(e) => {
                 let error_str = e.to_string();
                 if error_str.contains("Program appears to be closed") {
-                    info!(
-                        "Program {} appears to be closed. Marking as unverified and frozen.",
-                        program_address
+                    // Handle closed program using centralized helper
+                    self.handle_closed_program(&program_address).await?;
+
+                    let response = Self::create_verification_response(
+                        &verification_data,
+                        false,
+                        verification_data.on_chain_hash.clone(),
+                        false, // Don't mark as frozen
+                        true,  // Mark as closed
                     );
-
-                    // Mark the program as unverified since it's closed
-                    self.mark_program_unverified(&program_address).await?;
-
-                    // Update program authority status to frozen in database
-                    let program_id_pubkey = Pubkey::from_str(&program_address)?;
-                    self.insert_or_update_program_authority(
-                        &program_id_pubkey,
-                        None,       // No authority for closed programs
-                        false,      // Don't mark as frozen
-                        Some(true), // Mark as closed
-                    )
-                    .await?;
-
-                    let response = VerificationResponse {
-                        is_verified: false,               // Program is closed, so not verified
-                        on_chain_hash: res.on_chain_hash, // Keep the last known hash
-                        executable_hash: res.executable_hash,
-                        repo_url: build_repository_url(&build_params),
-                        last_verified_at: Some(res.verified_at),
-                        commit: build_params.commit_hash.unwrap_or_default(),
-                        is_frozen: false, // Don't mark as frozen, mark as closed instead
-                        is_closed: true,  // Program is definitely closed in this case
-                    };
                     return return_response(response).await;
                 }
                 info!("Failed to get on-chain hash. Using cached value.");
-                let response = VerificationResponse {
-                    is_verified: res.on_chain_hash == res.executable_hash,
-                    on_chain_hash: res.on_chain_hash,
-                    executable_hash: res.executable_hash,
-                    repo_url: build_repository_url(&build_params),
-                    last_verified_at: Some(res.verified_at),
-                    commit: build_params.commit_hash.unwrap_or_default(),
-                    is_frozen: program_frozen,
-                    is_closed: program_closed,
-                };
+                let is_verified =
+                    verification_data.on_chain_hash == verification_data.executable_hash;
+                let response = Self::create_verification_response(
+                    &verification_data,
+                    is_verified,
+                    verification_data.on_chain_hash.clone(),
+                    program_frozen,
+                    program_closed,
+                );
                 return return_response(response).await;
             }
         }
@@ -236,11 +306,12 @@ impl DbClient {
             }
         }
 
-        let res = self
+        let verified_builds = self
             .get_verified_builds_with_signer(&program_address)
             .await?;
 
-        let hash = match self.get_cache(&program_address).await {
+        // Fetch the current on-chain hash (either from cache or fresh from blockchain)
+        let current_on_chain_hash = match self.get_cache(&program_address).await {
             Ok(cache_result) => Some(cache_result),
             Err(_) => {
                 match get_on_chain_hash(&program_address).await {
@@ -251,22 +322,8 @@ impl DbClient {
                     Err(e) => {
                         let error_str = e.to_string();
                         if error_str.contains("Program appears to be closed") {
-                            info!("Program {} appears to be closed during get_all_verification_info. Marking as unverified and frozen.", program_address);
-
-                            // Mark all builds for this program as unverified
-                            self.mark_program_unverified(&program_address).await.ok();
-
-                            // Update program authority status to frozen in database
-                            if let Ok(program_id_pubkey) = Pubkey::from_str(&program_address) {
-                                self.insert_or_update_program_authority(
-                                    &program_id_pubkey,
-                                    None,       // No authority for closed programs
-                                    false,      // Don't mark as frozen
-                                    Some(true), // Mark as closed
-                                )
-                                .await
-                                .ok();
-                            }
+                            // Handle closed program using centralized helper
+                            self.handle_closed_program(&program_address).await.ok();
                         }
                         None
                     }
@@ -284,27 +341,43 @@ impl DbClient {
             closed: false,
         };
 
-        for verified_build_with_signer in res {
+        // Track if we've already updated the on-chain hash for this program
+        let mut program_on_chain_hash_updated = false;
+
+        // Process each build individually
+        for verified_build_with_signer in verified_builds {
             let build = verified_build_with_signer.solana_program_build;
             let verified_build = verified_build_with_signer.verified_program;
             let mut is_program_frozen;
 
             if let Some(verified_build) = verified_build {
-                let is_verified = if let Some(ref hash) = hash {
-                    if *hash != verified_build.executable_hash {
-                        info!("On chain hash doesn't match.");
-                        self.update_onchain_hash(
-                            &program_address,
-                            hash,
-                            *hash == verified_build.executable_hash,
-                        )
-                        .await?;
-                        is_verification_needed = true;
+                // Check if on-chain hash has changed once per program, not per build
+                // Since we are updating the on-chain hash for all builds of a program at once
+                if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
+                    if !program_on_chain_hash_updated {
+                        let stored_on_chain_hash = &verified_build.on_chain_hash;
+                        if fresh_on_chain_hash != stored_on_chain_hash {
+                            info!(
+                                "On-chain hash changed from {} to {}. Updating all builds for program.",
+                                stored_on_chain_hash, fresh_on_chain_hash
+                            );
+                            self.update_program_onchain_hash(&program_address, fresh_on_chain_hash)
+                                .await?;
+                            program_on_chain_hash_updated = true;
+                            is_verification_needed = true;
+                        }
                     }
-                    *hash == verified_build.executable_hash
-                } else {
-                    verified_build.executable_hash == verified_build.on_chain_hash
-                };
+                }
+
+                // Determine if this specific build is currently verified
+                let build_is_currently_verified =
+                    if let Some(ref fresh_on_chain_hash) = current_on_chain_hash {
+                        // Build is verified if current on-chain hash matches this build's executable hash
+                        *fresh_on_chain_hash == verified_build.executable_hash
+                    } else {
+                        // No current on-chain hash available, compare stored hashes
+                        verified_build.executable_hash == verified_build.on_chain_hash
+                    };
 
                 is_program_frozen = verified_build_with_signer.is_frozen.unwrap_or_default();
 
@@ -323,10 +396,16 @@ impl DbClient {
                     is_program_frozen = current_frozen_status;
                 }
 
+                // Use the fresh on-chain hash if available, otherwise use stored value
+                let response_on_chain_hash = current_on_chain_hash
+                    .as_ref()
+                    .unwrap_or(&verified_build.on_chain_hash)
+                    .clone();
+
                 verification_responses.push(VerificationResponseWithSigner {
                     verification_response: VerificationResponse {
-                        is_verified,
-                        on_chain_hash: verified_build.on_chain_hash,
+                        is_verified: build_is_currently_verified,
+                        on_chain_hash: response_on_chain_hash,
                         executable_hash: verified_build.executable_hash,
                         repo_url: build_repository_url(&build),
                         last_verified_at: Some(verified_build.verified_at),
@@ -352,9 +431,9 @@ impl DbClient {
 
         if is_verification_needed {
             let params = self.get_build_params(&program_address).await?;
-            let this = self.clone();
+            let db_client = self.clone();
             tokio::spawn(async move {
-                let _ = this.reverify_program(params).await;
+                let _ = db_client.reverify_program(params).await;
             });
         }
 
@@ -503,8 +582,8 @@ impl DbClient {
     pub async fn update_onchain_hash(
         &self,
         program_address: &str,
-        on_chainhash: &str,
-        isverified: bool,
+        on_chain_hash_value: &str,
+        is_verified_value: bool,
     ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
 
@@ -513,8 +592,8 @@ impl DbClient {
         diesel::update(verified_programs)
             .filter(program_id.eq(program_address))
             .set((
-                on_chain_hash.eq(on_chainhash),
-                is_verified.eq(isverified),
+                on_chain_hash.eq(on_chain_hash_value),
+                is_verified.eq(is_verified_value),
                 verified_at.eq(chrono::Utc::now().naive_utc()),
             ))
             .execute(conn)
@@ -523,6 +602,35 @@ impl DbClient {
                 error!("Failed to update on-chain hash: {}", e);
                 e.into()
             })
+    }
+
+    /// Update the on-chain hash and verification status for all builds of a program
+    /// Sets is_verified based on whether executable_hash matches the new on-chain hash
+    pub async fn update_program_onchain_hash(
+        &self,
+        program_address: &str,
+        new_on_chain_hash: &str,
+    ) -> Result<usize> {
+        let conn = &mut self.get_db_conn().await?;
+
+        sql_query(
+            r#"
+            UPDATE verified_programs
+            SET
+                on_chain_hash = $1,
+                is_verified = (executable_hash = $1),
+                verified_at = NOW()
+            WHERE program_id = $2
+            "#,
+        )
+        .bind::<diesel::sql_types::Text, _>(new_on_chain_hash)
+        .bind::<diesel::sql_types::Text, _>(program_address)
+        .execute(conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to update program on-chain hash: {}", e);
+            e.into()
+        })
     }
 
     /// Re-verify a program using on-chain metadata
@@ -616,7 +724,7 @@ impl DbClient {
     pub async fn unverify_program(
         &self,
         program_address: &str,
-        on_chainhash: &str,
+        on_chain_hash_value: &str,
     ) -> Result<usize> {
         use crate::schema::verified_programs::dsl::*;
 
@@ -625,7 +733,7 @@ impl DbClient {
         diesel::update(verified_programs)
             .filter(program_id.eq(program_address))
             .set((
-                on_chain_hash.eq(on_chainhash),
+                on_chain_hash.eq(on_chain_hash_value),
                 is_verified.eq(false),
                 verified_at.eq(chrono::Utc::now().naive_utc()),
             ))
@@ -654,6 +762,35 @@ impl DbClient {
                 error!("Failed to mark program as unverified: {}", e);
                 e.into()
             })
+    }
+
+    /// Handle a closed program by marking it as unverified and updating its authority status
+    /// This is a common operation when detecting that a program has been closed on-chain
+    pub async fn handle_closed_program(&self, program_address: &str) -> Result<()> {
+        info!(
+            "Program {} appears to be closed. Marking as unverified.",
+            program_address
+        );
+
+        // Mark the program as unverified since it's closed
+        self.mark_program_unverified(program_address).await?;
+
+        // Update program authority status to mark as closed in database
+        let program_id_pubkey = Pubkey::from_str(program_address)?;
+        self.insert_or_update_program_authority(
+            &program_id_pubkey,
+            None,       // No authority for closed programs
+            false,      // Don't mark as frozen
+            Some(true), // Mark as closed
+        )
+        .await?;
+
+        info!(
+            "Successfully marked closed program {} as unverified",
+            program_address
+        );
+
+        Ok(())
     }
 }
 

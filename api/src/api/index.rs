@@ -18,9 +18,15 @@ pub fn index() -> Json<Value> {
         json!({
             "endpoints": [
                 {
+                    "path": "/",
+                    "method": "GET",
+                    "description": "API endpoint documentation",
+                    "params": {}
+                },
+                {
                     "path": "/verify",
                     "method": "POST",
-                    "description": "Asynchronously verify a Solana program",
+                    "description": "Deprecated: use /verify-with-signer. Asynchronously verify a Solana program",
                     "params": {
                         "repository": {
                             "type": "string",
@@ -62,15 +68,37 @@ pub fn index() -> Json<Value> {
                             "items": "string",
                             "required": false,
                             "description": "Additional cargo build arguments"
+                        },
+                        "arch": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Build for the given target architecture [default: v0]"
                         }
                     }
                 },
                 {
-                    "path": "/verify/sync",
+                    "path": "/verify-with-signer",
                     "method": "POST",
-                    "description": "Synchronously verify a Solana program",
+                    "description": "Preferred endpoint. Asynchronously verify using PDA params for the provided signer, PDA signer should be the program authority",
                     "params": {
-                        "$ref": "#/endpoints/0/params"
+                        "signer": {
+                            "type": "string",
+                            "required": true,
+                            "description": "PDA signer public key should be the program authority"
+                        },
+                        "program_id": {
+                            "type": "string",
+                            "required": true,
+                            "description": "Solana program ID on mainnet"
+                        }
+                    }
+                },
+                {
+                    "path": "/verify_sync",
+                    "method": "POST",
+                    "description": "Deprecated: use /verify-with-signer. Synchronously verify a Solana program",
+                    "params": {
+                        "$ref": "#/endpoints/1/params"
                     }
                 },
                 {
@@ -86,19 +114,19 @@ pub fn index() -> Json<Value> {
                     }
                 },
                 {
-                    "path": "/verified-programs",
+                    "path": "/status-all/:address",
                     "method": "GET",
-                    "description": "Get list of all verified programs",
-                    "params": {}
+                    "description": "Get all verification information for a program",
+                    "params": {
+                        "address": {
+                            "type": "string",
+                            "required": true,
+                            "description": "Mainnet program address to check"
+                        }
+                    }
                 },
                 {
-                    "path": "/verified-programs/status",
-                    "method": "GET",
-                    "description": "Get detailed status of all verified programs",
-                    "params": {}
-                },
-                {
-                    "path": "/jobs/:job_id",
+                    "path": "/job/:job_id",
                     "method": "GET",
                     "description": "Check status of an async verification job",
                     "params": {
@@ -120,7 +148,31 @@ pub fn index() -> Json<Value> {
                             "description": "Program address to fetch logs for"
                         }
                     }
-                }
+                },
+                {
+                    "path": "/verified-programs",
+                    "method": "GET",
+                    "description": "Get list of all verified programs",
+                    "params": {}
+                },
+                {
+                    "path": "/verified-programs/:page",
+                    "method": "GET",
+                    "description": "Get paginated list of verified programs",
+                    "params": {
+                        "page": {
+                            "type": "integer",
+                            "required": true,
+                            "description": "Page number (starting from 1)"
+                        }
+                    }
+                },
+                {
+                    "path": "/verified-programs-status",
+                    "method": "GET",
+                    "description": "Get detailed status of all verified programs",
+                    "params": {}
+                },
             ]
         })
     });
