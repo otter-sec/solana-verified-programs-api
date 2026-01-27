@@ -8,17 +8,23 @@ services:
     command: diesel migration run --migration-dir /migrations
     depends_on:
       db:
-        condition: service_started
+        condition: service_healthy
 
   db:
-    image: postgres:15
+    image: postgres:18
     platform: linux/amd64
     env_file: .env
     restart: always
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - /pgdata:/var/lib/postgresql/data
+      - postgresql:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis
@@ -27,9 +33,18 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - "/redisdata/:/data"
-      - "./redis.conf:/conf/redis.conf"
-    command: sh -c 'redis-server /conf/redis.conf --requirepass $${REDIS_PASSWORD}'
+      - redis:/data
+    command: /bin/sh -c "redis-server --requirepass $${REDIS_PASSWORD}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   api:
     build:
@@ -37,29 +52,21 @@ services:
       dockerfile: ./api/Dockerfile
     env_file: .env
     restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
       - /logs:/logs
     depends_on:
       db:
-        condition: service_started
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       db-init:
         condition: service_completed_successfully
-      redis:
-        condition: service_started
 
-  nginx:
-    image: nginx:latest
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - api
-    links:
-      - api
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl-certs/certificate.crt:/etc/nginx/ssl-certs/certificate.cert
-      - ./nginx/ssl-certs/key.pem:/etc/nginx/ssl-certs/key.pem
+volumes:
+  postgresql:
+  redis:
+

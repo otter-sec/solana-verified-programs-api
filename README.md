@@ -130,7 +130,9 @@ To ensure that only legitimate requests from our Helius webhook are processed, w
 ## Deployment
 
 ```bash
-docker-compose up --build
+cp .env.example .env
+# update values in .env
+docker compose up --build
 ```
 
 ## Contact
