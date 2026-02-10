@@ -31,6 +31,8 @@ tower-http = { version = "0.4", features = ["full"] }
 tower_governor = { version = "0.0.4" }
 tracing = { version = "0.1.37" }
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
+time = "0.3.47"
+url = "2.5.4"
 uuid = { version = "1.4.0", features = ["v4", "fast-rng"] }
 
 # Test dependencies
@@ -38,5 +40,8 @@ uuid = { version = "1.4.0", features = ["v4", "fast-rng"] }
 tempfile = "3.10.1"
 tokio-test = "0.4.3"
 
+# Ignore url dependency for cargo-machete
+[package.metadata.cargo-machete]
+ignored = ["url"]
 
 
