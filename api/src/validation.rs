@@ -25,6 +25,23 @@ pub fn validate_http_url(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+const SEARCH_VALIDATION_MSG: &str = "Search must be a valid Solana address or a valid URL";
+
+/// Validates search query; must be a valid Solana public key or a valid URL
+pub fn validate_search(search: &str) -> Option<&'static str> {
+    let s = search.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if validate_pubkey(s).is_ok() {
+        return None;
+    }
+    if validate_http_url(s).is_ok() {
+        return None;
+    }
+    Some(SEARCH_VALIDATION_MSG)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -41,10 +58,7 @@ mod tests {
         );
         assert_eq!(
             validate_pubkey("12345678901234567890123456789012345678901"),
-            Err(
-                "Invalid public key: Invalid Base58 string"
-                    .to_string()
-            )
+            Err("Invalid public key: Invalid Base58 string".to_string())
         );
     }
 

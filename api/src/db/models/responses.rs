@@ -245,6 +245,7 @@ pub struct JobVerificationResponse {
 pub struct VerifiedProgramListResponse {
     pub meta: PaginationMeta,
     pub verified_programs: Vec<String>,
+    pub error: Option<String>,
 }
 
 /// Pagination metadata

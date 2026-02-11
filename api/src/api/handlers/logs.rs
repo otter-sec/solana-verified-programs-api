@@ -23,10 +23,7 @@ pub(crate) async fn get_build_logs(
     Path(address): Path<String>,
 ) -> (StatusCode, Json<Value>) {
     if let Err(e) = validation::validate_pubkey(&address) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": e })),
-        );
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": e })));
     }
 
     info!("Fetching build logs for program: {}", address);

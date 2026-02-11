@@ -1,4 +1,6 @@
-use super::verify_helpers::{create_and_insert_build, setup_verification, validation_error_response};
+use super::verify_helpers::{
+    create_and_insert_build, setup_verification, validation_error_response,
+};
 use crate::{
     db::{
         models::{

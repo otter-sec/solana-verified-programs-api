@@ -49,6 +49,13 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
     }
 }
 
+/// Query params for verified programs list
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct VerifiedProgramsQuery {
+    /// Optional search: valid address or HTTP/HTTPS URL to filter by program_id or repo
+    pub search: Option<String>,
+}
+
 /// Parameters for verification status requests
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct VerificationStatusParams {
