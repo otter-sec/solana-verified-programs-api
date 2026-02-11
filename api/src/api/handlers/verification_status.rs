@@ -3,6 +3,7 @@ use crate::db::models::{
     VerificationStatusParams,
 };
 use crate::db::DbClient;
+use crate::validation;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
@@ -22,6 +23,25 @@ pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> (StatusCode, Json<ExtendedStatusResponse>) {
+    if let Err(e) = validation::validate_pubkey(&address) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ExtendedStatusResponse {
+                status: StatusResponse {
+                    is_verified: false,
+                    message: e,
+                    on_chain_hash: String::new(),
+                    last_verified_at: None,
+                    executable_hash: String::new(),
+                    repo_url: String::new(),
+                    commit: String::new(),
+                },
+                is_frozen: false,
+                is_closed: false,
+            }),
+        );
+    }
+
     info!("Checking verification status for program: {}", address);
 
     match db.check_is_verified(address, None, None).await {
@@ -87,6 +107,19 @@ pub(crate) async fn get_verification_status_all(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    if let Err(e) = validation::validate_pubkey(&address) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                ErrorResponse {
+                    status: Status::Error,
+                    error: e,
+                }
+                .into(),
+            ),
+        );
+    }
+
     info!(
         "Fetching all verification information for program: {}",
         address
