@@ -1,4 +1,4 @@
-use super::verify_helpers::{create_and_insert_build, setup_verification};
+use super::verify_helpers::{create_and_insert_build, setup_verification, validation_error_response};
 use crate::{
     db::{
         models::{
@@ -11,6 +11,7 @@ use crate::{
         onchain::program_metadata_retriever::is_program_buffer_missing,
         verification::{check_and_handle_duplicates, process_verification_request},
     },
+    validation,
 };
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
@@ -22,6 +23,13 @@ pub(crate) async fn process_async_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    if let Err(e) = validation::validate_pubkey(&payload.program_id) {
+        return validation_error_response(e);
+    }
+    if let Err(e) = validation::validate_http_url(&payload.repository) {
+        return validation_error_response(e);
+    }
+
     info!(
         "Starting async verification for program: {}",
         payload.program_id
@@ -40,6 +48,13 @@ pub(crate) async fn process_async_verification_with_signer(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    if let Err(e) = validation::validate_pubkey(&payload.program_id) {
+        return validation_error_response(e);
+    }
+    if let Err(e) = validation::validate_pubkey(&payload.signer) {
+        return validation_error_response(e);
+    }
+
     info!(
         "Starting async verification for program {} with signer {}",
         payload.program_id, payload.signer
