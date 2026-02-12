@@ -73,6 +73,11 @@ pub fn index() -> Json<Value> {
                             "type": "string",
                             "required": false,
                             "description": "Build for the given target architecture [default: v0]"
+                        },
+                        "webhook_url": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Webhook URL to receive verification results"
                         }
                     }
                 },
@@ -90,6 +95,11 @@ pub fn index() -> Json<Value> {
                             "type": "string",
                             "required": true,
                             "description": "Solana program ID on mainnet"
+                        },
+                        "webhook_url": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Webhook URL to receive verification results"
                         }
                     }
                 },

@@ -22,6 +22,8 @@ pub struct SolanaProgramBuildParams {
     pub cargo_args: Option<Vec<String>>,
     /// Architecture target
     pub arch: Option<String>,
+    /// Optional webhook URL to POST verification result/error when job completes
+    pub webhook_url: Option<String>,
 }
 
 /// Build parameters with associated PDA signer
@@ -31,6 +33,8 @@ pub struct SolanaProgramBuildParamsWithSigner {
     pub signer: String,
     /// Solana program ID
     pub program_id: String,
+    /// Optional webhook URL to POST verification result/error when job completes
+    pub webhook_url: Option<String>,
 }
 
 impl From<OtterBuildParams> for SolanaProgramBuildParams {
@@ -45,6 +49,7 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
             mount_path: otter.get_mount_path(),
             cargo_args: otter.get_cargo_args(),
             arch: otter.get_arch(),
+            webhook_url: None,
         }
     }
 }
