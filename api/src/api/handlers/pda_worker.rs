@@ -100,7 +100,7 @@ async fn process_otter_verify_instruction(
         };
         let signer = otter_build_params.signer.to_string();
         let solana_build_params = SolanaProgramBuildParams::from(otter_build_params);
-        let _ = process_verification(db.clone(), solana_build_params, signer).await;
+        let _ = process_verification(db.clone(), solana_build_params, signer, None).await;
         info!("Successfully unverified program {}", program_id);
     } else {
         info!("Program {} has not been upgraded", program_id);

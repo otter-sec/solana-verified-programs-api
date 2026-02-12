@@ -5843,6 +5843,7 @@ dependencies = [
  "futures",
  "once_cell",
  "redis",
+ "reqwest",
  "serde",
  "serde_json",
  "solana-account-decoder",
