@@ -2,7 +2,8 @@ use crate::schema::{build_logs, solana_program_builds, verified_programs};
 use chrono::{NaiveDateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use solana_sdk::{pubkey::Pubkey, system_program};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk_ids::system_program;
 
 use super::SolanaProgramBuildParams;
 
