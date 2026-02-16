@@ -21,10 +21,11 @@ redis = { version = "0.32.3", features = ["aio", "tokio-comp"] }
 reqwest = { version = "0.12", features = ["rustls-tls"] }
 serde = { version = "1.0.166", features = ["derive"] }
 serde_json = { version = "1.0.99" }
-solana-account-decoder = {version= "2.1.7" }
-solana-client = {version= "2.1.7" }
-solana-sdk = {version= "2.1.7" }
-solana-transaction-status = "2.1.7"
+solana-account-decoder = { version = "3.1.8" }
+solana-client = { version = "3.1.8" }
+solana-sdk = { version = "4.0.0" }
+solana-sdk-ids = "3.1.0"
+solana-transaction-status = { version = "3.1.8" }
 thiserror = { version = "1.0.44" }
 tokio = { version = "1.43.1", features = ["full"] }
 tower = { version = "0.4", features = ["full"] }
