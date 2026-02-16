@@ -1,4 +1,4 @@
-FROM rust:1.87 AS api_build
+FROM rust:1.93 AS api_build
 
 WORKDIR /solana_verified_program_api
 

@@ -266,7 +266,7 @@ async fn process_verification_output(
 /// * `request_id` - Unique identifier for the verification request
 ///
 /// constructs the payload and spawns a task to post the payload to the webhook URL
-/// 
+///
 pub fn notify_webhook(
     webhook_url: String,
     result: std::result::Result<VerifiedProgram, ApiError>,
@@ -329,4 +329,26 @@ async fn post_webhook(
     }
     Err(last_error
         .unwrap_or_else(|| Box::from(std::io::Error::other("webhook post failed after retries"))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_notify_webhook() {
+        let webhook_url = "https://otter-ops.requestcatcher.com/test";
+        let payload = VerificationWebhookPayload {
+            request_id: "1234567890".to_string(),
+            status: "failed".to_string(),
+            is_verified: None,
+            program_id: None,
+            on_chain_hash: None,
+            executable_hash: None,
+            verified_at: None,
+            error: Some("test error".to_string()),
+        };
+        let result = post_webhook(&webhook_url, &payload).await;
+        assert!(result.is_ok());
+    }
 }
