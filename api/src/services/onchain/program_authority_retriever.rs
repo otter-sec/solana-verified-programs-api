@@ -6,7 +6,8 @@ use solana_client::{
     nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
     rpc_config::RpcTransactionConfig,
 };
-use solana_sdk::{pubkey::Pubkey, signature::Signature, system_program};
+use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_sdk_ids::system_program;
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
 use std::{str::FromStr, sync::Arc};
 use tracing::{error, info};
@@ -99,11 +100,8 @@ async fn get_program_authority_with_client(
             }
 
             // Check if this is specifically an account not found error using proper error types
-            if let ClientError {
-                kind: ClientErrorKind::RpcError(RpcError::ForUser(user_message)),
-                ..
-            } = &e
-            {
+            let ClientError { kind, .. } = &e;
+            if let ClientErrorKind::RpcError(RpcError::ForUser(user_message)) = kind.as_ref() {
                 // Check for account not found in user-facing error messages
                 if *user_message == format!("AccountNotFound: pubkey={program_data_account_id}") {
                     info!(

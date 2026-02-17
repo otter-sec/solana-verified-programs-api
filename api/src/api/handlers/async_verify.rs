@@ -1,4 +1,6 @@
-use super::verify_helpers::{create_and_insert_build, setup_verification};
+use super::verify_helpers::{
+    create_and_insert_build, setup_verification, validation_error_response,
+};
 use crate::{
     db::{
         models::{
@@ -9,8 +11,9 @@ use crate::{
     },
     services::{
         onchain::program_metadata_retriever::is_program_buffer_missing,
-        verification::{check_and_handle_duplicates, process_verification_request},
+        verification::{check_and_handle_duplicates, notify_webhook, process_verification_request},
     },
+    validation,
 };
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
@@ -22,13 +25,27 @@ pub(crate) async fn process_async_verification(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    if let Err(e) = validation::validate_pubkey(&payload.program_id) {
+        return validation_error_response(e);
+    }
+    if let Err(e) = validation::validate_http_url(&payload.repository) {
+        return validation_error_response(e);
+    }
+    if let Some(ref url) = payload.webhook_url {
+        if let Err(e) = validation::validate_http_url(url) {
+            return validation_error_response(e);
+        }
+    }
+
     info!(
         "Starting async verification for program: {}",
         payload.program_id
     );
 
     match setup_verification(&db, &payload.program_id, None).await {
-        Ok(setup) => process_verification(db, setup.params, setup.signer).await,
+        Ok(setup) => {
+            process_verification(db, setup.params, setup.signer, payload.webhook_url.clone()).await
+        }
         Err(error_response) => error_response,
     }
 }
@@ -40,13 +57,27 @@ pub(crate) async fn process_async_verification_with_signer(
     State(db): State<DbClient>,
     Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    if let Err(e) = validation::validate_pubkey(&payload.program_id) {
+        return validation_error_response(e);
+    }
+    if let Err(e) = validation::validate_pubkey(&payload.signer) {
+        return validation_error_response(e);
+    }
+    if let Some(ref url) = payload.webhook_url {
+        if let Err(e) = validation::validate_http_url(url) {
+            return validation_error_response(e);
+        }
+    }
+
     info!(
         "Starting async verification for program {} with signer {}",
         payload.program_id, payload.signer
     );
 
     match setup_verification(&db, &payload.program_id, Some(payload.signer)).await {
-        Ok(setup) => process_verification(db, setup.params, setup.signer).await,
+        Ok(setup) => {
+            process_verification(db, setup.params, setup.signer, payload.webhook_url.clone()).await
+        }
         Err(error_response) => error_response,
     }
 }
@@ -56,6 +87,7 @@ pub async fn process_verification(
     db: DbClient,
     payload: SolanaProgramBuildParams,
     signer: String,
+    webhook_url: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
     // Check for existing verification
     if let Some(response) = check_and_handle_duplicates(&payload, signer.clone(), &db).await {
@@ -83,7 +115,7 @@ pub async fn process_verification(
     };
 
     // Spawn async verification task
-    spawn_verification_task(db.clone(), payload, verification_uuid.clone()).await;
+    spawn_verification_task(db.clone(), payload, verification_uuid.clone(), webhook_url).await;
 
     // Return response with request ID
     (
@@ -100,12 +132,21 @@ pub async fn process_verification(
 }
 
 /// Spawns an asynchronous verification task
-async fn spawn_verification_task(db: DbClient, payload: SolanaProgramBuildParams, uuid: String) {
+async fn spawn_verification_task(
+    db: DbClient,
+    payload: SolanaProgramBuildParams,
+    uuid: String,
+    webhook_url: Option<String>,
+) {
     info!("Verification task spawned with UUID: {}", uuid);
     tokio::spawn(async move {
         info!("Spawning verification task with uuid: {}", uuid);
-        if let Err(e) = process_verification_request(payload, &uuid, &db).await {
+        let result = process_verification_request(payload, &uuid, &db).await;
+        if let Err(e) = &result {
             error!("Verification task failed: {:?}", e);
+        }
+        if let Some(url) = webhook_url {
+            notify_webhook(url, result, uuid);
         }
     });
 }

@@ -8,6 +8,7 @@ mod db;
 mod errors;
 mod schema;
 mod services;
+mod validation;
 
 /// Result type for API
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
