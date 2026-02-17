@@ -211,6 +211,7 @@ impl DbClient {
                 verification_data.on_chain_hash.clone(),
                 program_frozen,
                 program_closed,
+                build_params.signer.clone(),
             );
             return return_response(response).await;
         }
@@ -224,6 +225,7 @@ impl DbClient {
                 verification_data.on_chain_hash.clone(),
                 program_frozen,
                 program_closed,
+                build_params.signer.clone(),
             );
             return return_response(response).await;
         }
@@ -273,6 +275,7 @@ impl DbClient {
                         verification_data.on_chain_hash.clone(),
                         false, // Don't mark as frozen
                         true,  // Mark as closed
+                        build_params.signer.clone(),
                     );
                     return return_response(response).await;
                 }
