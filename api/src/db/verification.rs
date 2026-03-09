@@ -1,16 +1,17 @@
-use super::models::{ProgramAuthorityParams, VerificationResponseWithSigner};
 use super::DbClient;
+use super::models::{ProgramAuthorityParams, VerificationResponseWithSigner};
+use crate::Result;
 use crate::db::models::{
-    JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationData,
-    VerificationResponse, VerifiedBuildWithSigner, VerifiedProgram, DEFAULT_SIGNER,
+    DEFAULT_SIGNER, JobStatus, SolanaProgramBuild, SolanaProgramBuildParams, VerificationData,
+    VerificationResponse, VerifiedBuildWithSigner, VerifiedProgram,
 };
 use crate::services::onchain::{get_program_authority, program_metadata_retriever::SIGNER_KEYS};
 use crate::services::{build_repository_url, get_on_chain_hash, onchain, verification};
-use crate::Result;
 use diesel::{
+    Table,
     expression_methods::{BoolExpressionMethods, ExpressionMethods},
     query_dsl::QueryDsl,
-    sql_query, Table,
+    sql_query,
 };
 use diesel_async::RunQueryDsl;
 use std::str::FromStr;
@@ -232,12 +233,8 @@ impl DbClient {
 
                 if on_chain_hash != verification_data.on_chain_hash {
                     info!("On chain hash doesn't match. Triggering re-verification.");
-                    self.update_onchain_hash(
-                        &program_address,
-                        &on_chain_hash,
-                        on_chain_hash == verification_data.executable_hash,
-                    )
-                    .await?;
+                    self.update_program_onchain_hash(&program_address, &on_chain_hash)
+                        .await?;
 
                     // Spawn re-verification task
                     let params_cloned = build_params.clone();
@@ -302,7 +299,9 @@ impl DbClient {
                 info!("Cache hit for all verification info: {}", program_address);
                 return Ok(cached_data);
             } else {
-                warn!("Cache found for all verification info but failed to deserialize, proceeding...");
+                warn!(
+                    "Cache found for all verification info but failed to deserialize, proceeding..."
+                );
             }
         }
 
@@ -684,7 +683,9 @@ impl DbClient {
 
             let otter_params = SolanaProgramBuildParams::from(params_from_onchain);
             if otter_params != payload {
-                info!("Build params from on-chain and database don't match. Re-verifying the build using onchain Metadata.");
+                info!(
+                    "Build params from on-chain and database don't match. Re-verifying the build using onchain Metadata."
+                );
                 payload = otter_params;
             }
         } else if let Err(e) = params_from_onchain {
