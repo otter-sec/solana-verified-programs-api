@@ -535,7 +535,7 @@ impl DbClient {
                             PARTITION BY
                                 COALESCE(sp.signer, '11111111111111111111111111111111')
                             ORDER BY
-                                created_at
+                                vp.verified_at DESC
                         ) AS rn
                     FROM
                         verified_programs vp
