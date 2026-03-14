@@ -6,9 +6,18 @@ pub async fn health_check(State(db): State<DbClient>) -> (StatusCode, Json<serde
     let bg_manager = BackgroundJobManager::new(db.clone());
     let bg_health = bg_manager.get_health_status().await;
 
+    let redis_status = match db.get_async_redis_conn().await {
+        Err(e) => serde_json::json!({
+            "status": "error",
+            "message": e.to_string()
+        }),
+        Ok(_) => serde_json::json!("connected"),
+    };
+
     let health_status = serde_json::json!({
         "status": "ok",
         "database": "connected",
+        "redis": redis_status,
         "background_jobs": bg_health,
         "timestamp": chrono::Utc::now()
     });

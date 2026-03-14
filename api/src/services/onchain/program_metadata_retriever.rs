@@ -3,7 +3,8 @@ use std::{str::FromStr, sync::Arc};
 use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::{bpf_loader_upgradeable, pubkey::Pubkey};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk_ids::bpf_loader_upgradeable;
 
 #[cfg(feature = "use-external-pdas")]
 use {

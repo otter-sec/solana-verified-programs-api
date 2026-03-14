@@ -64,8 +64,14 @@ impl DbClient {
     /// Returns a list of VerifiedProgram structs
     /// This version uses cached database values for program status instead of real-time RPC checks
     ///
-    ///  
-    pub async fn get_verified_program_ids_page(&self, page: i64) -> Result<(Vec<String>, i64)> {
+    /// If `search` is present, filters by program_id or repository
+    ///
+    ///
+    pub async fn get_verified_program_ids_page(
+        &self,
+        page: i64,
+        search: Option<&str>,
+    ) -> Result<(Vec<String>, i64)> {
         // Ensure page is valid
         let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
@@ -73,25 +79,55 @@ impl DbClient {
         // Use a single query to get verified programs with pagination
         let conn = &mut self.get_db_conn().await?;
 
+        let search = search.and_then(|s| {
+            let s = s.trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        });
         // Get count and programs using cached status from database
         // This query excludes programs that are marked as closed or frozen in the database
-        let count_query = r#"
-            SELECT COUNT(DISTINCT vp.program_id) as total
-            FROM verified_programs vp
-            LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
-            WHERE vp.is_verified = true
-            AND (pa.is_closed IS NULL OR pa.is_closed = false)
-            AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
-        "#;
-
-        let total_count: i64 = sql_query(count_query)
-            .get_result::<CountResult>(conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to get total count of verified programs: {}", e);
-                e
-            })?
-            .total;
+        let total_count: i64 = if let Some(s) = search {
+            let pattern = format!("%{}%", s);
+            let count_query = r#"
+                SELECT COUNT(DISTINCT vp.program_id) as total
+                FROM verified_programs vp
+                LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+                LEFT JOIN solana_program_builds sp ON vp.solana_build_id = sp.id
+                WHERE vp.is_verified = true
+                AND (pa.is_closed IS NULL OR pa.is_closed = false)
+                AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+                AND (vp.program_id ILIKE $1 OR sp.repository ILIKE $1)
+            "#;
+            sql_query(count_query)
+                .bind::<diesel::sql_types::Text, _>(&pattern)
+                .get_result::<CountResult>(conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to get total count of verified programs: {}", e);
+                    e
+                })?
+                .total
+        } else {
+            let count_query = r#"
+                SELECT COUNT(DISTINCT vp.program_id) as total
+                FROM verified_programs vp
+                LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+                WHERE vp.is_verified = true
+                AND (pa.is_closed IS NULL OR pa.is_closed = false)
+                AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+            "#;
+            sql_query(count_query)
+                .get_result::<CountResult>(conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to get total count of verified programs: {}", e);
+                    e
+                })?
+                .total
+        };
 
         info!(
             "Fetching page {} with offset {}, limit {} from DB (cached status)",
@@ -99,29 +135,57 @@ impl DbClient {
         );
 
         // Fetch programs excluding closed/frozen ones using cached database status
-        let query = r#"
-            SELECT DISTINCT vp.program_id
-            FROM verified_programs vp
-            LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
-            WHERE vp.is_verified = true
-            AND (pa.is_closed IS NULL OR pa.is_closed = false)
-            AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
-            ORDER BY vp.program_id
-            LIMIT $1 OFFSET $2
-        "#;
-
-        let program_ids: Vec<String> = sql_query(query)
-            .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
-            .bind::<diesel::sql_types::BigInt, _>(offset)
-            .get_results::<ProgramIdResult>(conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to fetch paginated verified programs: {}", e);
-                e
-            })?
-            .into_iter()
-            .map(|result| result.program_id)
-            .collect();
+        let program_ids: Vec<String> = if let Some(s) = search {
+            let pattern = format!("%{}%", s);
+            let query = r#"
+                SELECT DISTINCT vp.program_id
+                FROM verified_programs vp
+                LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+                LEFT JOIN solana_program_builds sp ON vp.solana_build_id = sp.id
+                WHERE vp.is_verified = true
+                AND (pa.is_closed IS NULL OR pa.is_closed = false)
+                AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+                AND (vp.program_id ILIKE $1 OR sp.repository ILIKE $1)
+                ORDER BY vp.program_id
+                LIMIT $2 OFFSET $3
+            "#;
+            sql_query(query)
+                .bind::<diesel::sql_types::Text, _>(&pattern)
+                .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
+                .bind::<diesel::sql_types::BigInt, _>(offset)
+                .get_results::<ProgramIdResult>(conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to fetch paginated verified programs: {}", e);
+                    e
+                })?
+                .into_iter()
+                .map(|result| result.program_id)
+                .collect()
+        } else {
+            let query = r#"
+                SELECT DISTINCT vp.program_id
+                FROM verified_programs vp
+                LEFT JOIN program_authority pa ON vp.program_id = pa.program_id
+                WHERE vp.is_verified = true
+                AND (pa.is_closed IS NULL OR pa.is_closed = false)
+                AND (pa.is_frozen IS NULL OR pa.is_frozen = false)
+                ORDER BY vp.program_id
+                LIMIT $1 OFFSET $2
+            "#;
+            sql_query(query)
+                .bind::<diesel::sql_types::BigInt, _>(PER_PAGE)
+                .bind::<diesel::sql_types::BigInt, _>(offset)
+                .get_results::<ProgramIdResult>(conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to fetch paginated verified programs: {}", e);
+                    e
+                })?
+                .into_iter()
+                .map(|result| result.program_id)
+                .collect()
+        };
 
         info!(
             "Page {}: Found {} programs using cached database status",
@@ -244,8 +308,12 @@ impl DbClient {
         // If we got fewer valid programs than PER_PAGE, it might indicate we need to fetch more
         // This could happen if many programs are closed/invalid
         if valid_programs.len() < PER_PAGE as usize && programs_len == fetch_limit as usize {
-            info!("Page {}: Got {} valid programs (less than PER_PAGE={}), but fetched maximum from DB. This might indicate many closed/invalid programs.", 
-                  page, valid_programs.len(), PER_PAGE);
+            info!(
+                "Page {}: Got {} valid programs (less than PER_PAGE={}), but fetched maximum from DB. This might indicate many closed/invalid programs.",
+                page,
+                valid_programs.len(),
+                PER_PAGE
+            );
         }
 
         Ok((valid_programs, total_count))

@@ -1,3 +1,4 @@
+use crate::validation;
 use crate::{db::DbClient, services::logging::read_logs};
 use axum::{
     extract::{Path, State},
@@ -21,6 +22,10 @@ pub(crate) async fn get_build_logs(
     State(db): State<DbClient>,
     Path(address): Path<String>,
 ) -> (StatusCode, Json<Value>) {
+    if let Err(e) = validation::validate_pubkey(&address) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": e })));
+    }
+
     info!("Fetching build logs for program: {}", address);
 
     let file_id = match db.get_logs_info(&address).await {

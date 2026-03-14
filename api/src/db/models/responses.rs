@@ -3,6 +3,25 @@ use serde::{Deserialize, Serialize};
 
 use super::JobStatus;
 
+/// Payload posted to webhook when verification completes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationWebhookPayload {
+    pub request_id: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_chain_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executable_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_at: Option<NaiveDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// Response structure for program verification status
 /// Contains all the necessary information about a program's verification state
 #[derive(Debug, Serialize, Deserialize)]
@@ -245,6 +264,7 @@ pub struct JobVerificationResponse {
 pub struct VerifiedProgramListResponse {
     pub meta: PaginationMeta,
     pub verified_programs: Vec<String>,
+    pub error: Option<String>,
 }
 
 /// Pagination metadata

@@ -1,14 +1,21 @@
 use crate::{
-    db::models::{JobStatus, SolanaProgramBuildParams, VerifiedProgram, VerifyResponse},
+    db::models::{
+        JobStatus, SolanaProgramBuildParams, VerificationWebhookPayload, VerifiedProgram,
+        VerifyResponse,
+    },
     db::DbClient,
     errors::ApiError,
     services::misc::extract_hash_with_prefix,
     Result, CONFIG,
 };
 use std::process::Stdio;
-use tokio::{io::AsyncWriteExt, process::Command};
+use std::time::Duration;
+use tokio::{io::AsyncWriteExt, process::Command, time::sleep};
 use tracing::{error, info};
 use uuid::Uuid;
+
+const MAX_WEBHOOK_RETRIES: u32 = 3;
+const WEBHOOK_RETRY_DELAY_MS: u64 = 2000;
 
 /// Processes and verifies a program build
 ///
@@ -249,4 +256,99 @@ async fn process_verification_output(
         verified_at: chrono::Utc::now().naive_utc(),
         solana_build_id: build_id.to_string(),
     })
+}
+
+/// Notifies the webhook about the verification result
+///
+/// # Arguments
+/// * `webhook_url` - URL to post the verification result
+/// * `result` - Result of the verification process
+/// * `request_id` - Unique identifier for the verification request
+///
+/// constructs the payload and spawns a task to post the payload to the webhook URL
+///
+pub fn notify_webhook(
+    webhook_url: String,
+    result: std::result::Result<VerifiedProgram, ApiError>,
+    request_id: String,
+) {
+    let payload = match &result {
+        Ok(v) => VerificationWebhookPayload {
+            request_id: request_id.clone(),
+            status: "completed".to_string(),
+            is_verified: Some(v.is_verified),
+            program_id: Some(v.program_id.clone()),
+            on_chain_hash: Some(v.on_chain_hash.clone()),
+            executable_hash: Some(v.executable_hash.clone()),
+            verified_at: Some(v.verified_at),
+            error: None,
+        },
+        Err(e) => VerificationWebhookPayload {
+            request_id,
+            status: "failed".to_string(),
+            is_verified: None,
+            program_id: None,
+            on_chain_hash: None,
+            executable_hash: None,
+            verified_at: None,
+            error: Some(e.to_string()),
+        },
+    };
+    tokio::spawn(async move {
+        if let Err(e) = post_webhook(&webhook_url, &payload).await {
+            error!("Webhook failed to post payload to {}: {:?}", webhook_url, e);
+        }
+    });
+}
+
+/// POSTs the verification result payload to the webhook URL
+///
+/// # Arguments
+/// * `url` - URL to post the verification result
+/// * `payload` - Verification result payload
+///
+/// # Returns
+/// * `Result<(), Box<dyn std::error::Error + Send + Sync>>` - Result of the POST request
+async fn post_webhook(
+    url: &str,
+    payload: &VerificationWebhookPayload,
+) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = reqwest::Client::new();
+    let mut last_error = None;
+    for attempt in 0..MAX_WEBHOOK_RETRIES {
+        match client.post(url).json(payload).send().await {
+            Ok(res) => match res.error_for_status() {
+                Ok(_) => return Ok(()),
+                Err(e) => last_error = Some(e.into()),
+            },
+            Err(e) => last_error = Some(e.into()),
+        }
+        if attempt < MAX_WEBHOOK_RETRIES - 1 {
+            sleep(Duration::from_millis(WEBHOOK_RETRY_DELAY_MS)).await;
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| Box::from(std::io::Error::other("webhook post failed after retries"))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_notify_webhook() {
+        let webhook_url = "https://otter-ops.requestcatcher.com/test";
+        let payload = VerificationWebhookPayload {
+            request_id: "1234567890".to_string(),
+            status: "failed".to_string(),
+            is_verified: None,
+            program_id: None,
+            on_chain_hash: None,
+            executable_hash: None,
+            verified_at: None,
+            error: Some("test error".to_string()),
+        };
+        let result = post_webhook(&webhook_url, &payload).await;
+        assert!(result.is_ok());
+    }
 }

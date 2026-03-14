@@ -646,6 +646,7 @@ impl DbClient {
             bpf_flag: Some(build_params.bpf_flag),
             cargo_args: build_params.cargo_args,
             arch: build_params.arch,
+            webhook_url: None,
         };
 
         // Better error handling for program authority

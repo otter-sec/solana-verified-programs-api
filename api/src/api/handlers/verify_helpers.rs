@@ -124,6 +124,20 @@ pub fn create_internal_error() -> (StatusCode, Json<ApiResponse>) {
     )
 }
 
+/// Creates a 400 Bad Request response for input validation errors (invalid pubkey, URL, etc.)
+pub fn validation_error_response(message: impl Into<String>) -> (StatusCode, Json<ApiResponse>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(
+            ErrorResponse {
+                status: Status::Error,
+                error: message.into(),
+            }
+            .into(),
+        ),
+    )
+}
+
 /// Creates and inserts build parameters into the database
 /// Returns the UUID of the created build
 pub async fn create_and_insert_build(

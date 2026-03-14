@@ -73,6 +73,11 @@ pub fn index() -> Json<Value> {
                             "type": "string",
                             "required": false,
                             "description": "Build for the given target architecture [default: v0]"
+                        },
+                        "webhook_url": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Webhook URL to receive verification results"
                         }
                     }
                 },
@@ -90,6 +95,11 @@ pub fn index() -> Json<Value> {
                             "type": "string",
                             "required": true,
                             "description": "Solana program ID on mainnet"
+                        },
+                        "webhook_url": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Webhook URL to receive verification results"
                         }
                     }
                 },
@@ -153,7 +163,14 @@ pub fn index() -> Json<Value> {
                     "path": "/verified-programs",
                     "method": "GET",
                     "description": "Get list of all verified programs",
-                    "params": {}
+                    "params": {},
+                    "query": {
+                        "search": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Filter by program_id or repository (must be valid Solana address or HTTP/HTTPS URL)"
+                        }
+                    }
                 },
                 {
                     "path": "/verified-programs/:page",
@@ -164,6 +181,13 @@ pub fn index() -> Json<Value> {
                             "type": "integer",
                             "required": true,
                             "description": "Page number (starting from 1)"
+                        }
+                    },
+                    "query": {
+                        "search": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Filter by program_id or repository (must be valid Solana address or HTTP/HTTPS URL)"
                         }
                     }
                 },
