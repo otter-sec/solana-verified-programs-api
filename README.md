@@ -1,6 +1,6 @@
 # Solana Verified Programs API
 
-This is a hosted wrapper over [solana-verifiable-build](https://github.com/Ellipsis-Labs/solana-verifiable-build/).
+This is a hosted wrapper over [solana-verifiable-build](https://github.com/solana-foundation/solana-verifiable-build/).
 
 ## API Endpoints
 
