@@ -217,14 +217,14 @@ pub fn index() -> Json<Value> {
                     }
                 },
                 {
-                    "path": "/logs/:address",
+                    "path": "/logs/:build_id",
                     "method": "GET",
-                    "description": "Get build logs for a program",
+                    "description": "Build logs for a job",
                     "params": {
-                        "address": {
+                        "build_id": {
                             "type": "string",
                             "required": true,
-                            "description": "Program address to fetch logs for"
+                            "description": "Job id (UUID)"
                         }
                     }
                 },

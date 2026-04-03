@@ -6,7 +6,7 @@ pub fn validate_pubkey(value: &str) -> Result<Pubkey, String> {
     if value.trim().is_empty() {
         return Err("Public key cannot be empty".to_string());
     }
-    Pubkey::from_str(value).map_err(|e| format!("Invalid public key: {}", e))
+    Pubkey::from_str(value).map_err(|e| format!("Invalid public key({}): {}", value, e))
 }
 
 /// Validates HTTP/HTTPS URL

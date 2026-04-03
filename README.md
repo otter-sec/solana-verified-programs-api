@@ -71,7 +71,7 @@ curl https://verify.osec.io/job/f65e0e70-d258-4091-94c1-c039de3734fc | jq
 Retrieve build logs for a program verification:
 
 ```bash
-curl https://verify.osec.io/logs/PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY | jq
+curl https://verify.osec.io/logs/f65e0e70-d258-4091-94c1-c039de3734fc | jq
 ```
 
 ### Verified Programs Lists
