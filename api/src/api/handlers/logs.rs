@@ -28,7 +28,7 @@ pub(crate) async fn get_build_logs(
 
     info!("Fetching build logs for program: {}", address);
 
-    let file_id = match db.get_logs_info(&address).await {
+    let file_id = match db.get_latest_logs_info_for_program(&address).await {
         Ok(res) => {
             info!("Found log file: {}", res.file_name);
             res.file_name

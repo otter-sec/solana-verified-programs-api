@@ -29,13 +29,13 @@ impl DbClient {
             .map_err(Into::into)
     }
 
-    /// Retrieves build log information by build ID
-    pub async fn get_logs_info(&self, build_id: &str) -> Result<BuildLogs> {
+    /// Retrieves build log information by program address
+    pub async fn get_latest_logs_info_for_program(&self, program_addr: &str) -> Result<BuildLogs> {
         use crate::schema::build_logs::dsl::*;
 
         let conn = &mut self.get_db_conn().await?;
         build_logs
-            .filter(id.eq(build_id))
+            .filter(program_address.eq(program_addr))
             .order(created_at.desc())
             .first::<BuildLogs>(conn)
             .await
@@ -65,7 +65,8 @@ mod tests {
         assert!(insert_result.is_ok());
 
         // Test retrieve
-        let get_result = client.get_logs_info(build_id).await;
+        let get_result = client.get_latest_logs_info_for_program(program_addr).await;
         assert!(get_result.is_ok());
+        assert_eq!(get_result.unwrap().file_name, file_id);
     }
 }
