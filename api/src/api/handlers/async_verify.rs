@@ -91,20 +91,7 @@ pub async fn process_verification(
         return (StatusCode::OK, Json(response.into()));
     }
 
-    // Create initial build record and mark it as completed
-    let initial_uuid = match create_and_insert_build(&db, &payload, &signer).await {
-        Ok(uuid) => uuid,
-        Err(error_response) => return error_response,
-    };
-
-    if let Err(e) = db
-        .update_build_status(&initial_uuid, JobStatus::Completed)
-        .await
-    {
-        error!("Failed to update build status to completed: {:?}", e);
-    }
-
-    // Create new build record for the actual verification
+    // Create build record for the verification
     let verification_uuid = match create_and_insert_build(&db, &payload, &signer).await {
         Ok(uuid) => uuid,
         Err(error_response) => return error_response,
