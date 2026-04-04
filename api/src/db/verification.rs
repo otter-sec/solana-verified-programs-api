@@ -232,12 +232,8 @@ impl DbClient {
 
                 if on_chain_hash != verification_data.on_chain_hash {
                     info!("On chain hash doesn't match. Triggering re-verification.");
-                    self.update_onchain_hash(
-                        &program_address,
-                        &on_chain_hash,
-                        on_chain_hash == verification_data.executable_hash,
-                    )
-                    .await?;
+                    self.update_program_onchain_hash(&program_address, &on_chain_hash)
+                        .await?;
 
                     // Spawn re-verification task
                     let params_cloned = build_params.clone();
@@ -574,32 +570,6 @@ impl DbClient {
             .await
             .map_err(|e| {
                 error!("Failed to insert/update verified build: {}", e);
-                e.into()
-            })
-    }
-
-    /// Update the on-chain hash for a program
-    pub async fn update_onchain_hash(
-        &self,
-        program_address: &str,
-        on_chain_hash_value: &str,
-        is_verified_value: bool,
-    ) -> Result<usize> {
-        use crate::schema::verified_programs::dsl::*;
-
-        let conn = &mut self.get_db_conn().await?;
-
-        diesel::update(verified_programs)
-            .filter(program_id.eq(program_address))
-            .set((
-                on_chain_hash.eq(on_chain_hash_value),
-                is_verified.eq(is_verified_value),
-                verified_at.eq(chrono::Utc::now().naive_utc()),
-            ))
-            .execute(conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to update on-chain hash: {}", e);
                 e.into()
             })
     }
