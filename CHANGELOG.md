@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-04-04
+
+### Fixed
+
+- **Re-verification always marked `is_verified=false`**: fixed per-row `is_verified` computation when on-chain hash changes, preventing builds with matching hashes from being incorrectly unverified.
+- **Duplicate phantom build record on every verification**: removed the spurious `initial_uuid` row that was inserted and immediately marked completed before the real verification build started.
+
 ## [1.5.2] - 2026-03-25
 
 ### Added
