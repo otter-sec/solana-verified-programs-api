@@ -50,18 +50,21 @@ pub async fn handle_unverify(
         Err(status) => return status,
     };
 
-    // Process instructions
-    for ix in helius_parsed_transaction.instructions {
-        if ix.data == UPGRADE_INSTRUCTION_DATA {
-            let program_id = &ix.accounts[1];
-            info!("Processing upgrade instruction for program: {}", program_id);
+    // Process instructions (background task so Helius gets a fast 200)
+    let db = db.clone();
+    tokio::spawn(async move {
+        for ix in helius_parsed_transaction.instructions {
+            if ix.data == UPGRADE_INSTRUCTION_DATA {
+                let program_id = &ix.accounts[1];
+                info!("Processing upgrade instruction for program: {}", program_id);
 
-            if let Err(e) = process_program_upgrade(&db, program_id).await {
-                error!("Failed to process program upgrade: {}", e);
-                continue;
+                if let Err(e) = process_program_upgrade(&db, program_id).await {
+                    error!("Failed to process program upgrade: {}", e);
+                    continue;
+                }
             }
         }
-    }
+    });
 
     (StatusCode::OK, "Unverify request received")
 }
