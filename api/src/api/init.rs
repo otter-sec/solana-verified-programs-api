@@ -1,4 +1,4 @@
-use crate::db::DbClient;
+use crate::state::AppState;
 use axum::http::Request;
 use axum::{
     error_handling::HandleErrorLayer,
@@ -7,6 +7,7 @@ use axum::{
     routing::{get, post},
     BoxError, Router,
 };
+use std::sync::Arc;
 use std::time::Duration;
 use tower::{buffer::BufferLayer, limit::RateLimitLayer, ServiceBuilder};
 use tower_governor::{
@@ -19,12 +20,10 @@ use tower_http::{
 };
 use tracing::Span;
 
-use super::{
-    handlers::*,
-    index::{index, landing_page},
-};
+use crate::api::handlers::*;
+use crate::api::index::{index, landing_page};
 
-pub fn initialize_router(db: DbClient) -> Router {
+pub fn initialize_router(state: AppState) -> Router {
     let error_handler = || {
         ServiceBuilder::new().layer(HandleErrorLayer::new(|err: BoxError| async move {
             (
@@ -42,7 +41,7 @@ pub fn initialize_router(db: DbClient) -> Router {
     };
 
     let rate_limit_per_ip = |timeout: u64, limit: u32| {
-        let config = Box::new(
+        let config = Arc::new(
             GovernorConfigBuilder::default()
                 .per_second(timeout)
                 .burst_size(limit)
@@ -52,11 +51,7 @@ pub fn initialize_router(db: DbClient) -> Router {
                 .unwrap(),
         );
 
-        ServiceBuilder::new()
-            .layer(error_handler())
-            .layer(GovernorLayer {
-                config: Box::leak(config),
-            })
+        GovernorLayer::new(config)
     };
 
     let cors = |method: Method| {
@@ -67,7 +62,7 @@ pub fn initialize_router(db: DbClient) -> Router {
         .make_span_with(|request: &Request<_>| {
             let uri = request.uri();
             let method = request.method();
-            tracing::info_span!(
+            tracing::debug_span!(
                 "http_request",
                 method = %method,
                 uri = %uri,
@@ -75,7 +70,7 @@ pub fn initialize_router(db: DbClient) -> Router {
             )
         })
         .on_request(|request: &Request<_>, _span: &Span| {
-            tracing::info!(
+            tracing::debug!(
                 method = %request.method(),
                 path = request.uri().path(),
                 "started processing request"
@@ -83,7 +78,7 @@ pub fn initialize_router(db: DbClient) -> Router {
         })
         .on_response(
             |response: &Response, latency: std::time::Duration, _span: &Span| {
-                tracing::info!(
+                tracing::debug!(
                     latency = ?latency,
                     status = response.status().as_u16(),
                     "finished processing request"
@@ -102,25 +97,25 @@ pub fn initialize_router(db: DbClient) -> Router {
         .route("/verify_sync", post(process_sync_verification))
         .layer(
             global_rate_limit(5)
+                .layer(CompressionLayer::new().zstd(true))
                 .layer(rate_limit_per_ip(30, 1))
-                .layer(cors(Method::POST))
-                .layer(CompressionLayer::new().zstd(true)),
+                .layer(cors(Method::POST)),
         )
         .route("/unverify", post(handle_unverify))
         .layer(
             global_rate_limit(100)
+                .layer(CompressionLayer::new().zstd(true))
                 .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::POST))
-                .layer(CompressionLayer::new().zstd(true)),
+                .layer(cors(Method::POST)),
         )
-        .route("/status-all/:address", get(get_verification_status_all))
-        .route("/status/:address", get(get_verification_status))
-        .route("/job/:job_id", get(get_job_status))
-        .route("/logs/:build_id", get(get_build_logs))
+        .route("/status-all/{address}", get(get_verification_status_all))
+        .route("/status/{address}", get(get_verification_status))
+        .route("/job/{job_id}", get(get_job_status))
+        .route("/logs/{build_id}", get(get_build_logs))
         .route("/pda", post(handle_pda_updates_creations))
         .route("/verified-programs", get(get_verified_programs_list))
         .route(
-            "/verified-programs/:page",
+            "/verified-programs/{page}",
             get(get_verified_programs_list_paginated),
         )
         .route(
@@ -129,9 +124,9 @@ pub fn initialize_router(db: DbClient) -> Router {
         )
         .layer(
             global_rate_limit(10000)
+                .layer(CompressionLayer::new().zstd(true))
                 .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::GET))
-                .layer(CompressionLayer::new().zstd(true)),
+                .layer(cors(Method::GET)),
         )
         // Base route
         .route("/", get(|| async { landing_page() }))
@@ -140,5 +135,5 @@ pub fn initialize_router(db: DbClient) -> Router {
         .route("/health/background-jobs", get(background_job_status))
         // Apply common middleware
         .layer(trace_layer)
-        .with_state(db)
+        .with_state(state)
 }

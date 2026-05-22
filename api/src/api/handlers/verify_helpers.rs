@@ -1,75 +1,65 @@
 //! Shared verification helpers and utilities
 //! Contains common logic used across different verification endpoints
 
+#![allow(clippy::result_large_err)]
+
 use crate::{
-    db::{
-        models::{
-            ApiResponse, ErrorResponse, SolanaProgramBuild, SolanaProgramBuildParams, Status,
-        },
-        DbClient,
-    },
+    db::{DbClient, NewBuild},
     errors::ErrorMessages,
-    services::onchain::{self, get_program_authority},
-    validation,
+    responses::{ApiResponse, ErrorResponse, Status},
+    services::onchain::{self, ProgramOnchainState},
+    state::AppState,
+    validation::Address,
 };
 use axum::{http::StatusCode, Json};
 use tracing::error;
+use uuid::Uuid;
 
 /// Result type for verification setup operations
 pub type VerificationSetupResult = Result<VerificationSetup, (StatusCode, Json<ApiResponse>)>;
 
 /// Contains all the setup data needed for verification
 pub struct VerificationSetup {
-    pub params: SolanaProgramBuildParams,
-    pub signer: String,
+    pub params: NewBuild,
+    pub signer: Address,
 }
 
-/// Common setup logic for verification endpoints
-///
-/// Handles:
-/// - Getting program authority from on-chain
-/// - Fetching verification parameters from PDA
-/// - Updating program authority in database
+/// Fetches the on-chain program state + Otter Verify PDA params, refreshes
+/// the cached `program_state` row, and returns what the verify handlers
+/// need to insert a build.
 pub async fn setup_verification(
-    db: &DbClient,
-    program_id: &str,
-    specific_signer: Option<String>,
+    app: &AppState,
+    program_id: &Address,
+    specific_signer: Option<Address>,
 ) -> VerificationSetupResult {
-    // Get program authority from on-chain
-    let (program_authority, is_frozen, is_closed) = match get_program_authority(program_id).await {
-        Ok((authority, frozen, closed)) => (authority, frozen, closed),
-        Err(e) => {
-            let error_str = e.to_string();
-            if error_str.contains("Program appears to be closed") {
-                // For closed programs, no authority and closed=true
-                (None, false, true)
-            } else {
-                // For other errors, default to no authority and not frozen/closed
-                (None, false, false)
-            }
-        }
-    };
-
-    // Get verification parameters from on-chain PDA
-    match onchain::get_otter_verify_params(program_id, specific_signer, program_authority.clone())
+    let state = onchain::get_program_state(&app.rpc, program_id.as_pubkey())
         .await
+        .unwrap_or(ProgramOnchainState {
+            authority: None,
+            is_frozen: false,
+            is_closed: false,
+            executable_hash: None,
+        });
+
+    match onchain::get_otter_verify_params(
+        &app.rpc,
+        &program_id.to_string(),
+        specific_signer.map(|s| s.to_string()),
+        state.authority.clone(),
+    )
+    .await
     {
         Ok((params, signer)) => {
-            // Update program authority in database
-            if let Err(e) = db
-                .insert_or_update_program_authority(
-                    &params.address,
-                    program_authority.as_deref(),
-                    is_frozen,
-                    Some(is_closed),
-                )
+            if let Err(e) = app
+                .db
+                .upsert_program_state(&Address(params.address), &state)
                 .await
             {
-                error!("Failed to update program authority: {:?}", e);
+                error!("Failed to update program state: {:?}", e);
             }
 
             Ok(VerificationSetup {
-                params: SolanaProgramBuildParams::from(params),
+                params: NewBuild::from(&params),
                 signer,
             })
         }
@@ -125,74 +115,14 @@ pub fn create_internal_error() -> (StatusCode, Json<ApiResponse>) {
     )
 }
 
-/// Creates a 400 Bad Request response for input validation errors (invalid pubkey, URL, etc.)
-pub fn validation_error_response(message: impl Into<String>) -> (StatusCode, Json<ApiResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(
-            ErrorResponse {
-                status: Status::Error,
-                error: message.into(),
-            }
-            .into(),
-        ),
-    )
-}
-
-/// Validation helpers for verification endpoints
-pub type HandlerError = (StatusCode, Json<ApiResponse>);
-pub type HandlerResult<T> = Result<T, HandlerError>;
-
-#[allow(clippy::result_large_err)]
-pub fn validate_pubkey(value: &str) -> HandlerResult<()> {
-    validation::validate_pubkey(value)
-        .map(|_| ())
-        .map_err(validation_error_response)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn validate_http_url(value: &str) -> HandlerResult<()> {
-    validation::validate_http_url(value).map_err(validation_error_response)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn validate_program_id(program_id: &str) -> HandlerResult<()> {
-    validate_pubkey(program_id)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn validate_signer(signer: &str) -> HandlerResult<()> {
-    validate_pubkey(signer)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn validate_repository_url(repository: &str) -> HandlerResult<()> {
-    validate_http_url(repository)
-}
-
-#[allow(clippy::result_large_err)]
-pub fn validate_webhook_url(webhook_url: &Option<String>) -> HandlerResult<()> {
-    if let Some(url) = webhook_url.as_deref() {
-        validate_http_url(url)?;
-    }
-    Ok(())
-}
-
-/// Creates and inserts build parameters into the database
-/// Returns the UUID of the created build
+/// Inserts the build row and returns its UUID. Caller must set
+/// `params.signer` first.
 pub async fn create_and_insert_build(
     db: &DbClient,
-    params: &SolanaProgramBuildParams,
-    signer: &str,
-) -> Result<String, (StatusCode, Json<ApiResponse>)> {
-    let mut build_data = SolanaProgramBuild::from(params);
-    build_data.signer = Some(signer.to_string());
-    let uuid = build_data.id.clone();
-
-    if let Err(e) = db.insert_build_params(&build_data).await {
+    params: &NewBuild,
+) -> Result<Uuid, (StatusCode, Json<ApiResponse>)> {
+    db.insert_build(params).await.map_err(|e| {
         error!("Error inserting build parameters: {:?}", e);
-        return Err(create_db_error());
-    }
-
-    Ok(uuid)
+        create_db_error()
+    })
 }

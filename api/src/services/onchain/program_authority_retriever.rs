@@ -1,4 +1,11 @@
-use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
+//! Program authority + on-chain snapshot retrieval.
+//!
+//! `snapshot_programs` is the batched (getMultipleAccounts) workhorse used
+//! by the sweep; `get_program_state` is the single-program wrapper with
+//! Squads/burned-authority recovery via transaction history.
+
+use crate::errors::{ApiError, Result};
+use sha2::{Digest, Sha256};
 use solana_account_decoder::parse_bpf_loader::{
     parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
 };
@@ -6,428 +13,340 @@ use solana_client::{
     nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
     rpc_config::RpcTransactionConfig,
 };
-use solana_sdk::{pubkey::Pubkey, signature::Signature};
-use solana_sdk_ids::system_program;
+use solana_pubkey::Pubkey;
+use solana_sdk_ids::{bpf_loader, bpf_loader_deprecated, bpf_loader_upgradeable};
+use solana_signature::Signature;
 use solana_transaction_status::{EncodedTransaction, UiMessage, UiTransactionEncoding};
-use std::{str::FromStr, sync::Arc};
-use tracing::{error, info};
+use std::{collections::HashMap, str::FromStr};
+use tracing::warn;
 
+// Stable per the BPF loader v3 spec:
+// bincode(UpgradeableLoaderState::ProgramData{slot, Some(Pubkey)}) =
+//   4-byte enum tag + 8-byte slot + 1-byte option discriminator + 32-byte pubkey.
+pub(super) const PROGRAM_DATA_HEADER_SIZE: usize = 45;
+
+// Solana RPC servers cap getMultipleAccounts at 100.
+const GMA_CHUNK: usize = 100;
+
+// Squads-frozen programs route the final upgrade through the Squads multisig;
+// the burned authority is the 5th account on this specific instruction.
 const SQUADS_PROGRAM_ID: &str = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
-const EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA: &str = "ZTNTtVtnvbC";
-const AUTHORITY_ACCOUNT_INDEX: usize = 4;
+const SQUADS_AUTHORITY_IX_DATA: &str = "ZTNTtVtnvbC";
+const SQUADS_AUTHORITY_ACCOUNT_INDEX: usize = 4;
 
-/// Retrieves the upgrade authority for a Solana program from the blockchain
-///
-/// # Arguments
-/// * `program_id` - Public key of the program to check
-///
-/// # Returns
-/// * `Result<(Option<String>, bool, bool)>` - Program authority, is_frozen, is_closed
-///
-/// This function:
-/// 1. Fetches the program account data
-/// 2. Extracts the program data account address
-/// 3. Fetches the program data account
-/// 4. Extracts the upgrade authority
-pub async fn get_program_authority(program_id: &str) -> Result<(Option<String>, bool, bool)> {
-    // Parse program ID as Pubkey
-    let program_id = Pubkey::from_str(program_id).map_err(|e| {
-        error!("Invalid program ID: {}", e);
-        ApiError::Custom(format!("Invalid program ID: {e}"))
-    })?;
-
-    info!("Fetching program authority for: {}", program_id);
-
-    let rpc_manager = get_rpc_manager();
-    rpc_manager
-        .execute_with_retry(|client| async move {
-            get_program_authority_with_client(client, &program_id).await
-        })
-        .await
+/// Snapshot of the on-chain side of a program -- what gets written to `program_state`.
+#[derive(Debug, Clone)]
+pub struct ProgramOnchainState {
+    pub authority: Option<String>,
+    pub is_frozen: bool,
+    pub is_closed: bool,
+    pub executable_hash: Option<String>,
 }
 
-async fn get_program_authority_with_client(
-    client: Arc<RpcClient>,
-    program_id: &Pubkey,
-) -> Result<(Option<String>, bool, bool)> {
-    // Get program account data
-    let program_account_bytes = client.get_account_data(program_id).await.map_err(|e| {
-        error!("Failed to fetch program account data: {}", e);
-        ApiError::Custom(format!("Failed to fetch program account: {e}"))
-    })?;
-
-    // Parse program account to get program data address
-    let program_data_account_id = match parse_bpf_upgradeable_loader(&program_account_bytes)? {
-        BpfUpgradeableLoaderAccountType::Program(UiProgram { program_data }) => {
-            Pubkey::from_str(&program_data).map_err(|e| {
-                error!("Invalid program data address: {}", e);
-                ApiError::Custom(format!("Invalid program data pubkey: {e}"))
-            })?
-        }
-        unexpected => {
-            error!("Unexpected program account type: {:?}", unexpected);
-            return Err(ApiError::Custom(format!(
-                "Expected Program account type, found: {unexpected:?}"
-            )));
-        }
-    };
-
-    // Fetch program data account
-    match client.get_account_data(&program_data_account_id).await {
-        Ok(bytes) => {
-            if let BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData {
-                authority, ..
-            }) = parse_bpf_upgradeable_loader(&bytes)?
-            {
-                if authority.is_some() {
-                    info!("Successfully retrieved program authority: {:?}", authority);
-                    // Returning authority, is_frozen as false, is_closed as false
-                    return Ok((authority, false, false));
-                }
-            }
-        }
-        Err(e) => {
-            use solana_client::client_error::{ClientError, ClientErrorKind};
-            use solana_client::rpc_request::RpcError;
-
-            // Use is_account_closed to check if the program data account is closed
-            if let Ok(true) = is_account_closed(&client, &program_data_account_id).await {
-                info!(
-                    "Program data account is closed - program appears to be closed: {} Program id: {}",
-                    program_data_account_id, program_id
-                );
-                return Ok((None, false, true)); // Closed
-            }
-
-            // Check if this is specifically an account not found error using proper error types
-            let ClientError { kind, .. } = &e;
-            if let ClientErrorKind::RpcError(RpcError::ForUser(user_message)) = kind.as_ref() {
-                // Check for account not found in user-facing error messages
-                if *user_message == format!("AccountNotFound: pubkey={program_data_account_id}") {
-                    info!(
-                        "Program data account not found - program appears to be closed: {} Program id: {}",
-                        program_data_account_id, program_id
-                    );
-                    return Ok((None, false, true));
-                }
-            }
-
-            // For any other error, return the error
-            error!("Failed to fetch program data account: {}", e);
-            return Err(ApiError::Custom(format!(
-                "Failed to fetch program data account: {e}"
-            )));
+impl ProgramOnchainState {
+    fn closed() -> Self {
+        Self {
+            authority: None,
+            is_frozen: false,
+            is_closed: true,
+            executable_hash: None,
         }
     }
 
-    info!(
-        "Fetching program authority from latest transaction for {}",
-        program_data_account_id.to_string()
-    );
+    fn empty() -> Self {
+        Self {
+            authority: None,
+            is_frozen: false,
+            is_closed: false,
+            executable_hash: None,
+        }
+    }
+}
 
-    // Set a limit on the number of transactions to fetch
-    let config = GetConfirmedSignaturesForAddress2Config {
-        limit: Some(1), // Fetch only the latest 1 transaction
+/// Batched on-chain snapshot for many programs at once.
+///
+/// Two `getMultipleAccounts` calls per chunk of 100: one for the program
+/// accounts (to extract program-data PDAs and handle legacy loaders), one
+/// for the program-data accounts. Executable hash is computed inline from
+/// the bytes -- no `solana-verify` subprocess.
+///
+/// For programs frozen with no authority on the program-data account,
+/// `authority` is left `None` and `is_frozen` is `true`. The Squads
+/// transaction-history recovery only runs from [`get_program_state`].
+pub async fn snapshot_programs(
+    rpc: &RpcClient,
+    ids: &[Pubkey],
+) -> Result<HashMap<Pubkey, ProgramOnchainState>> {
+    let mut out = HashMap::with_capacity(ids.len());
+    for chunk in ids.chunks(GMA_CHUNK) {
+        snapshot_chunk(rpc, chunk, &mut out).await?;
+    }
+    Ok(out)
+}
+
+async fn snapshot_chunk(
+    rpc: &RpcClient,
+    ids: &[Pubkey],
+    out: &mut HashMap<Pubkey, ProgramOnchainState>,
+) -> Result<()> {
+    let accounts = rpc
+        .get_multiple_accounts(ids)
+        .await
+        .map_err(|e| ApiError::Custom(format!("getMultipleAccounts: {e}")))?;
+
+    let mut to_fetch: Vec<(Pubkey, Pubkey)> = Vec::new();
+    for (id, maybe_acc) in ids.iter().zip(accounts.into_iter()) {
+        let Some(acc) = maybe_acc else {
+            out.insert(*id, ProgramOnchainState::closed());
+            continue;
+        };
+        if acc.owner == bpf_loader_upgradeable::ID {
+            match extract_program_data_pda(&acc.data) {
+                Ok(pda) => to_fetch.push((*id, pda)),
+                Err(e) => {
+                    warn!("program {} unparseable: {}", id, e);
+                    out.insert(*id, ProgramOnchainState::closed());
+                }
+            }
+        } else if acc.owner == bpf_loader::ID || acc.owner == bpf_loader_deprecated::ID {
+            // Legacy loaders: the account data IS the executable; immutable.
+            out.insert(
+                *id,
+                ProgramOnchainState {
+                    authority: None,
+                    is_frozen: true,
+                    is_closed: false,
+                    executable_hash: Some(compute_program_hash(&acc.data)),
+                },
+            );
+        } else {
+            warn!("program {} has unsupported owner {}", id, acc.owner);
+            out.insert(*id, ProgramOnchainState::closed());
+        }
+    }
+
+    if to_fetch.is_empty() {
+        return Ok(());
+    }
+
+    let pdas: Vec<Pubkey> = to_fetch.iter().map(|(_, p)| *p).collect();
+    let pda_accounts = rpc
+        .get_multiple_accounts(&pdas)
+        .await
+        .map_err(|e| ApiError::Custom(format!("getMultipleAccounts(program_data): {e}")))?;
+
+    for ((program_id, _), maybe_acc) in to_fetch.iter().zip(pda_accounts.into_iter()) {
+        match maybe_acc {
+            None => {
+                out.insert(*program_id, ProgramOnchainState::closed());
+            }
+            Some(acc) => {
+                // If we can't parse the program-data account at all (corrupt
+                // bytes, unexpected loader account type), skip this program
+                // rather than overwriting its cached state with a guess.
+                let authority = match parse_program_data_authority(&acc.data) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        warn!("program {} program_data unparseable: {}", program_id, e);
+                        continue;
+                    }
+                };
+                let hash = if acc.data.len() > PROGRAM_DATA_HEADER_SIZE {
+                    Some(compute_program_hash(&acc.data[PROGRAM_DATA_HEADER_SIZE..]))
+                } else {
+                    None
+                };
+                out.insert(
+                    *program_id,
+                    ProgramOnchainState {
+                        is_frozen: authority.is_none(),
+                        authority,
+                        is_closed: false,
+                        executable_hash: hash,
+                    },
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `Ok(Some(_))` -- has authority. `Ok(None)` -- frozen (no authority).
+/// `Err(_)` -- parse failure, caller should not interpret either way.
+fn parse_program_data_authority(data: &[u8]) -> Result<Option<String>> {
+    match parse_bpf_upgradeable_loader(data)? {
+        BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData { authority, .. }) => {
+            Ok(authority)
+        }
+        other => Err(ApiError::Custom(format!(
+            "expected ProgramData account, got: {other:?}"
+        ))),
+    }
+}
+
+/// Single-program snapshot, with Squads/burned-authority recovery via tx
+/// history when the program looks frozen but has no on-chain authority.
+/// Used by the verify path where the authority drives Otter Verify PDA lookup.
+pub async fn get_program_state(
+    rpc: &RpcClient,
+    program_id: &Pubkey,
+) -> Result<ProgramOnchainState> {
+    let mut state = snapshot_programs(rpc, &[*program_id])
+        .await?
+        .remove(program_id)
+        .unwrap_or_else(ProgramOnchainState::empty);
+    if state.is_frozen && state.authority.is_none() && !state.is_closed {
+        if let Ok(Some(auth)) = recover_burned_authority(rpc, program_id).await {
+            state.authority = Some(auth);
+        }
+    }
+    Ok(state)
+}
+
+async fn recover_burned_authority(rpc: &RpcClient, program_id: &Pubkey) -> Result<Option<String>> {
+    let program_data_pda =
+        Pubkey::find_program_address(&[program_id.as_ref()], &bpf_loader_upgradeable::id()).0;
+    let cfg = GetConfirmedSignaturesForAddress2Config {
+        limit: Some(1),
         before: None,
         until: None,
         commitment: None,
     };
-
-    // Fetch recent transactions for the program data account
-    let transactions = match client
-        .get_signatures_for_address_with_config(&program_data_account_id, config)
+    let sigs = rpc
+        .get_signatures_for_address_with_config(&program_data_pda, cfg)
         .await
-    {
-        Ok(txns) => txns,
-        Err(e) => {
-            error!("Failed to fetch recent transactions: {}", e);
-            return Ok((None, false, false)); // Return both as false if we can't fetch transactions
-        }
+        .map_err(|e| ApiError::Custom(e.to_string()))?;
+    let Some(latest) = sigs.first() else {
+        return Ok(None);
     };
-
-    // Take the latest transaction
-    if let Some(latest_transaction) = transactions.first() {
-        let signature = Signature::from_str(&latest_transaction.signature)
-            .map_err(|e| ApiError::Custom(format!("Failed to parse transaction signature: {e}")))?;
-
-        // Fetch the full transaction details using the signature
-        let transaction_details = client
-            .get_transaction_with_config(
-                &signature,
-                RpcTransactionConfig {
-                    encoding: Some(UiTransactionEncoding::Json),
-                    commitment: None,
-                    max_supported_transaction_version: Some(0),
-                },
-            )
-            .await?;
-
-        // Access and decode the accounts involved
-        let versioned_transaction = transaction_details.transaction.transaction;
-        if let EncodedTransaction::Json(ui_transaction) = versioned_transaction {
-            if let UiMessage::Raw(raw_message) = &ui_transaction.message {
-                // Handle specific Squads program instruction for authority extraction
-                // The instruction data "ZTNTtVtnvbC" indicates a specific authority-related operation
-                // where the authority is located at the 5th account (index 4) of the instruction
-                if raw_message
-                    .account_keys
-                    .contains(&SQUADS_PROGRAM_ID.to_string())
-                {
-                    let program_id_idx = raw_message
-                        .account_keys
-                        .iter()
-                        .position(|key| key == SQUADS_PROGRAM_ID)
-                        .unwrap() as u8;
-                    for ix in &raw_message.instructions {
-                        if ix.program_id_index == program_id_idx
-                            && ix.data == EXPECTED_UPGRADE_AUTHORITY_INSTRUCTION_DATA
-                        {
-                            let authority_idx = ix.accounts[AUTHORITY_ACCOUNT_INDEX] as usize;
-                            let authority = raw_message.account_keys[authority_idx].clone();
-                            return Ok((Some(authority), true, false));
-                        }
+    let sig = Signature::from_str(&latest.signature)
+        .map_err(|e| ApiError::Custom(format!("parse signature: {e}")))?;
+    let tx = rpc
+        .get_transaction_with_config(
+            &sig,
+            RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Json),
+                commitment: None,
+                max_supported_transaction_version: Some(0),
+            },
+        )
+        .await?;
+    if let EncodedTransaction::Json(ui) = tx.transaction.transaction {
+        if let UiMessage::Raw(raw) = &ui.message {
+            if let Some(squads_idx) = raw.account_keys.iter().position(|k| k == SQUADS_PROGRAM_ID) {
+                let squads_idx = squads_idx as u8;
+                for ix in &raw.instructions {
+                    if ix.program_id_index == squads_idx && ix.data == SQUADS_AUTHORITY_IX_DATA {
+                        let aidx = ix.accounts[SQUADS_AUTHORITY_ACCOUNT_INDEX] as usize;
+                        return Ok(Some(raw.account_keys[aidx].clone()));
                     }
                 }
-                info!(
-                    "Successfully retrieved program authority from transaction: {:?}",
-                    raw_message.account_keys[0]
-                );
-                // Return the authority, is_frozen as true, is_closed as false
-                return Ok((Some(raw_message.account_keys[0].clone()), true, false));
             }
+            return Ok(Some(raw.account_keys[0].clone()));
         }
     }
-
-    Ok((None, false, false)) // Default to both as false if no authority is found
+    Ok(None)
 }
 
-/// Checks if a Solana account is closed (i.e., does not exist or has lamports = 0 and owned by system program).
-async fn is_account_closed(rpc_client: &RpcClient, pubkey: &Pubkey) -> Result<bool> {
-    match rpc_client.get_account(pubkey).await {
-        Ok(account) => {
-            let is_closed = account.lamports == 0 && account.owner == system_program::ID;
-            Ok(is_closed)
+fn extract_program_data_pda(data: &[u8]) -> Result<Pubkey> {
+    match parse_bpf_upgradeable_loader(data)? {
+        BpfUpgradeableLoaderAccountType::Program(UiProgram { program_data }) => {
+            Pubkey::from_str(&program_data).map_err(Into::into)
         }
-        Err(err) => {
-            if err.to_string().contains("AccountNotFound") {
-                // Account is fully closed and no longer exists
-                Ok(true)
-            } else {
-                // Some other RPC error
-                Err(err.into())
-            }
-        }
+        other => Err(ApiError::Custom(format!(
+            "expected Program account, got: {other:?}"
+        ))),
     }
 }
+
+/// `sha256(data with trailing zeros stripped)`, hex-encoded. Matches
+/// `solana-verify get-program-hash`'s output byte-for-byte.
+//
+// TODO: solana-verify is binary-only today. If it ships a library crate
+// we can drop this function and the PROGRAM_DATA_HEADER_SIZE constant in
+// favour of their `get_binary_hash` /
+// `UpgradeableLoaderState::size_of_programdata_metadata()`.
+fn compute_program_hash(data: &[u8]) -> String {
+    let trimmed = match data.iter().rposition(|&b| b != 0) {
+        Some(i) => &data[..=i],
+        None => &[][..],
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(trimmed);
+    hex::encode(hasher.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_is_account_closed() {
-        let rpc_manager = get_rpc_manager();
-        let client = rpc_manager.get_client().await;
-
-        // Test with a known closed program (should return true)
-        let closed_program_pubkey =
-            Pubkey::from_str("9fjvZfiAWRVXRHjBEz9mkAkLgK4dgbg7LnwWyPwHvFYB")
-                .expect("Invalid pubkey");
-
-        let result = is_account_closed(&client, &closed_program_pubkey).await;
-        assert!(
-            result.is_ok(),
-            "Failed to check closed account: {:?}",
-            result.err()
-        );
-        let is_closed = result.unwrap();
-        assert!(is_closed, "Closed program should be detected as closed");
-
-        // Test with an active program (should return false)
-        let active_program_pubkey = Pubkey::from_str("wsoGmxQLSvwWpuaidCApxN5kEowLe2HLQLJhCQnj4bE")
-            .expect("Invalid pubkey");
-
-        let result = is_account_closed(&client, &active_program_pubkey).await;
-        assert!(
-            result.is_ok(),
-            "Failed to check active account: {:?}",
-            result.err()
-        );
-        let is_closed = result.unwrap();
-        assert!(
-            !is_closed,
-            "Active program should not be detected as closed"
-        );
+    fn rpc() -> RpcClient {
+        RpcClient::new("https://api.mainnet-beta.solana.com".to_string())
     }
 
     #[tokio::test]
-    async fn test_get_program_authority() {
-        let result = get_program_authority("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC").await;
-
-        assert!(
-            result.is_ok(),
-            "Failed to get authority: {:?}",
-            result.err()
-        );
-        let (authority, _frozen, _closed) = result.unwrap();
-
+    #[ignore = "hits mainnet RPC"]
+    async fn test_get_program_state_active() {
+        let pid = Pubkey::from_str("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC").unwrap();
+        let state = get_program_state(&rpc(), &pid).await.expect("state");
+        assert!(!state.is_closed);
         assert_eq!(
-            authority,
-            Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU".to_string()),
-            "Unexpected authority value"
+            state.authority.as_deref(),
+            Some("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU")
         );
     }
 
     #[tokio::test]
-    async fn test_get_program_authority_for_frozen_program() {
-        let result = get_program_authority("333UA891CYPpAJAthphPT3hg1EkUBLhNFoP9HoWW3nug").await;
-
-        assert!(
-            result.is_ok(),
-            "Failed to get authority: {:?}",
-            result.err()
-        );
-        let (authority, _frozen, _closed) = result.unwrap();
-
+    #[ignore = "hits mainnet RPC"]
+    async fn test_get_program_state_frozen() {
+        let pid = Pubkey::from_str("333UA891CYPpAJAthphPT3hg1EkUBLhNFoP9HoWW3nug").unwrap();
+        let state = get_program_state(&rpc(), &pid).await.expect("state");
+        assert!(state.is_frozen);
         assert_eq!(
-            authority,
-            Some("FHKkBao61GZt3bkKbfMmd4GmDqQyYudyWQc5RUk4PKuZ".to_string())
+            state.authority.as_deref(),
+            Some("FHKkBao61GZt3bkKbfMmd4GmDqQyYudyWQc5RUk4PKuZ")
         );
     }
 
     #[tokio::test]
-    async fn test_get_program_authority_for_frozen_program_1() {
-        let result = get_program_authority("paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR").await;
-
-        assert!(
-            result.is_ok(),
-            "Failed to get authority: {:?}",
-            result.err()
-        );
-        let (authority, _frozen, _closed) = result.unwrap();
-
+    #[ignore = "hits mainnet RPC"]
+    async fn test_get_program_state_squads_frozen() {
+        let pid = Pubkey::from_str("paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR").unwrap();
+        let state = get_program_state(&rpc(), &pid).await.expect("state");
+        assert!(state.is_frozen);
         assert_eq!(
-            authority,
-            Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD".to_string())
+            state.authority.as_deref(),
+            Some("6EqYa8BxABzh5qHXYGw3nAoAueCyZG6KMG7K9WTA23sD")
         );
     }
 
     #[tokio::test]
-    async fn test_get_program_authority_invalid_program() {
-        let invalid_program = Pubkey::new_unique();
-        let result = get_program_authority(&invalid_program.to_string()).await;
-        assert!(result.is_err(), "Expected error for invalid program");
-    }
-
-    #[tokio::test]
-    async fn test_get_program_authority_closed_program() {
-        // This program has been closed - program data account no longer exists
-        let result = get_program_authority("woRrXQHeAi9R5oUcKJb7pkqC3GrQMabKWPBYHAN1ufY").await;
-
-        match result {
-            Ok((authority, _is_frozen, is_closed)) => {
-                // Should detect that the program is closed
-                assert!(is_closed, "Program should be detected as closed");
-                assert_eq!(authority, None, "Closed program should have no authority");
-            }
-            Err(e) => {
-                // It's also acceptable if it returns an error
-                println!("Got error for closed program (acceptable): {e:?}");
-            }
-        }
+    #[ignore = "hits mainnet RPC"]
+    async fn test_get_program_state_closed() {
+        let pid = Pubkey::from_str("woRrXQHeAi9R5oUcKJb7pkqC3GrQMabKWPBYHAN1ufY").unwrap();
+        let state = get_program_state(&rpc(), &pid).await.expect("state");
+        assert!(state.is_closed);
+        assert!(state.authority.is_none());
     }
 
     #[test]
-    fn test_error_string_parsing() {
-        // Test that we correctly distinguish between rate limit errors and actual closed programs
-
-        // Rate limit error (should NOT be treated as closed program)
-        let rate_limit_error = "AccountNotFound: pubkey=33G1UvntzZrQMWfRwP8c8KzsMeZwdUV1enVnnPyZ5dpv: HTTP status client error (429 Too Many Requests)";
-        assert!(rate_limit_error.contains("HTTP status") || rate_limit_error.contains("429"));
-        assert!(!should_treat_as_closed_program(rate_limit_error));
-
-        // Actual closed program error (should be treated as closed program)
-        let closed_program_error =
-            "AccountNotFound: pubkey=FwfEft6xYShpzwTVaXTc7G3Vax8ykefuviC6AhATv97p";
-        assert!(!closed_program_error.contains("HTTP"));
-        assert!(should_treat_as_closed_program(closed_program_error));
-
-        // Another HTTP error variant
-        let http_error = "could not find account: HTTP status server error";
-        assert!(!should_treat_as_closed_program(http_error));
+    fn hash_strips_trailing_zeros() {
+        // Empty payload (all zeros) hashes the empty string.
+        let h = compute_program_hash(&[0u8; 16]);
+        assert_eq!(
+            h,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 
-    fn should_treat_as_closed_program(error_str: &str) -> bool {
-        // Check if this is an HTTP error (like 429 rate limiting) first
-        if error_str.contains("HTTP status")
-            || error_str.contains("Too Many Requests")
-            || error_str.contains("429")
-        {
-            return false;
-        }
-
-        // Check if the error indicates the program data account was not found (closed)
-        (error_str.contains("could not find account") && !error_str.contains("HTTP"))
-            || (error_str.contains("AccountNotFound") && !error_str.contains("HTTP"))
-    }
-
-    #[tokio::test]
-    async fn test_get_program_authority_active_program() {
-        // Test with a program that is not closed
-        let active_program_id = "wsoGmxQLSvwWpuaidCApxN5kEowLe2HLQLJhCQnj4bE";
-        let result = get_program_authority(active_program_id).await;
-
-        match result {
-            Ok((authority, is_frozen, is_closed)) => {
-                // Should not be marked as closed
-                assert!(
-                    !is_closed,
-                    "Active program should not be detected as closed"
-                );
-                println!("Active program test passed - Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}");
-            }
-            Err(e) => {
-                // If there's an error, it should not be due to the program being closed
-                println!("Got error for active program: {e:?}");
-                // We can still pass the test as long as we're not incorrectly marking it as closed
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_program_status_differentiation() {
-        // Test that we can differentiate between different program states
-
-        // Test 1: Valid program with authority (should not be frozen or closed)
-        let result = get_program_authority("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC").await;
-        if let Ok((authority, is_frozen, is_closed)) = result {
-            assert!(authority.is_some(), "Valid program should have authority");
-            // Note: These assertions might vary based on the actual program state
-            println!("Valid program - Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}");
-        }
-
-        // Test 2: Test return tuple format consistency
-        let test_programs = vec![
-            "333UA891CYPpAJAthphPT3hg1EkUBLhNFoP9HoWW3nug",
-            "paxosVkYuJBKUQoZGAidRA47Qt4uidqG5fAt5kmr1nR",
-        ];
-
-        for program_id in test_programs {
-            match get_program_authority(program_id).await {
-                Ok((authority, is_frozen, is_closed)) => {
-                    println!(
-                        "Program {program_id}: Authority: {authority:?}, Frozen: {is_frozen}, Closed: {is_closed}"
-                    );
-
-                    // Basic validation: closed programs should not have authority
-                    if is_closed {
-                        assert_eq!(authority, None, "Closed program should not have authority");
-                    }
-                }
-                Err(e) => {
-                    println!("Error for program {program_id}: {e:?}");
-                    // Errors are acceptable for some programs
-                }
-            }
-        }
+    #[test]
+    fn hash_known_bytes() {
+        // sha256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        let mut data = b"hello".to_vec();
+        data.extend_from_slice(&[0u8; 8]);
+        assert_eq!(
+            compute_program_hash(&data),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
     }
 }

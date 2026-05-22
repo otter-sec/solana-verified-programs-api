@@ -1,45 +1,23 @@
-use crate::db::models::SolanaProgramBuild;
-
-/// Extracts the last line from a multi-line string
+/// Constructs a repository URL with optional commit hash
+///
+/// Trailing `/` and a `.git` suffix are stripped from the base URL so that the
+/// resulting links are normalized regardless of how the repository was provided.
 ///
 /// # Arguments
-/// * `output` - Multi-line string to process
+/// * `repository` - Base repository URL
+/// * `commit` - Optional commit hash (or `"None"`, which is treated as absent)
 ///
 /// # Returns
-/// * `Option<String>` - Last line if present, None if empty
-pub fn get_last_line(output: &str) -> Option<String> {
-    output.lines().last().map(ToOwned::to_owned)
-}
-
-/// Trims trailing `/` and `.git` from a repo URL.
-pub fn normalize_repository_url(repository: &str) -> String {
+/// * `String` - Full repository URL, optionally including commit reference
+pub fn build_repository_url(repository: &str, commit: Option<&str>) -> String {
     let trimmed = repository.trim_end_matches('/');
-    trimmed.strip_suffix(".git").unwrap_or(trimmed).to_string()
-}
-
-/// Builds `repo` or `repo/tree/{commit}` for API responses.
-pub fn build_repository_url_from_parts(repository: &str, commit_hash: Option<&str>) -> String {
-    let repository = normalize_repository_url(repository);
-    if let Some(hash) = commit_hash {
+    let repository = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    if let Some(hash) = commit {
         if !hash.is_empty() && hash != "None" {
             return format!("{repository}/tree/{hash}");
         }
     }
-    repository
-}
-
-/// Constructs a repository URL with optional commit hash
-///
-/// # Arguments
-/// * `build_params` - Build parameters containing repository and commit information
-///
-/// # Returns
-/// * `String` - Full repository URL, optionally including commit reference
-pub fn build_repository_url(build_params: &SolanaProgramBuild) -> String {
-    build_repository_url_from_parts(
-        &build_params.repository,
-        build_params.commit_hash.as_deref(),
-    )
+    repository.to_string()
 }
 
 /// Extracts a hash value from output text with a specific prefix
@@ -72,44 +50,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_last_line() {
-        assert_eq!(get_last_line("Hello\nWorld"), Some("World".to_string()));
-        assert_eq!(get_last_line(""), None);
-        assert_eq!(get_last_line("Solana"), Some("Solana".to_string()));
-    }
-
-    #[test]
-    fn test_get_repo_url() {
-        let mut build = SolanaProgramBuild {
-            repository: "https://github.com/user/repo/".to_string(),
-            commit_hash: Some("abc123".to_string()),
-            ..Default::default()
-        };
+    fn test_build_repository_url() {
         assert_eq!(
-            build_repository_url(&build),
+            build_repository_url("https://github.com/user/repo/", Some("abc123")),
             "https://github.com/user/repo/tree/abc123"
         );
-
-        build.commit_hash = None;
-        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
-
-        build.commit_hash = Some("".to_string());
-        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
-
-        build.repository = "https://github.com/user/repo.git".to_string();
-        build.commit_hash = Some("abc123".to_string());
         assert_eq!(
-            build_repository_url(&build),
+            build_repository_url("https://github.com/user/repo/", None),
+            "https://github.com/user/repo"
+        );
+        assert_eq!(
+            build_repository_url("https://github.com/user/repo/", Some("")),
+            "https://github.com/user/repo"
+        );
+        // A `.git` suffix is stripped, with or without a trailing slash.
+        assert_eq!(
+            build_repository_url("https://github.com/user/repo.git", Some("abc123")),
             "https://github.com/user/repo/tree/abc123"
         );
-
-        build.commit_hash = None;
-        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
-
-        build.repository = "https://github.com/user/repo.git/".to_string();
-        build.commit_hash = Some("abc123".to_string());
         assert_eq!(
-            build_repository_url(&build),
+            build_repository_url("https://github.com/user/repo.git", None),
+            "https://github.com/user/repo"
+        );
+        assert_eq!(
+            build_repository_url("https://github.com/user/repo.git/", Some("abc123")),
             "https://github.com/user/repo/tree/abc123"
         );
     }

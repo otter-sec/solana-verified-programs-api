@@ -1,49 +1,53 @@
-use super::verify_helpers::{
-    create_and_insert_build, setup_verification, validate_program_id, validate_repository_url,
-    validate_signer, validate_webhook_url,
-};
+use super::verify_helpers::{create_and_insert_build, setup_verification};
 use crate::{
-    db::{
-        models::{
-            ApiResponse, JobStatus, SolanaProgramBuildParams, SolanaProgramBuildParamsWithSigner,
-            VerifyResponse,
-        },
-        DbClient,
-    },
-    services::{
-        onchain::program_metadata_retriever::is_program_buffer_missing,
-        verification::{check_and_handle_duplicates, notify_webhook, process_verification_request},
-    },
+    db::{DbClient, NewBuild},
+    responses::{ApiResponse, JobStatus, VerifyResponse},
+    services::onchain::is_program_data_missing,
+    services::verification as build,
+    state::AppState,
+    validation::{Address, WebhookUrl},
 };
 use axum::{extract::State, http::StatusCode, Json};
+use serde::Deserialize;
+use solana_client::nonblocking::rpc_client::RpcClient;
 use tracing::{error, info};
+use uuid::Uuid;
+
+/// Request body for `POST /verify`. Build params come from the on-chain
+/// Otter Verify PDA; only `program_id` (and optionally `webhook_url`) is
+/// honoured. Extra fields like `repository` / `commit_hash` are accepted
+/// and silently ignored for backward compatibility.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SolanaProgramBuildParams {
+    pub program_id: Address,
+    #[serde(default)]
+    pub webhook_url: Option<WebhookUrl>,
+}
+
+/// Request body for `POST /verify-with-signer`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SolanaProgramBuildParamsWithSigner {
+    pub program_id: Address,
+    pub signer: Address,
+    #[serde(default)]
+    pub webhook_url: Option<WebhookUrl>,
+}
 
 /// Handler for asynchronous program verification
 ///
 /// # Endpoint: POST /verify
 pub(crate) async fn process_async_verification(
-    State(db): State<DbClient>,
+    State(state): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParams>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    if let Err(resp) = validate_program_id(&payload.program_id) {
-        return resp;
-    }
-    if let Err(resp) = validate_repository_url(&payload.repository) {
-        return resp;
-    }
-    if let Err(resp) = validate_webhook_url(&payload.webhook_url) {
-        return resp;
-    }
-
     info!(
         "Starting async verification for program: {}",
         payload.program_id
     );
 
-    match setup_verification(&db, &payload.program_id, None).await {
-        Ok(setup) => {
-            process_verification(db, setup.params, setup.signer, payload.webhook_url.clone()).await
-        }
+    let webhook_url = payload.webhook_url.map(WebhookUrl::into_inner);
+    match setup_verification(&state, &payload.program_id, None).await {
+        Ok(setup) => process_verification(state, setup.params, setup.signer, webhook_url).await,
         Err(error_response) => error_response,
     }
 }
@@ -52,61 +56,65 @@ pub(crate) async fn process_async_verification(
 ///
 /// # Endpoint: POST /verify-with-signer
 pub(crate) async fn process_async_verification_with_signer(
-    State(db): State<DbClient>,
+    State(state): State<AppState>,
     Json(payload): Json<SolanaProgramBuildParamsWithSigner>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    if let Err(resp) = validate_program_id(&payload.program_id) {
-        return resp;
-    }
-    if let Err(resp) = validate_signer(&payload.signer) {
-        return resp;
-    }
-    if let Err(resp) = validate_webhook_url(&payload.webhook_url) {
-        return resp;
-    }
-
     info!(
         "Starting async verification for program {} with signer {}",
         payload.program_id, payload.signer
     );
 
-    match setup_verification(&db, &payload.program_id, Some(payload.signer)).await {
-        Ok(setup) => {
-            process_verification(db, setup.params, setup.signer, payload.webhook_url.clone()).await
-        }
+    let webhook_url = payload.webhook_url.map(WebhookUrl::into_inner);
+    match setup_verification(&state, &payload.program_id, Some(payload.signer)).await {
+        Ok(setup) => process_verification(state, setup.params, setup.signer, webhook_url).await,
         Err(error_response) => error_response,
     }
 }
 
 /// Processes the verification request asynchronously
 pub async fn process_verification(
-    db: DbClient,
-    payload: SolanaProgramBuildParams,
-    signer: String,
+    state: AppState,
+    mut payload: NewBuild,
+    signer: Address,
     webhook_url: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    // The dedupe predicate matches on every NewBuild field including
+    // `signer`; populate it before the lookup or we'd never match.
+    payload.signer = Some(signer);
+
     // Check for existing verification
-    if let Some(response) = check_and_handle_duplicates(&payload, signer.clone(), &db).await {
-        check_program_closed(&db, &payload.program_id).await;
-        return (StatusCode::OK, Json(response.into()));
+    if let Ok(Some(dup)) = state.db.find_duplicate(&payload).await {
+        check_program_closed(&state.db, &state.rpc, &payload.program_id).await;
+        return (
+            StatusCode::OK,
+            Json(
+                VerifyResponse {
+                    status: dup.status,
+                    request_id: dup.id.to_string(),
+                    message: match dup.status {
+                        JobStatus::InProgress => "Build verification already in progress".into(),
+                        JobStatus::Completed => "Verification already completed.".into(),
+                        JobStatus::Failed => "Build record exists.".into(),
+                    },
+                }
+                .into(),
+            ),
+        );
     }
 
-    // Create build record for the verification
-    let verification_uuid = match create_and_insert_build(&db, &payload, &signer).await {
+    let verification_uuid = match create_and_insert_build(&state.db, &payload).await {
         Ok(uuid) => uuid,
         Err(error_response) => return error_response,
     };
 
-    // Spawn async verification task
-    spawn_verification_task(db.clone(), payload, verification_uuid.clone(), webhook_url).await;
+    spawn_verification_task(state, payload, verification_uuid, webhook_url).await;
 
-    // Return response with request ID
     (
         StatusCode::OK,
         Json(
             VerifyResponse {
                 status: JobStatus::InProgress,
-                request_id: verification_uuid,
+                request_id: verification_uuid.to_string(),
                 message: "Build verification started".to_string(),
             }
             .into(),
@@ -116,34 +124,28 @@ pub async fn process_verification(
 
 /// Spawns an asynchronous verification task
 async fn spawn_verification_task(
-    db: DbClient,
-    payload: SolanaProgramBuildParams,
-    uuid: String,
+    state: AppState,
+    payload: NewBuild,
+    uuid: Uuid,
     webhook_url: Option<String>,
 ) {
     info!("Verification task spawned with UUID: {}", uuid);
     tokio::spawn(async move {
         info!("Spawning verification task with uuid: {}", uuid);
-        let result = process_verification_request(payload, &uuid, &db).await;
-        if let Err(e) = &result {
-            error!("Verification task failed: {:?}", e);
-        }
-        if let Some(url) = webhook_url {
-            notify_webhook(url, result, uuid).await;
-        }
+        build::execute(uuid, payload, state, webhook_url).await;
     });
 }
 
 /// Checks if the program's buffer account is missing, and if so,
 /// marks the program as unverified in the database.
-pub async fn check_program_closed(db: &DbClient, program_id: &str) {
-    if is_program_buffer_missing(program_id).await {
+pub async fn check_program_closed(db: &DbClient, rpc: &RpcClient, program_id: &Address) {
+    if is_program_data_missing(rpc, &program_id.to_string()).await {
         info!(
             "Program {} buffer missing. Marking as unverified.",
             program_id
         );
 
-        if let Err(e) = db.mark_program_unverified(program_id).await {
+        if let Err(e) = db.mark_closed(program_id).await {
             error!(
                 "Program {} buffer missing. failed to mark as unverified: {:?}",
                 program_id, e

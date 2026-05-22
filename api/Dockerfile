@@ -1,4 +1,4 @@
-FROM rust:1.93 AS api_build
+FROM rust:1.94 AS api_build
 
 WORKDIR /solana_verified_program_api
 
@@ -9,9 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the entire project directory to the Docker image
-COPY api ./api
-
-WORKDIR /solana_verified_program_api/api
+COPY . .
 
 RUN cargo build --release
 
@@ -21,10 +19,10 @@ FROM debian:stable-slim AS api_final
 
 WORKDIR /solana_verified_program_api
 
-COPY --from=api_build /solana_verified_program_api/api/target/release/verified_programs_api .
+COPY --from=api_build /solana_verified_program_api/target/release/verified_programs_api .
 
 COPY --from=api_build /usr/local/cargo/bin/solana-verify /usr/local/bin/solana-verify
 
-RUN apt-get update && apt-get install -y docker.io libpq-dev
+RUN apt-get update && apt-get install -y docker.io ca-certificates && rm -rf /var/lib/apt/lists/*
 
 CMD ["./verified_programs_api"]

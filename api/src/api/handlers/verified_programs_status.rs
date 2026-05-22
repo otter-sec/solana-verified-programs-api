@@ -1,7 +1,5 @@
-use crate::db::{
-    models::{Status, VerifiedProgramsStatusListResponse},
-    DbClient,
-};
+use crate::db::DbClient;
+use crate::responses::{Status, VerifiedProgramsStatusListResponse};
 use axum::{extract::State, http::StatusCode, Json};
 use tracing::{error, info};
 

@@ -64,7 +64,6 @@ jobs:
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
           DATABASE_URL: postgres://dummy:dummy@localhost/dummy
-          REDIS_URL: redis://localhost:6379
           AUTH_SECRET: dummy-secret
           PORT: "8080"
         run: cargo test

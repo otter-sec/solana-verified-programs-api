@@ -1,17 +1,19 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
-use super::JobStatus;
+pub use crate::db::JobStatus;
 
-/// Payload posted to webhook when verification completes
+/// Payload posted to webhook when verification completes. `status` is
+/// always either `Completed` or `Failed` (in-progress doesn't fire a
+/// webhook); the field is typed so call sites can't drift the string.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationWebhookPayload {
     pub request_id: String,
-    pub status: String,
+    pub status: JobStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_verified: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub program_id: Option<String>,
+    pub program_id: Option<crate::validation::Address>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_chain_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,7 +26,7 @@ pub struct VerificationWebhookPayload {
 
 /// Response structure for program verification status
 /// Contains all the necessary information about a program's verification state
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct VerificationResponse {
     /// Indicates if the program is currently verified
     pub is_verified: bool,
@@ -45,76 +47,42 @@ pub struct VerificationResponse {
 }
 
 impl VerificationResponse {
-    /// Creates a new builder for VerificationResponse
-    pub fn builder() -> VerificationResponseBuilder {
-        VerificationResponseBuilder::default()
-    }
-}
-
-/// Builder for VerificationResponse to reduce repetitive struct initialization
-#[derive(Default)]
-pub struct VerificationResponseBuilder {
-    is_verified: bool,
-    on_chain_hash: String,
-    executable_hash: String,
-    repo_url: String,
-    commit: String,
-    last_verified_at: Option<NaiveDateTime>,
-    is_frozen: bool,
-    is_closed: bool,
-}
-
-impl VerificationResponseBuilder {
-    pub fn with_is_verified(mut self, value: bool) -> Self {
-        self.is_verified = value;
-        self
-    }
-
-    pub fn with_on_chain_hash(mut self, value: impl Into<String>) -> Self {
-        self.on_chain_hash = value.into();
-        self
-    }
-
-    pub fn with_executable_hash(mut self, value: impl Into<String>) -> Self {
-        self.executable_hash = value.into();
-        self
-    }
-
-    pub fn with_repo_url(mut self, value: impl Into<String>) -> Self {
-        self.repo_url = value.into();
-        self
-    }
-
-    pub fn with_commit(mut self, value: impl Into<String>) -> Self {
-        self.commit = value.into();
-        self
-    }
-
-    pub fn with_last_verified_at(mut self, value: Option<NaiveDateTime>) -> Self {
-        self.last_verified_at = value;
-        self
-    }
-
-    pub fn with_is_frozen(mut self, value: bool) -> Self {
-        self.is_frozen = value;
-        self
-    }
-
-    pub fn with_is_closed(mut self, value: bool) -> Self {
-        self.is_closed = value;
-        self
-    }
-
-    pub fn build(self) -> VerificationResponse {
-        VerificationResponse {
-            is_verified: self.is_verified,
-            on_chain_hash: self.on_chain_hash,
-            executable_hash: self.executable_hash,
-            repo_url: self.repo_url,
-            commit: self.commit,
-            last_verified_at: self.last_verified_at,
-            is_frozen: self.is_frozen,
-            is_closed: self.is_closed,
+    /// Shapes a `(state, build)` pair into the `/status` response.
+    /// Centralises the "is_verified" rule: non-empty on-chain hash +
+    /// matching build hash + not closed.
+    pub fn from_state_and_build(
+        state: Option<&crate::db::ProgramStateRow>,
+        build: Option<&crate::db::BuildRow>,
+    ) -> Self {
+        let on_chain_hash = state
+            .and_then(|s| s.on_chain_hash.clone())
+            .unwrap_or_default();
+        let is_frozen = state.is_some_and(|s| s.is_frozen);
+        let is_closed = state.is_some_and(|s| s.is_closed);
+        let Some(b) = build else {
+            return Self {
+                is_verified: false,
+                on_chain_hash,
+                is_frozen,
+                is_closed,
+                ..Self::default()
+            };
+        };
+        let is_verified = !on_chain_hash.is_empty()
+            && b.executable_hash.as_deref() == Some(on_chain_hash.as_str())
+            && !is_closed;
+        Self {
+            is_verified,
+            on_chain_hash,
+            executable_hash: b.executable_hash.clone().unwrap_or_default(),
+            repo_url: crate::services::misc::build_repository_url(
+                &b.repository,
+                b.commit_hash.as_deref(),
+            ),
+            commit: b.commit_hash.clone().unwrap_or_default(),
+            last_verified_at: b.completed_at.map(|t| t.naive_utc()),
+            is_frozen,
+            is_closed,
         }
     }
 }
@@ -124,7 +92,7 @@ impl VerificationResponseBuilder {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
-    pub signer: String,
+    pub signer: Option<crate::validation::Address>,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,
@@ -182,6 +150,8 @@ pub struct ExtendedStatusResponse {
 
 /// Response structure for verification job status
 /// Used when checking the status of a verification job
+///
+/// `request_id` is the build UUID the caller polls `/job/{job_id}` with.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     /// Current status of the verification job
@@ -242,12 +212,41 @@ impl From<ErrorResponse> for ApiResponse {
     }
 }
 
+impl From<Vec<VerificationResponseWithSigner>> for ApiResponse {
+    fn from(value: Vec<VerificationResponseWithSigner>) -> Self {
+        Self::Success(SuccessResponse::StatusAll(value))
+    }
+}
+
+/// `JobVerificationResponse.status`. A superset of [`JobStatus`] with
+/// an `Unknown` for "job not found / bad input / DB error".
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum JobReplyStatus {
+    InProgress,
+    Completed,
+    Failed,
+    Unknown,
+}
+
+impl From<JobStatus> for JobReplyStatus {
+    fn from(j: JobStatus) -> Self {
+        match j {
+            JobStatus::InProgress => Self::InProgress,
+            JobStatus::Completed => Self::Completed,
+            JobStatus::Failed => Self::Failed,
+        }
+    }
+}
+
 /// Response structure for job verification status
 /// Used to report the status of a verification job
+///
+/// Hash/url fields are empty strings (not null) for in-progress or failed jobs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JobVerificationResponse {
     /// Current status of the verification job
-    pub status: String,
+    pub status: JobReplyStatus,
     /// Detailed message about the job status
     pub message: String,
     /// Current on-chain hash of the program
@@ -282,7 +281,7 @@ pub struct PaginationMeta {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramStatusResponse {
     /// Program identifier
-    pub program_id: String,
+    pub program_id: crate::validation::Address,
     /// Current verification status
     pub is_verified: bool,
     /// Status message
@@ -299,6 +298,27 @@ pub struct VerifiedProgramStatusResponse {
     pub commit: String,
 }
 
+/// Builds the response from a `BuildRow` whose hash already equals
+/// `program_state.on_chain_hash` (the caller enforces that via SQL JOIN).
+impl From<crate::db::BuildRow> for VerifiedProgramStatusResponse {
+    fn from(b: crate::db::BuildRow) -> Self {
+        let hash = b.executable_hash.unwrap_or_default();
+        Self {
+            program_id: b.program_id,
+            is_verified: true,
+            message: "On chain program verified".to_string(),
+            on_chain_hash: hash.clone(),
+            executable_hash: hash,
+            last_verified_at: b.completed_at.map(|t| t.naive_utc()),
+            repo_url: crate::services::misc::build_repository_url(
+                &b.repository,
+                b.commit_hash.as_deref(),
+            ),
+            commit: b.commit_hash.unwrap_or_default(),
+        }
+    }
+}
+
 /// Response structure for list of program statuses
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramsStatusListResponse {
@@ -308,4 +328,37 @@ pub struct VerifiedProgramsStatusListResponse {
     pub data: Option<Vec<VerifiedProgramStatusResponse>>,
     /// Error message if any
     pub error: Option<String>,
+}
+
+/// Path-extraction shape for `/status/{address}` and `/status-all/{address}`.
+#[derive(Debug, Deserialize)]
+pub struct VerificationStatusParams {
+    pub address: crate::validation::Address,
+}
+
+/// Query-string shape for `/verified-programs[?search=]`.
+#[derive(Debug, Deserialize)]
+pub struct VerifiedProgramsQuery {
+    #[serde(default)]
+    pub search: Option<String>,
+}
+
+/// Sweep liveness as observed at request time.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+pub enum BackgroundJobStatus {
+    /// A recent enough sweep cycle landed; the cache is fresh.
+    Active,
+    /// A sweep ran but not recently enough.
+    Inactive,
+    /// No sweep has completed yet (also: empty DB).
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+/// Health view for `/health/background-jobs`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackgroundJobHealth {
+    pub status: BackgroundJobStatus,
+    pub last_program_check: Option<NaiveDateTime>,
+    pub message: String,
 }

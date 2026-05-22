@@ -1,7 +1,9 @@
 use crate::{
-    api::handlers::is_authorized,
-    db::{models::parse_helius_transaction, DbClient},
-    services::get_on_chain_hash,
+    api::handlers::{is_authorized, parse_helius_transaction},
+    db::DbClient,
+    services::onchain::get_on_chain_hash,
+    state::AppState,
+    validation::Address,
 };
 use axum::{
     extract::State,
@@ -9,34 +11,23 @@ use axum::{
     Json,
 };
 use serde_json::Value;
+use solana_client::nonblocking::rpc_client::RpcClient;
+use std::str::FromStr;
 use tracing::{error, info, warn};
 
 /// Constant for the upgrade instruction data identifier
 const UPGRADE_INSTRUCTION_DATA: &str = "5Sxr3";
 
-/// Handler for unverifying a program after an upgrade
-///
-/// # Endpoint: POST /unverify
-///
-/// # Arguments
-/// * `db` - Database client from application state
-/// * `headers` - Request headers containing authorization
-/// * `payload` - Vector of instruction data
-///
-/// # Returns
-/// * `(StatusCode, &'static str)` - Status code and response message
-///
-/// # Security
-/// Requires valid authorization header matching CONFIG.auth_secret
+/// `POST /unverify` -- Helius webhook for upgrade instructions. We respond
+/// 200 immediately and process in a background task.
 pub async fn handle_unverify(
-    State(db): State<DbClient>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<Vec<Value>>,
 ) -> (StatusCode, &'static str) {
     info!("Received unverify request");
 
-    // Validate authorization
-    if !is_authorized(&headers) {
+    if !is_authorized(&headers, &state.auth_secret) {
         warn!("Unauthorized unverify attempt");
         return (
             StatusCode::UNAUTHORIZED,
@@ -44,21 +35,26 @@ pub async fn handle_unverify(
         );
     }
 
-    // Validate payload
     let helius_parsed_transaction = match parse_helius_transaction(&payload) {
         Ok(parsed_transaction) => parsed_transaction,
         Err(status) => return status,
     };
 
-    // Process instructions (background task so Helius gets a fast 200)
-    let db = db.clone();
+    let AppState { db, rpc, .. } = state;
     tokio::spawn(async move {
         for ix in helius_parsed_transaction.instructions {
             if ix.data == UPGRADE_INSTRUCTION_DATA {
-                let program_id = &ix.accounts[1];
+                let Some(addr) = ix.accounts.get(1) else {
+                    warn!("Upgrade instruction missing program account");
+                    continue;
+                };
+                let Ok(program_id) = Address::from_str(addr) else {
+                    warn!("Invalid program id in unverify instruction");
+                    continue;
+                };
                 info!("Processing upgrade instruction for program: {}", program_id);
 
-                if let Err(e) = process_program_upgrade(&db, program_id).await {
+                if let Err(e) = process_program_upgrade(&db, &rpc, &program_id).await {
                     error!("Failed to process program upgrade: {}", e);
                     continue;
                 }
@@ -72,27 +68,21 @@ pub async fn handle_unverify(
 /// Processes a program upgrade by checking and updating verification status
 async fn process_program_upgrade(
     db: &DbClient,
-    program_id: &str,
+    rpc: &RpcClient,
+    program_id: &Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Get current verification status
-    let executable_hash = db.get_verified_build(program_id, None).await?;
+    let cached_hash = db.cached_on_chain_hash(program_id).await?;
 
-    // Get new on-chain hash
-    let onchain_hash = match get_on_chain_hash(program_id).await {
+    let onchain_hash = match get_on_chain_hash(rpc, program_id).await {
         Ok(hash) => hash,
-        Err(e) => {
-            let error_str = e.to_string();
-            if error_str.contains("Program appears to be closed") {
-                // Handle closed program using centralized helper
-                db.handle_closed_program(program_id).await?;
-                return Ok(());
-            }
-            return Err(e.into());
+        Err(e) if e.to_string().contains("Program appears to be closed") => {
+            db.mark_closed(program_id).await?;
+            return Ok(());
         }
+        Err(e) => return Err(e.into()),
     };
 
-    // Check if program needs to be unverified
-    if onchain_hash != executable_hash.on_chain_hash {
+    if onchain_hash != cached_hash {
         info!("Program {} has been upgraded, unverifying", program_id);
         db.unverify_program(program_id, &onchain_hash).await?;
         info!("Successfully unverified program {}", program_id);

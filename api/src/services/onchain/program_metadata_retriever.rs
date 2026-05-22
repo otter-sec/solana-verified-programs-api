@@ -1,20 +1,23 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
 
-use crate::{errors::ApiError, services::rpc_manager::get_rpc_manager, Result};
+use crate::{
+    errors::{ApiError, Result},
+    validation::Address,
+};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_pubkey::Pubkey;
 use solana_sdk_ids::bpf_loader_upgradeable;
 
 /// Program ID for the Otter Verify program
-pub const OTTER_VERIFY_PROGRAMID: Pubkey =
-    solana_sdk::pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
+pub const OTTER_VERIFY_PROGRAM_ID: Pubkey =
+    solana_pubkey::pubkey!("verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC");
 
 /// Whitelisted signer public keys
 pub const SIGNER_KEYS: [Pubkey; 3] = [
-    solana_sdk::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU"),
-    solana_sdk::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
-    solana_sdk::pubkey!("5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"),
+    solana_pubkey::pubkey!("9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU"),
+    solana_pubkey::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
+    solana_pubkey::pubkey!("5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"),
 ];
 
 /// Build parameters stored in Otter Verify PDA
@@ -39,26 +42,18 @@ impl OtterBuildParams {
 
     /// Gets the mount path from build arguments
     pub fn get_mount_path(&self) -> Option<String> {
-        self.args
-            .iter()
-            .position(|arg| arg == "--mount-path")
-            .map(|index| self.args[index + 1].clone())
+        self.arg_value("--mount-path")
     }
 
     /// Gets the library name from build arguments
     pub fn get_library_name(&self) -> Option<String> {
-        self.args
-            .iter()
-            .position(|arg| arg == "--library-name")
-            .map(|index| self.args[index + 1].clone())
+        self.arg_value("--library-name")
     }
 
     /// Gets the base image from build arguments
     pub fn get_base_image(&self) -> Option<String> {
-        self.args
-            .iter()
-            .position(|arg| arg == "--base-image" || arg == "-b")
-            .map(|index| self.args[index + 1].clone())
+        self.arg_value("--base-image")
+            .or_else(|| self.arg_value("-b"))
     }
 
     /// Gets additional cargo arguments which are after "--"
@@ -71,10 +66,14 @@ impl OtterBuildParams {
 
     /// Gets the architecture from build arguments
     pub fn get_arch(&self) -> Option<String> {
-        self.args
-            .iter()
-            .position(|arg| arg == "--arch")
-            .map(|index| self.args[index + 1].clone())
+        self.arg_value("--arch")
+    }
+
+    /// Returns the value following `flag` in `args`, or `None` if the flag
+    /// is missing or has no following value (last entry).
+    fn arg_value(&self, flag: &str) -> Option<String> {
+        let idx = self.args.iter().position(|a| a == flag)?;
+        self.args.get(idx + 1).cloned()
     }
 
     /// `solana-verify --cargo-build-sbf-args` value
@@ -129,9 +128,13 @@ pub async fn get_otter_pda(
         &signer.to_bytes(),
         &program_id_pubkey.to_bytes(),
     ];
-    let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAMID);
+    let (pda_account, _) = Pubkey::find_program_address(seeds, &OTTER_VERIFY_PROGRAM_ID);
     let account_data = client.get_account_data(&pda_account).await?;
-    OtterBuildParams::try_from_slice(&account_data[8..])
+    // Skip the 8-byte Anchor discriminator.
+    let body = account_data
+        .get(8..)
+        .ok_or_else(|| ApiError::Custom("PDA account data is too short".to_string()))?;
+    OtterBuildParams::try_from_slice(body)
         .map_err(|e| ApiError::Custom(format!("Failed to deserialize PDA data: {e}")))
 }
 
@@ -149,48 +152,23 @@ pub async fn get_otter_pda(
 ///
 /// # Returns
 ///
-/// * `Result<(OtterBuildParams, String)>` - The OtterVerify parameters and the signer's public key if successful, or an error
+/// * `Result<(OtterBuildParams, Address)>` - The OtterVerify parameters and the signer if successful, or an error
 pub async fn get_otter_verify_params(
+    rpc: &RpcClient,
     program_id: &str,
     signer: Option<String>,
     program_authority: Option<String>,
-) -> Result<(OtterBuildParams, String)> {
+) -> Result<(OtterBuildParams, Address)> {
     let program_id_pubkey = Pubkey::from_str(program_id)?;
 
-    let rpc_manager = get_rpc_manager();
-    let signer_clone = signer.clone();
-    let program_authority_clone = program_authority.clone();
-    rpc_manager
-        .execute_with_retry(move |client| {
-            let signer = signer_clone.clone();
-            let program_authority = program_authority_clone.clone();
-            async move {
-                get_otter_verify_params_with_client(
-                    client,
-                    &program_id_pubkey,
-                    signer,
-                    program_authority,
-                )
-                .await
-            }
-        })
-        .await
-}
-
-async fn get_otter_verify_params_with_client(
-    client: Arc<RpcClient>,
-    program_id_pubkey: &Pubkey,
-    signer: Option<String>,
-    program_authority: Option<String>,
-) -> Result<(OtterBuildParams, String)> {
     // Try with provided signer
     if let Some(signer) = signer {
         let signer_pubkey = Pubkey::from_str(&signer)
-            .map_err(|_| ApiError::Custom(format!("Invalid signer pubkey: {signer}")))?;
-        if let Ok(params) = get_otter_pda(&client, &signer_pubkey, program_id_pubkey).await {
-            return Ok((params, signer_pubkey.to_string()));
+            .map_err(|_| ApiError::BadRequest(format!("Invalid signer pubkey: {signer}")))?;
+        if let Ok(params) = get_otter_pda(rpc, &signer_pubkey, &program_id_pubkey).await {
+            return Ok((params, Address(signer_pubkey)));
         }
-        return Err(ApiError::Custom(format!(
+        return Err(ApiError::NotFound(format!(
             "Otter-Verify PDA not found for signer: {signer}"
         )));
     }
@@ -198,70 +176,56 @@ async fn get_otter_verify_params_with_client(
     // Try with program authority
     if let Some(authority) = &program_authority {
         let authority_pubkey = Pubkey::from_str(authority)?;
-        if let Ok(params) = get_otter_pda(&client, &authority_pubkey, program_id_pubkey).await {
-            return Ok((params, authority_pubkey.to_string()));
+        if let Ok(params) = get_otter_pda(rpc, &authority_pubkey, &program_id_pubkey).await {
+            return Ok((params, Address(authority_pubkey)));
         }
     }
 
     // Try with whitelisted signers
     for signer in SIGNER_KEYS.iter() {
-        if let Ok(params) = get_otter_pda(&client, signer, program_id_pubkey).await {
-            return Ok((params, signer.to_string()));
+        if let Ok(params) = get_otter_pda(rpc, signer, &program_id_pubkey).await {
+            return Ok((params, Address(*signer)));
         }
     }
 
     // If no valid parameters are found, return an error
-    Err(ApiError::Custom(
+    Err(ApiError::NotFound(
         "No valid Otter-Verify PDA found".to_string(),
     ))
 }
 
-/// Returns `false` if program buffer account exists
-/// Returns `true` only if the buffer account is missing (AccountNotFound)
-pub async fn is_program_buffer_missing(program_id: &str) -> bool {
-    let program_id_pubkey = match Pubkey::from_str(program_id) {
-        Ok(pubkey) => pubkey,
-        Err(_) => return false,
+/// Returns `true` only if the program-data account doesn't exist
+/// (`AccountNotFound`). Any other error -- RPC down, rate-limited -- is
+/// treated as "exists" so we don't accidentally flip a healthy program
+/// to closed on a transient hiccup.
+pub async fn is_program_data_missing(rpc: &RpcClient, program_id: &str) -> bool {
+    let Ok(program_id_pubkey) = Pubkey::from_str(program_id) else {
+        return false;
     };
-
-    let rpc_manager = get_rpc_manager();
-    let result = rpc_manager
-        .execute_with_retry(|client| async move {
-            is_program_buffer_missing_with_client(client, &program_id_pubkey).await
-        })
-        .await;
-
-    result.unwrap_or(false)
-}
-
-async fn is_program_buffer_missing_with_client(
-    client: Arc<RpcClient>,
-    program_id_pubkey: &Pubkey,
-) -> Result<bool> {
-    let program_buffer =
+    let program_data_pda =
         Pubkey::find_program_address(&[program_id_pubkey.as_ref()], &bpf_loader_upgradeable::id())
             .0;
 
-    match client.get_account(&program_buffer).await {
-        Ok(_) => Ok(false), // Account exists
-        Err(err) => {
-            if err.to_string().contains("AccountNotFound") {
-                Ok(true)
-            } else {
-                Ok(false) // Ignore other errors and continue
-            }
-        }
+    match rpc.get_account(&program_data_pda).await {
+        Ok(_) => false,
+        Err(err) => err.to_string().contains("AccountNotFound"),
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::models::SolanaProgramBuildParams;
+    use crate::db::NewBuild;
+
+    fn rpc() -> RpcClient {
+        RpcClient::new("https://api.mainnet-beta.solana.com".to_string())
+    }
 
     #[tokio::test]
+    #[ignore = "hits mainnet RPC"]
     async fn test_get_otter_verify_params() {
         let program_id = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
-        let result = get_otter_verify_params(program_id, None, None).await;
+        let result = get_otter_verify_params(&rpc(), program_id, None, None).await;
         assert!(result.is_ok(), "Failed to get params: {:?}", result.err());
 
         let (params, _) = result.unwrap();
@@ -276,17 +240,18 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "hits mainnet RPC"]
     async fn test_build_params_conversion() {
         let program_id = "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu";
-        let result = get_otter_verify_params(program_id, None, None).await;
+        let result = get_otter_verify_params(&rpc(), program_id, None, None).await;
         assert!(result.is_ok(), "Failed to get params: {:?}", result.err());
 
         let (params, _) = result.unwrap();
-        let build_params = SolanaProgramBuildParams::from(params);
+        let new_build = NewBuild::from(&params);
 
-        assert_eq!(build_params.program_id, program_id);
-        assert!(build_params.lib_name.unwrap() == "squads_mpl");
-        assert!(build_params.bpf_flag.unwrap());
+        assert_eq!(new_build.program_id.to_string(), program_id);
+        assert_eq!(new_build.lib_name.as_deref(), Some("squads_mpl"));
+        assert!(new_build.bpf_flag);
     }
 
     #[test]
@@ -335,9 +300,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "hits mainnet RPC"]
     async fn test_program_buffer_missing() {
         let program_id = "2gFsaXeN9jngaKbQvZsLwxqfUrT2n4WRMraMpeL8NwZM";
-        let result = is_program_buffer_missing(program_id).await;
-        assert!(result);
+        assert!(is_program_data_missing(&rpc(), program_id).await);
     }
 }
