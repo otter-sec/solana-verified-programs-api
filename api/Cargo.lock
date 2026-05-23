@@ -6030,7 +6030,6 @@ dependencies = [
  "dotenvy",
  "envy",
  "hex",
- "once_cell",
  "reqwest 0.13.3",
  "serde",
  "serde_json",
