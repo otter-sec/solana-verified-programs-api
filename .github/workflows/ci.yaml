@@ -28,8 +28,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            api/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('api/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
@@ -44,23 +44,18 @@ jobs:
           tool: cargo-machete
 
       - name: Check formatting
-        working-directory: api
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        working-directory: api
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Check dependency sort
-        working-directory: api
         run: cargo sort --check
 
       - name: Check unused dependencies
-        working-directory: api
         run: cargo machete
 
       - name: Run tests
-        working-directory: api
         env:
           RPC_URL: ${{ secrets.RPC_URL }}
           DATABASE_URL: postgres://dummy:dummy@localhost/dummy

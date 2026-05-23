@@ -1,10 +1,10 @@
 use super::async_verify::SolanaProgramBuildParams;
 use super::verify_helpers::{create_and_insert_build, create_internal_error, setup_verification};
 use crate::{
+    api::responses::build_repository_url,
+    api::responses::{ApiResponse, StatusResponse},
+    build,
     db::NewBuild,
-    responses::{ApiResponse, StatusResponse},
-    services::build_repository_url,
-    services::verification as build,
     state::AppState,
 };
 use axum::{extract::State, http::StatusCode, Json};
@@ -36,17 +36,17 @@ async fn process_verification_sync(
         return (
             StatusCode::OK,
             Json(
-                crate::responses::VerifyResponse {
+                crate::api::responses::VerifyResponse {
                     status: dup.status,
                     request_id: dup.id.to_string(),
                     message: match dup.status {
-                        crate::responses::JobStatus::InProgress => {
+                        crate::api::responses::JobStatus::InProgress => {
                             "Build verification already in progress".into()
                         }
-                        crate::responses::JobStatus::Completed => {
+                        crate::api::responses::JobStatus::Completed => {
                             "Verification already completed.".into()
                         }
-                        crate::responses::JobStatus::Failed => "Build record exists.".into(),
+                        crate::api::responses::JobStatus::Failed => "Build record exists.".into(),
                     },
                 }
                 .into(),

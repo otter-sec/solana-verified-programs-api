@@ -20,8 +20,8 @@ use tower_http::{
 };
 use tracing::Span;
 
+use crate::api::handlers::index::{index, landing_page};
 use crate::api::handlers::*;
-use crate::api::index::{index, landing_page};
 
 pub fn initialize_router(state: AppState) -> Router {
     let error_handler = || {

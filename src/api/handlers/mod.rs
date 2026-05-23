@@ -2,7 +2,8 @@
 //! Each module corresponds to a specific API endpoint or related group of endpoints.
 
 // Verification-related handlers
-pub mod async_verify; // Asynchronous program verification
+pub mod async_verify;
+pub mod index; // Asynchronous program verification
 pub mod sync_verify; // Synchronous program verification
 pub mod unverify; // Program unverification
 pub mod verification_status;

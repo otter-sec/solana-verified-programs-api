@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     errors::{ApiError, Result},
-    validation::Address,
+    types::Address,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;

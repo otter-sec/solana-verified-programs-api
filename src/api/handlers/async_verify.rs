@@ -1,11 +1,11 @@
 use super::verify_helpers::{create_and_insert_build, setup_verification};
 use crate::{
+    api::responses::{ApiResponse, JobStatus, VerifyResponse},
+    build,
     db::{DbClient, NewBuild},
-    responses::{ApiResponse, JobStatus, VerifyResponse},
-    services::onchain::is_program_data_missing,
-    services::verification as build,
+    onchain::is_program_data_missing,
     state::AppState,
-    validation::{Address, WebhookUrl},
+    types::{Address, WebhookUrl},
 };
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;

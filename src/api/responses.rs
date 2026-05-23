@@ -3,6 +3,21 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::db::JobStatus;
 
+/// Formats `repo/tree/<commit>` for display in `/status`-style responses.
+/// Returns the bare repo when `commit` is missing, empty, or the sentinel
+/// string `"None"`. A trailing `/` and a `.git` suffix are stripped so the
+/// resulting links are normalized regardless of how the repo was provided.
+pub fn build_repository_url(repository: &str, commit: Option<&str>) -> String {
+    let trimmed = repository.trim_end_matches('/');
+    let repository = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    if let Some(hash) = commit {
+        if !hash.is_empty() && hash != "None" {
+            return format!("{repository}/tree/{hash}");
+        }
+    }
+    repository.to_string()
+}
+
 /// Payload posted to webhook when verification completes. `status` is
 /// always either `Completed` or `Failed` (in-progress doesn't fire a
 /// webhook); the field is typed so call sites can't drift the string.
@@ -13,7 +28,7 @@ pub struct VerificationWebhookPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_verified: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub program_id: Option<crate::validation::Address>,
+    pub program_id: Option<crate::types::Address>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_chain_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -75,7 +90,7 @@ impl VerificationResponse {
             is_verified,
             on_chain_hash,
             executable_hash: b.executable_hash.clone().unwrap_or_default(),
-            repo_url: crate::services::misc::build_repository_url(
+            repo_url: crate::api::responses::build_repository_url(
                 &b.repository,
                 b.commit_hash.as_deref(),
             ),
@@ -92,7 +107,7 @@ impl VerificationResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
-    pub signer: Option<crate::validation::Address>,
+    pub signer: Option<crate::types::Address>,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,
@@ -281,7 +296,7 @@ pub struct PaginationMeta {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramStatusResponse {
     /// Program identifier
-    pub program_id: crate::validation::Address,
+    pub program_id: crate::types::Address,
     /// Current verification status
     pub is_verified: bool,
     /// Status message
@@ -310,7 +325,7 @@ impl From<crate::db::BuildRow> for VerifiedProgramStatusResponse {
             on_chain_hash: hash.clone(),
             executable_hash: hash,
             last_verified_at: b.completed_at.map(|t| t.naive_utc()),
-            repo_url: crate::services::misc::build_repository_url(
+            repo_url: crate::api::responses::build_repository_url(
                 &b.repository,
                 b.commit_hash.as_deref(),
             ),
@@ -333,7 +348,7 @@ pub struct VerifiedProgramsStatusListResponse {
 /// Path-extraction shape for `/status/{address}` and `/status-all/{address}`.
 #[derive(Debug, Deserialize)]
 pub struct VerificationStatusParams {
-    pub address: crate::validation::Address,
+    pub address: crate::types::Address,
 }
 
 /// Query-string shape for `/verified-programs[?search=]`.

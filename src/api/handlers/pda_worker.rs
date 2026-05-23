@@ -3,9 +3,9 @@ use std::str::FromStr;
 use crate::{
     api::handlers::{async_verify::process_verification, is_authorized, parse_helius_transaction},
     db::NewBuild,
-    services::onchain::{get_on_chain_hash, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID},
+    onchain::{get_on_chain_hash, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID},
     state::AppState,
-    validation::Address,
+    types::Address,
 };
 use axum::{
     extract::State,

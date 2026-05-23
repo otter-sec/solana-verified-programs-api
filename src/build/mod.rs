@@ -1,13 +1,14 @@
 //! Spawning and lifecycle of `solana-verify` builds.
 
+pub mod logs;
+
 use crate::{
+    api::responses::VerificationWebhookPayload,
+    build::logs as build_logs,
     db::{DbClient, NewBuild},
     errors::{ApiError, Result},
-    responses::VerificationWebhookPayload,
-    services::logging as logs,
-    services::misc::extract_hash_with_prefix,
     state::AppState,
-    validation::Address,
+    types::Address,
 };
 use chrono::Utc;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -63,7 +64,7 @@ pub async fn run_build(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        if let Err(e) = logs::write_logs(&stderr, &stdout, &log_id, rpc_url).await {
+        if let Err(e) = build_logs::write_logs(&stderr, &stdout, &log_id, rpc_url).await {
             error!("write build logs: {}", e);
         }
         if let Err(e) = db
@@ -172,9 +173,7 @@ pub async fn execute(
 
     if let Err(e) = &result {
         // If the upgrade buffer is missing, treat the program as closed.
-        if crate::services::onchain::is_program_data_missing(&state.rpc, &program_id.to_string())
-            .await
-        {
+        if crate::onchain::is_program_data_missing(&state.rpc, &program_id.to_string()).await {
             if let Err(err) = state.db.mark_closed(&program_id).await {
                 error!("mark_closed after failed build: {}", err);
             }
@@ -203,7 +202,7 @@ pub async fn finalize_completed(
         error!("mark completed: {}", e);
     }
     let pid = *program_id.as_pubkey();
-    let snapshots = match crate::services::onchain::snapshot_programs(rpc, &[pid]).await {
+    let snapshots = match crate::onchain::snapshot_programs(rpc, &[pid]).await {
         Ok(s) => s,
         Err(e) => {
             error!("snapshot {}: {}", program_id, e);
@@ -238,5 +237,27 @@ async fn post_webhook(url: &str, payload: &VerificationWebhookPayload) {
         if attempt + 1 < WEBHOOK_RETRIES {
             tokio::time::sleep(WEBHOOK_RETRY_DELAY).await;
         }
+    }
+}
+
+/// Pulls a hash off a `Prefix: <hash>` line in `solana-verify`'s stdout.
+fn extract_hash_with_prefix(output: &str, prefix: &str) -> Option<String> {
+    output
+        .lines()
+        .find(|line| line.starts_with(prefix))
+        .map(|line| line.trim_start_matches(prefix.trim()).trim().to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_prefixed_hash() {
+        let output = "Program Hash: abc123\nRandom text";
+        assert_eq!(
+            extract_hash_with_prefix(output, "Program Hash:"),
+            Some("abc123".to_string())
+        );
     }
 }
