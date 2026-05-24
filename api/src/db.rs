@@ -91,6 +91,20 @@ pub struct ProgramStateRow {
     pub is_closed: bool,
 }
 
+/// Projection of just the columns `check_is_verified` reads to build a
+/// response. Both sides of the LATERAL join can miss, so everything is
+/// nullable.
+#[derive(sqlx::FromRow)]
+struct VerificationRow {
+    on_chain_hash: Option<String>,
+    is_frozen: Option<bool>,
+    is_closed: Option<bool>,
+    executable_hash: Option<String>,
+    repository: Option<String>,
+    commit_hash: Option<String>,
+    completed_at: Option<DateTime<Utc>>,
+}
+
 /// Identifying parameters for a build, before insertion.
 #[derive(Debug, Clone)]
 pub struct NewBuild {
@@ -242,26 +256,6 @@ impl DbClient {
         .await?)
     }
 
-    /// Most recent completed build for the program. When `prefer_hash` is
-    /// set, prefers a build whose `executable_hash` matches; falls back to
-    /// the latest of any hash. The fallback keeps `/status` responses
-    /// carrying repo/commit data after an upgrade.
-    pub async fn best_build(
-        &self,
-        program_id: &Address,
-        prefer_hash: Option<&str>,
-    ) -> Result<Option<BuildRow>> {
-        Ok(sqlx::query_as::<_, BuildRow>(
-            "SELECT * FROM builds
-             WHERE program_id = $1 AND status = 'completed'
-             ORDER BY (executable_hash IS NOT DISTINCT FROM $2) DESC, completed_at DESC
-             LIMIT 1",
-        )
-        .bind(program_id)
-        .bind(prefer_hash)
-        .fetch_optional(&self.pool)
-        .await?)
-    }
     /// One row per signer who has a completed claim on this program.
     pub async fn get_all_verification_info(
         &self,
@@ -290,21 +284,60 @@ impl DbClient {
             .collect())
     }
 
-    /// "Is program X verified" — `program_state` (cached on-chain hash +
-    /// frozen/closed flags) joined with the best matching completed build.
-    pub async fn check_is_verified(
-        &self,
-        program_id: Address,
-    ) -> Result<crate::responses::VerificationResponse> {
-        let state = self.get_program_state(&program_id).await?;
-        let on_chain_hash = state.as_ref().and_then(|s| s.on_chain_hash.as_deref());
-        let build = self.best_build(&program_id, on_chain_hash).await?;
-        Ok(
-            crate::responses::VerificationResponse::from_state_and_build(
-                state.as_ref(),
-                build.as_ref(),
-            ),
+    /// Serialized `GET /status/{program_id}` response body. Joins
+    /// `program_state` (cached on-chain hash + frozen/closed flags) with the
+    /// best matching completed build in a single `LEFT JOIN LATERAL`, then
+    /// renders an `ExtendedStatusResponse` directly to JSON.
+    pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
+        let row: VerificationRow = sqlx::query_as(
+            "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
+                    b.executable_hash, b.repository, b.commit_hash, b.completed_at
+             FROM (VALUES ($1::text)) AS v(program_id)
+             LEFT JOIN program_state ps ON ps.program_id = v.program_id
+             LEFT JOIN LATERAL (
+                 SELECT executable_hash, repository, commit_hash, completed_at
+                 FROM builds
+                 WHERE program_id = v.program_id AND status = 'completed'
+                 ORDER BY (executable_hash IS NOT DISTINCT FROM ps.on_chain_hash) DESC,
+                          completed_at DESC
+                 LIMIT 1
+             ) b ON TRUE",
         )
+        .bind(&program_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let on_chain_hash = row.on_chain_hash.unwrap_or_default();
+        let is_closed = row.is_closed.unwrap_or(false);
+        let is_verified = !on_chain_hash.is_empty()
+            && row.executable_hash.as_deref() == Some(on_chain_hash.as_str())
+            && !is_closed;
+        let message = if is_verified {
+            "On chain program verified"
+        } else {
+            "On chain program not verified"
+        };
+        let response = crate::responses::ExtendedStatusResponse {
+            status: crate::responses::StatusResponse {
+                is_verified,
+                message: message.to_string(),
+                on_chain_hash,
+                executable_hash: row.executable_hash.unwrap_or_default(),
+                repo_url: row
+                    .repository
+                    .as_deref()
+                    .map(|r| {
+                        crate::services::misc::build_repository_url(r, row.commit_hash.as_deref())
+                    })
+                    .unwrap_or_default(),
+                commit: row.commit_hash.unwrap_or_default(),
+                last_verified_at: row.completed_at.map(|t| t.naive_utc()),
+            },
+            is_frozen: row.is_frozen.unwrap_or(false),
+            is_closed,
+        };
+        serde_json::to_string(&response)
+            .map_err(|e| ApiError::Custom(format!("encode /status body: {e}")))
     }
 
     /// `program_state.on_chain_hash` for `program_id`, or "" when the row

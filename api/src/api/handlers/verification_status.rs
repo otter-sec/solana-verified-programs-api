@@ -4,31 +4,30 @@ use crate::responses::{
     VerificationStatusParams,
 };
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use tracing::{error, info};
 
 /// Handler for checking if a specific program is verified
 ///
 /// # Endpoint: GET /status/{address}
-///
-/// # Arguments
-/// * `db` - Database client from application state
-/// * `address` - Program address to check verification status
-///
-/// # Returns
-/// * `(StatusCode, Json<ExtendedStatusResponse>)` - HTTP status and verification status details
 pub(crate) async fn get_verification_status(
     State(db): State<DbClient>,
     Path(VerificationStatusParams { address }): Path<VerificationStatusParams>,
-) -> (StatusCode, Json<ExtendedStatusResponse>) {
+) -> Response {
     info!("Checking verification status for program: {}", address);
 
-    let r = match db.check_is_verified(address).await {
-        Ok(r) => r,
+    match db.check_is_verified(address).await {
+        Ok(json) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json")],
+            json,
+        )
+            .into_response(),
         Err(err) => {
             error!("Failed to check verification status: {}", err);
-            return (
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ExtendedStatusResponse {
                     status: StatusResponse {
@@ -43,32 +42,10 @@ pub(crate) async fn get_verification_status(
                     is_frozen: false,
                     is_closed: false,
                 }),
-            );
+            )
+                .into_response()
         }
-    };
-    let message = if r.is_verified {
-        "On chain program verified"
-    } else {
-        "On chain program not verified"
-    };
-    info!("Program status: {} (verified: {})", message, r.is_verified);
-
-    (
-        StatusCode::OK,
-        Json(ExtendedStatusResponse {
-            status: StatusResponse {
-                is_verified: r.is_verified,
-                message: message.to_string(),
-                on_chain_hash: r.on_chain_hash,
-                last_verified_at: r.last_verified_at,
-                executable_hash: r.executable_hash,
-                repo_url: r.repo_url,
-                commit: r.commit,
-            },
-            is_frozen: r.is_frozen,
-            is_closed: r.is_closed,
-        }),
-    )
+    }
 }
 
 /// Handler for retrieving all verification information for a program
