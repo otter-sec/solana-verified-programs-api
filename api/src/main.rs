@@ -27,9 +27,13 @@ async fn main() {
 
     let config = config::Config::from_env().expect("Failed to load configuration");
 
-    let db = db::DbClient::connect(&config.database_url, config.db_max_connections)
-        .await
-        .expect("Failed to connect to database");
+    let db = db::DbClient::connect(
+        &config.database_url,
+        config.db_max_connections,
+        std::time::Duration::from_secs(config.sweep_interval_seconds),
+    )
+    .await
+    .expect("Failed to connect to database");
     db.migrate().await.expect("Failed to apply migrations");
 
     match db.fail_orphan_builds().await {

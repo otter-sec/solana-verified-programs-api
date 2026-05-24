@@ -32,17 +32,34 @@ pub const PER_PAGE: i64 = 20;
 #[derive(Clone)]
 pub struct DbClient {
     pool: PgPool,
+    /// Cached `/status` response bodies, keyed by program. Every mutating
+    /// path (`upsert_program_state`, `unverify_program`, `mark_closed`,
+    /// `mark_build_completed`) invalidates the entry; the TTL is just a
+    /// safety net for missed invalidations.
+    verify_cache: moka::future::Cache<Address, String>,
 }
 
 impl DbClient {
-    /// Opens a bounded connection pool against `url`.
-    pub async fn connect(url: &str, max_connections: u32) -> Result<Self> {
+    /// Opens a bounded connection pool against `url`. `verify_cache_ttl`
+    /// should be `sweep_interval_seconds`: every sweep cycle upserts every
+    /// `program_state` row, which invalidates the matching cache entry, so
+    /// a longer TTL would never fire and a shorter one just adds DB load
+    /// between sweeps.
+    pub async fn connect(
+        url: &str,
+        max_connections: u32,
+        verify_cache_ttl: Duration,
+    ) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(max_connections)
             .acquire_timeout(Duration::from_secs(30))
             .connect(url)
             .await?;
-        Ok(Self { pool })
+        let verify_cache = moka::future::Cache::builder()
+            .max_capacity(10_000)
+            .time_to_live(verify_cache_ttl)
+            .build();
+        Ok(Self { pool, verify_cache })
     }
 
     /// Runs all pending embedded migrations.
@@ -169,8 +186,14 @@ impl DbClient {
         Ok(id)
     }
 
-    /// Transitions a build to `completed` and records its executable hash.
-    pub async fn mark_build_completed(&self, id: Uuid, executable_hash: &str) -> Result<()> {
+    /// Transitions a build to `completed`, records its executable hash, and
+    /// invalidates the `program_id`'s cached `/status` response.
+    pub async fn mark_build_completed(
+        &self,
+        id: Uuid,
+        program_id: &Address,
+        executable_hash: &str,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE builds SET status = $1, executable_hash = $2, completed_at = NOW() WHERE id = $3",
         )
@@ -179,6 +202,7 @@ impl DbClient {
         .bind(id)
         .execute(&self.pool)
         .await?;
+        self.verify_cache.invalidate(program_id).await;
         Ok(())
     }
 
@@ -287,8 +311,12 @@ impl DbClient {
     /// Serialized `GET /status/{program_id}` response body. Joins
     /// `program_state` (cached on-chain hash + frozen/closed flags) with the
     /// best matching completed build in a single `LEFT JOIN LATERAL`, then
-    /// renders an `ExtendedStatusResponse` directly to JSON.
+    /// renders an `ExtendedStatusResponse` directly to JSON. Result cached
+    /// in-process; cache invalidated on every write that affects the row.
     pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
+        if let Some(hit) = self.verify_cache.get(&program_id).await {
+            return Ok(hit);
+        }
         let row: VerificationRow = sqlx::query_as(
             "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
                     b.executable_hash, b.repository, b.commit_hash, b.completed_at
@@ -336,8 +364,10 @@ impl DbClient {
             is_frozen: row.is_frozen.unwrap_or(false),
             is_closed,
         };
-        serde_json::to_string(&response)
-            .map_err(|e| ApiError::Custom(format!("encode /status body: {e}")))
+        let json = serde_json::to_string(&response)
+            .map_err(|e| ApiError::Custom(format!("encode /status body: {e}")))?;
+        self.verify_cache.insert(program_id, json.clone()).await;
+        Ok(json)
     }
 
     /// `program_state.on_chain_hash` for `program_id`, or "" when the row
@@ -388,6 +418,7 @@ impl DbClient {
         .bind(state.is_closed)
         .execute(&self.pool)
         .await?;
+        self.verify_cache.invalidate(program_id).await;
         Ok(())
     }
 
@@ -404,6 +435,7 @@ impl DbClient {
         .bind(on_chain_hash)
         .execute(&self.pool)
         .await?;
+        self.verify_cache.invalidate(program_id).await;
         Ok(())
     }
 
@@ -418,6 +450,7 @@ impl DbClient {
         .bind(program_id)
         .execute(&self.pool)
         .await?;
+        self.verify_cache.invalidate(program_id).await;
         Ok(())
     }
 

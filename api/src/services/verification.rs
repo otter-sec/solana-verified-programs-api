@@ -197,7 +197,7 @@ pub async fn finalize_completed(
     program_id: &Address,
 ) {
     if let Err(e) = db
-        .mark_build_completed(build_id, &outcome.executable_hash)
+        .mark_build_completed(build_id, program_id, &outcome.executable_hash)
         .await
     {
         error!("mark completed: {}", e);
