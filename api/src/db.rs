@@ -314,60 +314,63 @@ impl DbClient {
     /// renders an `ExtendedStatusResponse` directly to JSON. Result cached
     /// in-process; cache invalidated on every write that affects the row.
     pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
-        if let Some(hit) = self.verify_cache.get(&program_id).await {
-            return Ok(hit);
-        }
-        let row: VerificationRow = sqlx::query_as(
-            "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
-                    b.executable_hash, b.repository, b.commit_hash, b.completed_at
-             FROM (VALUES ($1::text)) AS v(program_id)
-             LEFT JOIN program_state ps ON ps.program_id = v.program_id
-             LEFT JOIN LATERAL (
-                 SELECT executable_hash, repository, commit_hash, completed_at
-                 FROM builds
-                 WHERE program_id = v.program_id AND status = 'completed'
-                 ORDER BY (executable_hash IS NOT DISTINCT FROM ps.on_chain_hash) DESC,
-                          completed_at DESC
-                 LIMIT 1
-             ) b ON TRUE",
-        )
-        .bind(&program_id)
-        .fetch_one(&self.pool)
-        .await?;
+        self.verify_cache
+            .try_get_with(program_id, async move {
+                let row: VerificationRow = sqlx::query_as(
+                    "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
+                            b.executable_hash, b.repository, b.commit_hash, b.completed_at
+                     FROM (VALUES ($1::text)) AS v(program_id)
+                     LEFT JOIN program_state ps ON ps.program_id = v.program_id
+                     LEFT JOIN LATERAL (
+                         SELECT executable_hash, repository, commit_hash, completed_at
+                         FROM builds
+                         WHERE program_id = v.program_id AND status = 'completed'
+                         ORDER BY (executable_hash IS NOT DISTINCT FROM ps.on_chain_hash) DESC,
+                                  completed_at DESC
+                         LIMIT 1
+                     ) b ON TRUE",
+                )
+                .bind(program_id)
+                .fetch_one(&self.pool)
+                .await?;
 
-        let on_chain_hash = row.on_chain_hash.unwrap_or_default();
-        let is_closed = row.is_closed.unwrap_or(false);
-        let is_verified = !on_chain_hash.is_empty()
-            && row.executable_hash.as_deref() == Some(on_chain_hash.as_str())
-            && !is_closed;
-        let message = if is_verified {
-            "On chain program verified"
-        } else {
-            "On chain program not verified"
-        };
-        let response = crate::responses::ExtendedStatusResponse {
-            status: crate::responses::StatusResponse {
-                is_verified,
-                message: message.to_string(),
-                on_chain_hash,
-                executable_hash: row.executable_hash.unwrap_or_default(),
-                repo_url: row
-                    .repository
-                    .as_deref()
-                    .map(|r| {
-                        crate::services::misc::build_repository_url(r, row.commit_hash.as_deref())
-                    })
-                    .unwrap_or_default(),
-                commit: row.commit_hash.unwrap_or_default(),
-                last_verified_at: row.completed_at.map(|t| t.naive_utc()),
-            },
-            is_frozen: row.is_frozen.unwrap_or(false),
-            is_closed,
-        };
-        let json = serde_json::to_string(&response)
-            .map_err(|e| ApiError::Custom(format!("encode /status body: {e}")))?;
-        self.verify_cache.insert(program_id, json.clone()).await;
-        Ok(json)
+                let on_chain_hash = row.on_chain_hash.unwrap_or_default();
+                let is_closed = row.is_closed.unwrap_or(false);
+                let is_verified = !on_chain_hash.is_empty()
+                    && row.executable_hash.as_deref() == Some(on_chain_hash.as_str())
+                    && !is_closed;
+                let message = if is_verified {
+                    "On chain program verified"
+                } else {
+                    "On chain program not verified"
+                };
+                let response = crate::responses::ExtendedStatusResponse {
+                    status: crate::responses::StatusResponse {
+                        is_verified,
+                        message: message.to_string(),
+                        on_chain_hash,
+                        executable_hash: row.executable_hash.unwrap_or_default(),
+                        repo_url: row
+                            .repository
+                            .as_deref()
+                            .map(|r| {
+                                crate::services::misc::build_repository_url(
+                                    r,
+                                    row.commit_hash.as_deref(),
+                                )
+                            })
+                            .unwrap_or_default(),
+                        commit: row.commit_hash.unwrap_or_default(),
+                        last_verified_at: row.completed_at.map(|t| t.naive_utc()),
+                    },
+                    is_frozen: row.is_frozen.unwrap_or(false),
+                    is_closed,
+                };
+                serde_json::to_string(&response)
+                    .map_err(|e| ApiError::Custom(format!("encode /status body: {e}")))
+            })
+            .await
+            .map_err(|e| ApiError::Custom(format!("check_is_verified: {e}")))
     }
 
     /// `program_state.on_chain_hash` for `program_id`, or "" when the row
