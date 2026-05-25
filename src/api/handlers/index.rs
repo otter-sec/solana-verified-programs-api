@@ -203,6 +203,18 @@ pub fn index() -> Json<Value> {
                     }
                 },
                 {
+                    "path": "/resolve-hash/:hash",
+                    "method": "GET",
+                    "description": "Content-addressed lookup: every completed build that produced the given executable hash",
+                    "params": {
+                        "hash": {
+                            "type": "string",
+                            "required": true,
+                            "description": "Executable hash (hex-encoded sha256)"
+                        }
+                    }
+                },
+                {
                     "path": "/job/:job_id",
                     "method": "GET",
                     "description": "Check status of an async verification job",

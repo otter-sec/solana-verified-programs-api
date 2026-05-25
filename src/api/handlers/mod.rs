@@ -14,6 +14,7 @@ pub mod health; // Health check and background job status
 pub mod job_status; // Build job status
 pub mod logs; // Build logs retrieval
 pub mod pda_worker;
+pub mod resolve_hash; // GET /resolve-hash/{hash}
 pub mod verified_programs_list; // List of verified programs
 pub mod verified_programs_status; // Status of verified programs // PDA updates/creations
 

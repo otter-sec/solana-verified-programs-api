@@ -91,6 +91,12 @@ curl https://verify.osec.io/verified-programs/1 | jq
 curl https://verify.osec.io/verified-programs-status | jq
 ```
 
+#### Resolve Executable Hash
+Content-addressed lookup. Given an executable hash, returns every completed build that produced it, with a `matches_deployed` flag indicating whether that hash is what's currently deployed on its program.
+```bash
+curl https://verify.osec.io/resolve-hash/29e7713aa3c48e242e2847bc031fe2a03eb61aae5ecaec8728131e16934de465 | jq
+```
+
 ### Rate Limits
 
 - **Verification endpoints**: 5 requests/second globally, 1 request per 30 seconds per IP

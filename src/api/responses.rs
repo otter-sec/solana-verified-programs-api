@@ -370,3 +370,23 @@ pub struct BackgroundJobHealth {
     pub last_program_check: Option<NaiveDateTime>,
     pub message: String,
 }
+
+/// Response shape for `GET /resolve-hash/{executable_hash}`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveHashResponse {
+    pub executable_hash: String,
+    pub builds: Vec<ResolveHashEntry>,
+}
+
+/// `matches_deployed` is true when this build's hash matches its
+/// program's cached `on_chain_hash`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveHashEntry {
+    pub build_id: String,
+    pub program_id: crate::types::Address,
+    pub signer: Option<crate::types::Address>,
+    pub repository: String,
+    pub commit: Option<String>,
+    pub completed_at: Option<NaiveDateTime>,
+    pub matches_deployed: bool,
+}

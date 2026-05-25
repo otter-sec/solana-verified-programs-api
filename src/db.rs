@@ -332,6 +332,18 @@ impl DbClient {
         .await?)
     }
 
+    /// Every completed build with this executable hash.
+    pub async fn builds_by_executable_hash(&self, hash: &str) -> Result<Vec<BuildRow>> {
+        Ok(sqlx::query_as::<_, BuildRow>(
+            "SELECT * FROM builds
+             WHERE executable_hash = $1 AND status = 'completed'
+             ORDER BY completed_at DESC",
+        )
+        .bind(hash)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     /// Clears the `pending_reverify` flag once the sweep has acted on a
     /// program (kicked a build, or decided there was nothing to do). It only
     /// comes back via a fresh drift in [`upsert_program_state`].
