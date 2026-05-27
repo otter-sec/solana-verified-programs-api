@@ -5,8 +5,12 @@
 //! offline cache to keep in sync with migrations.
 
 use crate::{
+    api::responses::{
+        build_repository_url, ExtendedStatusResponse, StatusResponse, VerificationResponse,
+        VerificationResponseWithSigner, VerifiedProgramStatusResponse,
+    },
     errors::{ApiError, Result},
-    onchain::ProgramOnchainState,
+    onchain::{trusted_signers, OtterBuildParams, ProgramOnchainState},
     types::Address,
 };
 use chrono::{DateTime, Utc};
@@ -140,8 +144,8 @@ pub struct NewBuild {
     pub signer: Option<Address>,
 }
 
-impl From<&crate::onchain::OtterBuildParams> for NewBuild {
-    fn from(p: &crate::onchain::OtterBuildParams) -> Self {
+impl From<&OtterBuildParams> for NewBuild {
+    fn from(p: &OtterBuildParams) -> Self {
         NewBuild {
             repository: p.git_url.clone(),
             commit_hash: Some(p.commit.clone()),
@@ -343,7 +347,7 @@ impl DbClient {
     pub async fn get_all_verification_info(
         &self,
         program_id: Address,
-    ) -> Result<Vec<crate::api::responses::VerificationResponseWithSigner>> {
+    ) -> Result<Vec<VerificationResponseWithSigner>> {
         let state = self.get_program_state(&program_id).await?;
         let builds = sqlx::query_as::<_, BuildRow>(
             "SELECT DISTINCT ON (signer) * FROM builds
@@ -354,7 +358,6 @@ impl DbClient {
         .fetch_all(&self.pool)
         .await?;
 
-        use crate::api::responses::{VerificationResponse, VerificationResponseWithSigner};
         Ok(builds
             .into_iter()
             .map(|b| VerificationResponseWithSigner {
@@ -381,7 +384,7 @@ impl DbClient {
     pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
         self.verify_cache
             .try_get_with(program_id, async move {
-                let trusted = crate::onchain::trusted_signers();
+                let trusted = trusted_signers();
                 let row: VerificationRow = sqlx::query_as(
                     "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
                             b.executable_hash, b.repository, b.commit_hash, b.completed_at
@@ -414,8 +417,8 @@ impl DbClient {
                 } else {
                     "On chain program not verified"
                 };
-                let response = crate::api::responses::ExtendedStatusResponse {
-                    status: crate::api::responses::StatusResponse {
+                let response = ExtendedStatusResponse {
+                    status: StatusResponse {
                         is_verified,
                         message: message.to_string(),
                         on_chain_hash,
@@ -423,12 +426,7 @@ impl DbClient {
                         repo_url: row
                             .repository
                             .as_deref()
-                            .map(|r| {
-                                crate::api::responses::build_repository_url(
-                                    r,
-                                    row.commit_hash.as_deref(),
-                                )
-                            })
+                            .map(|r| build_repository_url(r, row.commit_hash.as_deref()))
                             .unwrap_or_default(),
                         commit: row.commit_hash.unwrap_or_default(),
                         last_verified_at: row.completed_at.map(|t| t.naive_utc()),
@@ -579,10 +577,8 @@ impl DbClient {
     /// Latest trusted-signer completed build for every currently-verified
     /// program. The `JOIN program_state` predicates and the signer filter
     /// enforce verified-ness in SQL, so each row maps straight to the response.
-    pub async fn get_verification_status_all(
-        &self,
-    ) -> Result<Vec<crate::api::responses::VerifiedProgramStatusResponse>> {
-        let trusted = crate::onchain::trusted_signers();
+    pub async fn get_verification_status_all(&self) -> Result<Vec<VerifiedProgramStatusResponse>> {
+        let trusted = trusted_signers();
         let builds = sqlx::query_as::<_, BuildRow>(
             "SELECT DISTINCT ON (b.program_id) b.*
              FROM builds b

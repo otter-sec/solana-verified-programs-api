@@ -2,6 +2,8 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 pub use crate::db::JobStatus;
+use crate::db::{BuildRow, ProgramStateRow};
+use crate::types::Address;
 
 /// Formats `repo/tree/<commit>` for display in `/status`-style responses.
 /// Returns the bare repo when `commit` is missing, empty, or the sentinel
@@ -28,7 +30,7 @@ pub struct VerificationWebhookPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_verified: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub program_id: Option<crate::types::Address>,
+    pub program_id: Option<Address>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_chain_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -65,10 +67,7 @@ impl VerificationResponse {
     /// Shapes a `(state, build)` pair into the `/status` response.
     /// Centralises the "is_verified" rule: non-empty on-chain hash +
     /// matching build hash + not closed.
-    pub fn from_state_and_build(
-        state: Option<&crate::db::ProgramStateRow>,
-        build: Option<&crate::db::BuildRow>,
-    ) -> Self {
+    pub fn from_state_and_build(state: Option<&ProgramStateRow>, build: Option<&BuildRow>) -> Self {
         let on_chain_hash = state
             .and_then(|s| s.on_chain_hash.clone())
             .unwrap_or_default();
@@ -90,10 +89,7 @@ impl VerificationResponse {
             is_verified,
             on_chain_hash,
             executable_hash: b.executable_hash.clone().unwrap_or_default(),
-            repo_url: crate::api::responses::build_repository_url(
-                &b.repository,
-                b.commit_hash.as_deref(),
-            ),
+            repo_url: build_repository_url(&b.repository, b.commit_hash.as_deref()),
             commit: b.commit_hash.clone().unwrap_or_default(),
             last_verified_at: b.completed_at.map(|t| t.naive_utc()),
             is_frozen,
@@ -107,7 +103,7 @@ impl VerificationResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationResponseWithSigner {
     /// Public key of the signer who verified the program
-    pub signer: Option<crate::types::Address>,
+    pub signer: Option<Address>,
     /// The complete verification response data
     #[serde(flatten)]
     pub verification_response: VerificationResponse,
@@ -296,7 +292,7 @@ pub struct PaginationMeta {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifiedProgramStatusResponse {
     /// Program identifier
-    pub program_id: crate::types::Address,
+    pub program_id: Address,
     /// Current verification status
     pub is_verified: bool,
     /// Status message
@@ -315,8 +311,8 @@ pub struct VerifiedProgramStatusResponse {
 
 /// Builds the response from a `BuildRow` whose hash already equals
 /// `program_state.on_chain_hash` (the caller enforces that via SQL JOIN).
-impl From<crate::db::BuildRow> for VerifiedProgramStatusResponse {
-    fn from(b: crate::db::BuildRow) -> Self {
+impl From<BuildRow> for VerifiedProgramStatusResponse {
+    fn from(b: BuildRow) -> Self {
         let hash = b.executable_hash.unwrap_or_default();
         Self {
             program_id: b.program_id,
@@ -325,10 +321,7 @@ impl From<crate::db::BuildRow> for VerifiedProgramStatusResponse {
             on_chain_hash: hash.clone(),
             executable_hash: hash,
             last_verified_at: b.completed_at.map(|t| t.naive_utc()),
-            repo_url: crate::api::responses::build_repository_url(
-                &b.repository,
-                b.commit_hash.as_deref(),
-            ),
+            repo_url: build_repository_url(&b.repository, b.commit_hash.as_deref()),
             commit: b.commit_hash.unwrap_or_default(),
         }
     }
@@ -348,7 +341,7 @@ pub struct VerifiedProgramsStatusListResponse {
 /// Path-extraction shape for `/status/{address}` and `/status-all/{address}`.
 #[derive(Debug, Deserialize)]
 pub struct VerificationStatusParams {
-    pub address: crate::types::Address,
+    pub address: Address,
 }
 
 /// Query-string shape for `/verified-programs[?search=]`.

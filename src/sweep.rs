@@ -5,8 +5,10 @@
 //! for upgrades the `/pda` webhook missed.
 
 use crate::{
+    api::responses::{BackgroundJobHealth, BackgroundJobStatus},
     build,
     db::NewBuild,
+    errors::Result,
     onchain::{get_otter_verify_params, snapshot_programs},
     state::AppState,
     types::Address,
@@ -43,8 +45,7 @@ pub fn spawn(state: AppState) {
 /// sweep's own liveness timestamp (`AppState::last_sweep_at`) rather than
 /// `program_state.last_checked` -- the latter is bumped by every verify and
 /// webhook write, so it would report a dead sweep as healthy.
-pub fn health(state: &AppState) -> crate::api::responses::BackgroundJobHealth {
-    use crate::api::responses::{BackgroundJobHealth, BackgroundJobStatus};
+pub fn health(state: &AppState) -> BackgroundJobHealth {
     // Unix-seconds of the last completed sweep; `0` = none since startup.
     let last_sweep_time = state.last_sweep_at.load(Ordering::Relaxed);
     if last_sweep_time == 0 {
@@ -73,7 +74,7 @@ pub fn health(state: &AppState) -> crate::api::responses::BackgroundJobHealth {
     }
 }
 
-async fn run_once(state: &AppState) -> crate::errors::Result<()> {
+async fn run_once(state: &AppState) -> Result<()> {
     let db = &state.db;
     let ids = db.sweep_program_ids().await?;
     if ids.is_empty() {
@@ -130,7 +131,7 @@ async fn reverify_one(
     state: &AppState,
     program_id: &Address,
     authority: Option<String>,
-) -> crate::errors::Result<()> {
+) -> Result<()> {
     // signer=None -> tries the authority, then the whitelisted SIGNER_KEYS.
     let (otter_params, _) =
         match get_otter_verify_params(&state.rpc, &program_id.to_string(), None, authority).await {

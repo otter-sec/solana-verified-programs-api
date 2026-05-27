@@ -5,8 +5,9 @@ pub mod logs;
 use crate::{
     api::responses::VerificationWebhookPayload,
     build::logs as build_logs,
-    db::{DbClient, NewBuild},
+    db::{DbClient, JobStatus, NewBuild},
     errors::{ApiError, Result},
+    onchain::{is_program_data_missing, snapshot_programs},
     state::AppState,
     types::Address,
 };
@@ -145,7 +146,7 @@ pub async fn execute(
             finalize_completed(&state.db, &state.rpc, build_id, out, &program_id).await;
             VerificationWebhookPayload {
                 request_id: build_id.to_string(),
-                status: crate::db::JobStatus::Completed,
+                status: JobStatus::Completed,
                 is_verified: Some(out.is_verified),
                 program_id: Some(program_id),
                 on_chain_hash: Some(out.on_chain_hash.clone()),
@@ -160,7 +161,7 @@ pub async fn execute(
             }
             VerificationWebhookPayload {
                 request_id: build_id.to_string(),
-                status: crate::db::JobStatus::Failed,
+                status: JobStatus::Failed,
                 is_verified: None,
                 program_id: Some(program_id),
                 on_chain_hash: None,
@@ -173,7 +174,7 @@ pub async fn execute(
 
     if let Err(e) = &result {
         // If the upgrade buffer is missing, treat the program as closed.
-        if crate::onchain::is_program_data_missing(&state.rpc, &program_id.to_string()).await {
+        if is_program_data_missing(&state.rpc, &program_id.to_string()).await {
             if let Err(err) = state.db.mark_closed(&program_id).await {
                 error!("mark_closed after failed build: {}", err);
             }
@@ -202,7 +203,7 @@ pub async fn finalize_completed(
         error!("mark completed: {}", e);
     }
     let pid = *program_id.as_pubkey();
-    let snapshots = match crate::onchain::snapshot_programs(rpc, &[pid]).await {
+    let snapshots = match snapshot_programs(rpc, &[pid]).await {
         Ok(s) => s,
         Err(e) => {
             error!("snapshot {}: {}", program_id, e);
