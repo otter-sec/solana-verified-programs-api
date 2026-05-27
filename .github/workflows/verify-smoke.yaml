@@ -40,4 +40,4 @@ jobs:
       - name: Run verify smoke test
         env:
           VERIFY_SMOKE_RPC_URL: ${{ secrets.RPC_URL || 'https://api.mainnet-beta.solana.com' }}
-        run: cargo test --test integration verify_smoke -- --ignored --nocapture
+        run: cargo test --test verify_smoke -- --ignored --nocapture
