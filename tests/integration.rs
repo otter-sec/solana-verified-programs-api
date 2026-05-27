@@ -25,13 +25,22 @@ const RPC_URL: &str = "http://127.0.0.1:1";
 /// returns an axum `Router` plus the container handle (kept so the
 /// container outlives the test).
 async fn boot() -> (axum::Router, Option<ContainerAsync<Postgres>>) {
+    let (router, _db, container) = boot_with_rpc(RPC_URL).await;
+    (router, container)
+}
+
+/// Same as `boot` but exposes the `DbClient` for direct setup/assertions
+/// and accepts a custom RPC URL (typically a `wiremock` server's URI).
+async fn boot_with_rpc(
+    rpc_url: &str,
+) -> (axum::Router, DbClient, Option<ContainerAsync<Postgres>>) {
     let (url, container) = pg_for_test().await;
     let db = DbClient::connect(&url, 5, std::time::Duration::from_secs(300))
         .await
         .expect("db connect");
     db.migrate().await.expect("migrate");
-    let state = AppState::new(db, RPC_URL, AUTH_SECRET, 300);
-    (initialize_router(state), container)
+    let state = AppState::new(db.clone(), rpc_url, AUTH_SECRET, 300);
+    (initialize_router(state), db, container)
 }
 
 async fn pg_for_test() -> (String, Option<ContainerAsync<Postgres>>) {
@@ -224,6 +233,168 @@ async fn unverify_without_auth_returns_401() {
     let (app, _pg) = boot().await;
     let (status, _) = post(app, "/unverify", "[]").await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+/// One of the whitelisted `SIGNER_KEYS` from `onchain::otter`.
+const TRUSTED_SIGNER: &str = "9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU";
+
+/// Trust-filter regression test for `GET /status`.
+///
+/// Seeds two completed builds for the same program with the same
+/// executable hash but different repo URLs: one from a whitelisted
+/// `SIGNER_KEYS` signer, one from a random (untrusted) signer. The
+/// untrusted build is marked completed last, so without a trust filter
+/// the LATERAL join's `ORDER BY completed_at DESC` surfaces its
+/// `repo_url`. With the filter, the trusted row wins.
+#[tokio::test]
+#[ignore = "fails until trust filter ships on /status; tracked separately"]
+async fn status_filters_untrusted_signer() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    let seed = seed_trusted_vs_untrusted(&db).await;
+
+    let (status, body) = get(app, &format!("/status/{}", seed.program_id)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_verified"], true);
+    assert_eq!(
+        body["repo_url"], seed.trusted_repo,
+        "untrusted signer's repo_url leaked through /status"
+    );
+}
+
+/// Trust-filter regression test for `GET /verified-programs-status`.
+///
+/// Same seed as `status_filters_untrusted_signer`; asserts the bulk
+/// endpoint's row for the seeded program surfaces the trusted signer's
+/// metadata, not the untrusted one's.
+#[tokio::test]
+#[ignore = "fails until trust filter ships on /verified-programs-status; tracked separately"]
+async fn verified_programs_status_filters_untrusted_signer() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    let seed = seed_trusted_vs_untrusted(&db).await;
+
+    let (status, body) = get(app, "/verified-programs-status").await;
+    assert_eq!(status, StatusCode::OK);
+    let entries = body["data"].as_array().expect("data array");
+    let entry = entries
+        .iter()
+        .find(|e| e["program_id"] == seed.program_id)
+        .expect("entry for seeded program");
+    assert_eq!(
+        entry["repo_url"], seed.trusted_repo,
+        "untrusted signer's repo_url leaked through /verified-programs-status"
+    );
+}
+
+struct TrustSetup {
+    program_id: String,
+    trusted_repo: String,
+}
+
+/// Seeds a program with two completed builds at the same on-chain hash,
+/// one from a whitelisted signer (`trusted_repo`) and one from a random
+/// signer (different repo), with the untrusted row strictly newer on
+/// `completed_at` so it would win the `ORDER BY completed_at DESC`
+/// tiebreaker absent the trust filter. `program_state.authority` is
+/// left NULL so the per-program-authority branch can't accidentally
+/// match the untrusted row.
+async fn seed_trusted_vs_untrusted(db: &DbClient) -> TrustSetup {
+    use std::str::FromStr;
+    use verified_programs_api::db::NewBuild;
+    use verified_programs_api::onchain::ProgramOnchainState;
+    use verified_programs_api::types::Address;
+
+    const TEST_HASH: &str = "0000000000000000000000000000000000000000000000000000000000001234";
+    const TRUSTED_REPO: &str = "https://github.com/trusted/repo";
+    const UNTRUSTED_REPO: &str = "https://github.com/untrusted/repo";
+
+    let program_id = Address(solana_pubkey::Pubkey::new_unique());
+    let trusted = Address::from_str(TRUSTED_SIGNER).unwrap();
+    let untrusted = Address(solana_pubkey::Pubkey::new_unique());
+
+    db.upsert_program_state(
+        &program_id,
+        &ProgramOnchainState {
+            authority: None,
+            is_frozen: false,
+            is_closed: false,
+            executable_hash: Some(TEST_HASH.to_string()),
+        },
+    )
+    .await
+    .expect("upsert state");
+
+    let make_build = |signer: Address, repo: &str| NewBuild {
+        repository: repo.to_string(),
+        commit_hash: None,
+        program_id,
+        lib_name: None,
+        base_docker_image: None,
+        mount_path: None,
+        cargo_args: None,
+        bpf_flag: false,
+        arch: None,
+        signer: Some(signer),
+    };
+
+    let trusted_id = db
+        .insert_build(&make_build(trusted, TRUSTED_REPO))
+        .await
+        .expect("insert trusted");
+    db.mark_build_completed(trusted_id, &program_id, TEST_HASH)
+        .await
+        .expect("complete trusted");
+
+    // postgres `NOW()` has microsecond resolution but two consecutive
+    // calls can tie. Sleep so the untrusted row is strictly newer on
+    // `completed_at`.
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let untrusted_id = db
+        .insert_build(&make_build(untrusted, UNTRUSTED_REPO))
+        .await
+        .expect("insert untrusted");
+    db.mark_build_completed(untrusted_id, &program_id, TEST_HASH)
+        .await
+        .expect("complete untrusted");
+
+    TrustSetup {
+        program_id: program_id.to_string(),
+        trusted_repo: TRUSTED_REPO.to_string(),
+    }
+}
+
+/// End-to-end smoke test: hits `/verify_sync` for a currently-verified
+/// program on mainnet and asserts the response reports `is_verified:
+/// true`. Drives the full pipeline: PDA lookup, `solana-verify` build
+/// in Docker, hash compare.
+///
+/// Slow (typically 5-15 min) and depends on Docker Hub, GitHub, and
+/// mainnet RPC. Ignored by default; CI runs it on a weekly cron via
+/// `.github/workflows/verify-smoke.yaml`.
+///
+/// Run locally:
+///   cargo test --test integration verify_smoke -- --ignored --nocapture
+#[tokio::test]
+#[ignore = "slow; spawns solana-verify build in Docker against mainnet"]
+async fn verify_smoke_otter_verify_program() {
+    let rpc_url = std::env::var("VERIFY_SMOKE_RPC_URL")
+        .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+    let (app, _db, _pg) = boot_with_rpc(&rpc_url).await;
+
+    // Otter Verify itself: small, currently verified, repo owned by otter-sec.
+    const PROGRAM_ID: &str = "verifycLy8mB96wd9wqq3WDXQwM4oU6r42Th37Db9fC";
+    let body = format!(r#"{{"program_id":"{PROGRAM_ID}"}}"#);
+
+    let (status, response) = post(app, "/verify_sync", &body).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "/verify_sync returned {status}: {response:#?}"
+    );
+    assert_eq!(
+        response["is_verified"], true,
+        "verify smoke failed - program did not verify: {response:#?}"
+    );
 }
 
 /// Boots a fresh postgres with the v1 (Diesel-era) schema pre-seeded,

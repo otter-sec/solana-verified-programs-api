@@ -36,3 +36,4 @@ http-body-util = "0.1"
 tempfile = "3.10.1"
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
 tower = { version = "0.5", features = ["util"] }
+wiremock = "0.6"
