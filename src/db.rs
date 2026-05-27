@@ -81,6 +81,13 @@ impl DbClient {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
         Ok(())
     }
+
+    /// Underlying connection pool. Exposed so tests (and any future
+    /// admin tooling) can run ad-hoc queries; production paths should
+    /// keep going through the methods on `DbClient`.
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]

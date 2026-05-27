@@ -7,14 +7,15 @@ mod common;
 
 use axum::http::StatusCode;
 use common::rpc::{
-    account_value, compute_program_hash, program_account_bytes, program_data_account_bytes,
-    program_data_pda, MockRpc,
+    account_value, compute_program_hash, encode_otter_pda, program_account_bytes,
+    program_data_account_bytes, program_data_pda, MockRpc,
 };
 use common::{boot, boot_with_rpc, post, post_with_auth, wait_until, AUTH_SECRET};
 use serde_json::json;
 use solana_pubkey::Pubkey;
 use solana_sdk_ids::bpf_loader_upgradeable;
 use std::time::Duration;
+use verified_programs_api::db::NewBuild;
 use verified_programs_api::onchain::{ProgramOnchainState, OTTER_VERIFY_PROGRAM_ID};
 use verified_programs_api::types::Address;
 
@@ -278,23 +279,166 @@ async fn pda_ignores_unknown_pda() {
     );
 }
 
-#[tokio::test]
-#[ignore = "spawns process_verification which shells out to solana-verify; verify smoke covers this end-to-end"]
-async fn pda_enqueues_build_for_valid_otter_pda() {
-    // Mocking the full flow (snapshot_programs x N, get_account_data on
-    // PDA, then setup_verification's RPC calls) is doable but invasive.
-    // The smoke test in `verify_smoke.rs` covers the full chain end-to-end
-    // against real RPC; leaving this ignored until we either move
-    // `process_verification`'s build spawn behind a trait or accept the
-    // mocking complexity.
+/// Constants shared by the two /pda behavioural tests below.
+const PDA_TEST_REPO: &str = "https://github.com/test/program";
+const PDA_TEST_COMMIT: &str = "deadbeef";
+
+/// Sets up the full mock chain that `pda_worker` walks when an Otter
+/// Verify PDA event arrives for a program whose on-chain hash has
+/// drifted. Returns the program id (as `Address`), the PDA account
+/// pubkey, and the Otter PDA signer.
+async fn mock_pda_event(rpc: &MockRpc, bytecode: &[u8]) -> (Address, Pubkey, Address) {
+    let program_id = Pubkey::new_unique();
+    let program_data = program_data_pda(&program_id);
+    let authority = Pubkey::new_unique();
+    let signer = Address(Pubkey::new_unique());
+    // The PDA account address in the webhook ix is opaque to the handler
+    // (it just calls get_account_data on it), so any pubkey works.
+    let pda_account = Pubkey::new_unique();
+
+    // get_on_chain_hash -> snapshot_programs(program, program_data)
+    rpc.expect_get_multiple_accounts_for(
+        &[program_id],
+        vec![Some(account_value(
+            &bpf_loader_upgradeable::ID,
+            &program_account_bytes(&program_data),
+            1_000_000,
+        ))],
+    )
+    .await;
+    rpc.expect_get_multiple_accounts_for(
+        &[program_data],
+        vec![Some(account_value(
+            &bpf_loader_upgradeable::ID,
+            &program_data_account_bytes(0, Some(&authority), bytecode),
+            1_000_000,
+        ))],
+    )
+    .await;
+
+    // get_account_data(pda_account) -> the Borsh-encoded Otter params.
+    let otter_bytes = encode_otter_pda(
+        &program_id,
+        signer.as_pubkey(),
+        "",
+        PDA_TEST_REPO,
+        PDA_TEST_COMMIT,
+        &[],
+        0,
+    );
+    rpc.expect_get_account_info_for(
+        &pda_account,
+        Some(account_value(
+            &OTTER_VERIFY_PROGRAM_ID,
+            &otter_bytes,
+            1_000_000,
+        )),
+    )
+    .await;
+
+    (Address(program_id), pda_account, signer)
 }
 
 #[tokio::test]
-#[ignore = "same RPC-mocking complexity as pda_enqueues_build_for_valid_otter_pda"]
+async fn pda_enqueues_build_for_valid_otter_pda() {
+    let rpc = MockRpc::start().await;
+    let (program_id, pda_account, signer) = mock_pda_event(&rpc, b"fresh bytecode v2").await;
+
+    let (app, db, _pg) = boot_with_rpc(&rpc.uri()).await;
+
+    let payload = json!([{
+        "instructions": [{
+            "accounts": [pda_account.to_string(), "filler", program_id.to_string()],
+            "data": "",
+            "programId": OTTER_VERIFY_PROGRAM_ID.to_string(),
+        }]
+    }])
+    .to_string();
+
+    let (status, _) = post_with_auth(app, "/pda", AUTH_SECRET, &payload).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // pda_worker -> process_verification -> create_and_insert_build
+    // inserts the row synchronously; the build run is spawned and will
+    // fail (no Docker) but the row is already there.
+    let ok = wait_until(Duration::from_secs(5), || async {
+        let builds: Vec<(uuid::Uuid,)> =
+            sqlx::query_as("SELECT id FROM builds WHERE program_id = $1 AND repository = $2")
+                .bind(program_id)
+                .bind(PDA_TEST_REPO)
+                .fetch_all(db.pool())
+                .await
+                .unwrap_or_default();
+        !builds.is_empty()
+    })
+    .await;
+    assert!(ok, "expected a build row to be enqueued for the program");
+
+    // The inserted row carries the signer from the Otter PDA, not None.
+    let signer_col: Option<String> =
+        sqlx::query_scalar("SELECT signer FROM builds WHERE program_id = $1 AND repository = $2")
+            .bind(program_id)
+            .bind(PDA_TEST_REPO)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(signer_col.as_deref(), Some(signer.to_string().as_str()));
+}
+
+#[tokio::test]
 async fn pda_dedupes_existing_inprogress_build() {
-    // Pre-seeding the duplicate requires constructing a NewBuild whose
-    // fields match what `NewBuild::from(&OtterBuildParams)` would
-    // produce given a mocked Otter Verify PDA. That ties the test to
-    // internal layout in a brittle way; defer until the build-spawn
-    // path is testable in isolation.
+    let rpc = MockRpc::start().await;
+    let (program_id, pda_account, signer) = mock_pda_event(&rpc, b"another bytecode rev").await;
+
+    let (app, db, _pg) = boot_with_rpc(&rpc.uri()).await;
+
+    // Pre-seed a build row with exactly the fields `NewBuild::from(&OtterBuildParams)`
+    // will produce, in `in_progress`. find_duplicate must match it and
+    // skip the insert.
+    db.insert_build(&NewBuild {
+        repository: PDA_TEST_REPO.to_string(),
+        commit_hash: Some(PDA_TEST_COMMIT.to_string()),
+        program_id,
+        lib_name: None,
+        base_docker_image: None,
+        mount_path: None,
+        cargo_args: None,
+        cargo_build_sbf_args: None,
+        bpf_flag: false,
+        arch: None,
+        signer: Some(signer),
+    })
+    .await
+    .unwrap();
+
+    let payload = json!([{
+        "instructions": [{
+            "accounts": [pda_account.to_string(), "filler", program_id.to_string()],
+            "data": "",
+            "programId": OTTER_VERIFY_PROGRAM_ID.to_string(),
+        }]
+    }])
+    .to_string();
+
+    let (status, _) = post_with_auth(app, "/pda", AUTH_SECRET, &payload).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // unverify_program (which precedes find_duplicate) fires either way;
+    // poll for its on-chain hash to land, then assert build count stayed
+    // at 1.
+    let ok = wait_until(Duration::from_secs(5), || async {
+        db.cached_on_chain_hash(&program_id)
+            .await
+            .map(|h| !h.is_empty())
+            .unwrap_or(false)
+    })
+    .await;
+    assert!(ok, "expected unverify_program to update on_chain_hash");
+
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM builds WHERE program_id = $1")
+        .bind(program_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(count.0, 1, "duplicate build must not be inserted");
 }

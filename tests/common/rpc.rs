@@ -76,6 +76,27 @@ impl MockRpc {
             .await;
     }
 
+    /// Like [`expect_get_account_info`] but only matches calls whose
+    /// `params[0]` is the given pubkey. Use this when you have several
+    /// `getAccountInfo` mocks active at once.
+    pub async fn expect_get_account_info_for(&self, pubkey: &Pubkey, account: Option<Value>) {
+        Mock::given(method("POST"))
+            .and(body_partial_json(json!({
+                "method": "getAccountInfo",
+                "params": [pubkey.to_string()],
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "context": {"apiVersion": "2.0.0", "slot": 0},
+                    "value": account,
+                }
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
     /// Stand-in for `getAccountInfo`. `account` is the value object
     /// (built with [`account_value`]), or `None` for a missing account.
     pub async fn expect_get_account_info(&self, account: Option<Value>) {
@@ -188,4 +209,46 @@ pub fn compute_program_hash(data: &[u8]) -> String {
 /// BPF loader does).
 pub fn program_data_pda(program: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[program.as_ref()], &bpf_loader_upgradeable::id()).0
+}
+
+/// Hand-rolled Borsh encoding of `OtterBuildParams` with an 8-byte
+/// Anchor discriminator prefix. We can't use `borsh::to_vec` because
+/// the struct's `bump` field is private to the crate.
+///
+/// Layout (after the 8 discriminator bytes):
+///   address: 32 bytes
+///   signer:  32 bytes
+///   version: u32(len, LE) + utf8
+///   git_url: u32(len, LE) + utf8
+///   commit:  u32(len, LE) + utf8
+///   args:    u32(len, LE) + (u32(len) + utf8) per element
+///   deployed_slot: u64 LE
+///   bump:    u8
+pub fn encode_otter_pda(
+    address: &Pubkey,
+    signer: &Pubkey,
+    version: &str,
+    git_url: &str,
+    commit: &str,
+    args: &[&str],
+    deployed_slot: u64,
+) -> Vec<u8> {
+    let mut out = vec![0u8; 8];
+    out.extend_from_slice(&address.to_bytes());
+    out.extend_from_slice(&signer.to_bytes());
+    write_str(&mut out, version);
+    write_str(&mut out, git_url);
+    write_str(&mut out, commit);
+    out.extend_from_slice(&(args.len() as u32).to_le_bytes());
+    for a in args {
+        write_str(&mut out, a);
+    }
+    out.extend_from_slice(&deployed_slot.to_le_bytes());
+    out.push(255); // bump
+    out
+}
+
+fn write_str(buf: &mut Vec<u8>, s: &str) {
+    buf.extend_from_slice(&(s.len() as u32).to_le_bytes());
+    buf.extend_from_slice(s.as_bytes());
 }
