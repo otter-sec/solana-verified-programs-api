@@ -22,7 +22,7 @@ pub(crate) async fn process_sync_verification(
     );
 
     match setup_verification(&state, &payload.program_id, None).await {
-        Ok(setup) => process_verification_sync(state, setup.params, setup.signer).await,
+        Ok(params) => process_verification_sync(state, params).await,
         Err(error_response) => error_response,
     }
 }
@@ -30,13 +30,8 @@ pub(crate) async fn process_sync_verification(
 /// Processes the verification request synchronously
 async fn process_verification_sync(
     state: AppState,
-    mut params: NewBuild,
-    signer: crate::validation::Address,
+    params: NewBuild,
 ) -> (StatusCode, Json<ApiResponse>) {
-    // The dedupe predicate matches every NewBuild field including `signer`;
-    // populate it before the lookup or we'd never match.
-    params.signer = Some(signer);
-
     if let Ok(Some(dup)) = state.db.find_duplicate(&params).await {
         return (
             StatusCode::OK,

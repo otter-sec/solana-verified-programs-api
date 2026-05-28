@@ -113,9 +113,8 @@ async fn process_otter_verify_instruction(
                 return Err(e.into());
             }
         };
-        let signer = crate::validation::Address(otter_build_params.signer);
         let new_build = NewBuild::from(&otter_build_params);
-        let _ = process_verification(state, new_build, signer, None).await;
+        let _ = process_verification(state, new_build, None).await;
         info!("Re-verification triggered for program {}", program_id);
     } else {
         info!("Program {} has not been upgraded", program_id);

@@ -47,7 +47,7 @@ pub(crate) async fn process_async_verification(
 
     let webhook_url = payload.webhook_url.map(WebhookUrl::into_inner);
     match setup_verification(&state, &payload.program_id, None).await {
-        Ok(setup) => process_verification(state, setup.params, setup.signer, webhook_url).await,
+        Ok(params) => process_verification(state, params, webhook_url).await,
         Err(error_response) => error_response,
     }
 }
@@ -66,7 +66,7 @@ pub(crate) async fn process_async_verification_with_signer(
 
     let webhook_url = payload.webhook_url.map(WebhookUrl::into_inner);
     match setup_verification(&state, &payload.program_id, Some(payload.signer)).await {
-        Ok(setup) => process_verification(state, setup.params, setup.signer, webhook_url).await,
+        Ok(params) => process_verification(state, params, webhook_url).await,
         Err(error_response) => error_response,
     }
 }
@@ -74,14 +74,9 @@ pub(crate) async fn process_async_verification_with_signer(
 /// Processes the verification request asynchronously
 pub async fn process_verification(
     state: AppState,
-    mut payload: NewBuild,
-    signer: Address,
+    payload: NewBuild,
     webhook_url: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    // The dedupe predicate matches on every NewBuild field including
-    // `signer`; populate it before the lookup or we'd never match.
-    payload.signer = Some(signer);
-
     // Check for existing verification
     if let Ok(Some(dup)) = state.db.find_duplicate(&payload).await {
         check_program_closed(&state.db, &state.rpc, &payload.program_id).await;

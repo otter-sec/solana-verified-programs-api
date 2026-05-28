@@ -16,17 +16,10 @@ use tracing::error;
 use uuid::Uuid;
 
 /// Result type for verification setup operations
-pub type VerificationSetupResult = Result<VerificationSetup, (StatusCode, Json<ApiResponse>)>;
-
-/// Contains all the setup data needed for verification
-pub struct VerificationSetup {
-    pub params: NewBuild,
-    pub signer: Address,
-}
+pub type VerificationSetupResult = Result<NewBuild, (StatusCode, Json<ApiResponse>)>;
 
 /// Fetches the on-chain program state + Otter Verify PDA params, refreshes
-/// the cached `program_state` row, and returns what the verify handlers
-/// need to insert a build.
+/// the cached `program_state` row, and returns the `NewBuild` to insert.
 pub async fn setup_verification(
     app: &AppState,
     program_id: &Address,
@@ -49,7 +42,7 @@ pub async fn setup_verification(
     )
     .await
     {
-        Ok((params, signer)) => {
+        Ok((params, _signer)) => {
             if let Err(e) = app
                 .db
                 .upsert_program_state(&Address(params.address), &state)
@@ -58,10 +51,7 @@ pub async fn setup_verification(
                 error!("Failed to update program state: {:?}", e);
             }
 
-            Ok(VerificationSetup {
-                params: NewBuild::from(&params),
-                signer,
-            })
+            Ok(NewBuild::from(&params))
         }
         Err(err) => {
             error!(

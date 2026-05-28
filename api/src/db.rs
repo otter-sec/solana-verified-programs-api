@@ -153,7 +153,7 @@ impl From<&crate::services::onchain::OtterBuildParams> for NewBuild {
             cargo_build_sbf_args: p.get_cargo_build_sbf_args(),
             bpf_flag: p.is_bpf(),
             arch: p.get_arch(),
-            signer: None,
+            signer: Some(Address(p.signer)),
         }
     }
 }
