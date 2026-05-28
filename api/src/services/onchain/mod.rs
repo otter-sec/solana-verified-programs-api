@@ -18,4 +18,5 @@ pub use program_authority_retriever::{get_program_state, snapshot_programs, Prog
 pub use program_hash_retriver::get_on_chain_hash;
 pub use program_metadata_retriever::{
     get_otter_verify_params, is_program_data_missing, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID,
+    SIGNER_KEYS,
 };

@@ -313,9 +313,23 @@ impl DbClient {
     /// best matching completed build in a single `LEFT JOIN LATERAL`, then
     /// renders an `ExtendedStatusResponse` directly to JSON. Result cached
     /// in-process; cache invalidated on every write that affects the row.
+    ///
+    /// Builds are restricted to a trusted signer: `SIGNER_KEYS`,
+    /// `system_program::ID`, the program's current upgrade authority
+    /// (matched live via `program_state.authority`), or NULL. Without
+    /// this filter, an untrusted signer with a build that reproduces
+    /// the on-chain hash could surface its own `repo_url` / `commit`.
     pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
         self.verify_cache
             .try_get_with(program_id, async move {
+                let trusted: Vec<String> =
+                    std::iter::once(solana_sdk_ids::system_program::ID.to_string())
+                        .chain(
+                            crate::services::onchain::SIGNER_KEYS
+                                .iter()
+                                .map(|k| k.to_string()),
+                        )
+                        .collect();
                 let row: VerificationRow = sqlx::query_as(
                     "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
                             b.executable_hash, b.repository, b.commit_hash, b.completed_at
@@ -325,12 +339,16 @@ impl DbClient {
                          SELECT executable_hash, repository, commit_hash, completed_at
                          FROM builds
                          WHERE program_id = v.program_id AND status = 'completed'
+                           AND (signer IS NULL
+                                OR signer = ANY($2)
+                                OR signer IS NOT DISTINCT FROM ps.authority)
                          ORDER BY (executable_hash IS NOT DISTINCT FROM ps.on_chain_hash) DESC,
                                   completed_at DESC
                          LIMIT 1
                      ) b ON TRUE",
                 )
                 .bind(program_id)
+                .bind(&trusted)
                 .fetch_one(&self.pool)
                 .await?;
 
