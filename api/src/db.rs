@@ -322,14 +322,7 @@ impl DbClient {
     pub async fn check_is_verified(&self, program_id: Address) -> Result<String> {
         self.verify_cache
             .try_get_with(program_id, async move {
-                let trusted: Vec<String> =
-                    std::iter::once(solana_sdk_ids::system_program::ID.to_string())
-                        .chain(
-                            crate::services::onchain::SIGNER_KEYS
-                                .iter()
-                                .map(|k| k.to_string()),
-                        )
-                        .collect();
+                let trusted = crate::services::onchain::trusted_signers();
                 let row: VerificationRow = sqlx::query_as(
                     "SELECT ps.on_chain_hash, ps.is_frozen, ps.is_closed,
                             b.executable_hash, b.repository, b.commit_hash, b.completed_at
@@ -517,12 +510,13 @@ impl DbClient {
         Ok((ids, total))
     }
 
-    /// Latest completed build for every currently-verified program. The
-    /// `JOIN program_state` predicates enforce verified-ness in SQL, so
-    /// the result maps straight to the response.
+    /// Latest trusted-signer completed build for every currently-verified
+    /// program. The `JOIN program_state` predicates and the signer filter
+    /// enforce verified-ness in SQL, so each row maps straight to the response.
     pub async fn get_verification_status_all(
         &self,
     ) -> Result<Vec<crate::responses::VerifiedProgramStatusResponse>> {
+        let trusted = crate::services::onchain::trusted_signers();
         let builds = sqlx::query_as::<_, BuildRow>(
             "SELECT DISTINCT ON (b.program_id) b.*
              FROM builds b
@@ -530,8 +524,12 @@ impl DbClient {
                AND ps.on_chain_hash = b.executable_hash
                AND NOT ps.is_closed AND NOT ps.is_frozen
              WHERE b.status = 'completed'
+               AND (b.signer IS NULL
+                    OR b.signer = ANY($1)
+                    OR b.signer IS NOT DISTINCT FROM ps.authority)
              ORDER BY b.program_id, b.completed_at DESC",
         )
+        .bind(&trusted)
         .fetch_all(&self.pool)
         .await?;
 

@@ -7,7 +7,7 @@ use crate::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_pubkey::Pubkey;
-use solana_sdk_ids::bpf_loader_upgradeable;
+use solana_sdk_ids::{bpf_loader_upgradeable, system_program};
 
 /// Program ID for the Otter Verify program
 pub const OTTER_VERIFY_PROGRAM_ID: Pubkey =
@@ -19,6 +19,16 @@ pub const SIGNER_KEYS: [Pubkey; 3] = [
     solana_pubkey::pubkey!("CyJj5ejJAUveDXnLduJbkvwjxcmWJNqCuB9DR7AExrHn"),
     solana_pubkey::pubkey!("5vJwnLeyjV8uNJSp1zn7VLW8GwiQbcsQbGaVSwRmkE4r"),
 ];
+
+/// Signers whose completed builds are trusted when deciding verified-ness:
+/// the whitelisted `SIGNER_KEYS` plus `system_program::ID` (legacy/unsigned
+/// rows). The program's live upgrade authority is also trusted, but it's
+/// matched in SQL against `program_state.authority` rather than listed here.
+pub fn trusted_signers() -> Vec<String> {
+    std::iter::once(system_program::ID.to_string())
+        .chain(SIGNER_KEYS.iter().map(|k| k.to_string()))
+        .collect()
+}
 
 /// Build parameters stored in Otter Verify PDA
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
