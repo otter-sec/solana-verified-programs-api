@@ -151,7 +151,7 @@ async fn snapshot_chunk(
                         continue;
                     }
                 };
-                let hash = if acc.data.len() > PROGRAM_DATA_HEADER_SIZE {
+                let hash = if acc.data.len() >= PROGRAM_DATA_HEADER_SIZE {
                     Some(compute_program_hash(&acc.data[PROGRAM_DATA_HEADER_SIZE..]))
                 } else {
                     None

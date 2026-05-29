@@ -538,7 +538,7 @@ impl DbClient {
     ) -> Result<(Vec<String>, i64)> {
         let page = page.max(1);
         let offset = (page - 1) * PER_PAGE;
-        let search = search.unwrap_or("");
+        let search = search.unwrap_or("").trim();
         let pattern = format!("%{search}%");
 
         let rows: Vec<(String, i64)> = sqlx::query_as(
