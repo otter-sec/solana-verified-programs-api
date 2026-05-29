@@ -247,6 +247,17 @@ impl DbClient {
         )
     }
 
+    /// Whether the program has any completed build -- i.e. it's one we've
+    /// verified before and should keep state for.
+    pub async fn has_completed_build(&self, program_id: &Address) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM builds WHERE program_id = $1 AND status = 'completed')",
+        )
+        .bind(program_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     /// Most recent build with identical params. `include_failed = false`
     /// ignores failed rows (they're retryable); `true` counts every status.
     /// `$11` toggles the failed filter so both callers share one query.
@@ -551,7 +562,6 @@ impl DbClient {
                    AND b.executable_hash IS NOT NULL
                    AND b.executable_hash = ps.on_chain_hash
                    AND NOT COALESCE(ps.is_closed, FALSE)
-                   AND NOT COALESCE(ps.is_frozen, FALSE)
                    AND ($1 = '' OR b.program_id ILIKE $2 OR b.repository ILIKE $2)
              ) q
              ORDER BY program_id
@@ -581,7 +591,7 @@ impl DbClient {
              FROM builds b
              JOIN program_state ps ON ps.program_id = b.program_id
                AND ps.on_chain_hash = b.executable_hash
-               AND NOT ps.is_closed AND NOT ps.is_frozen
+               AND NOT ps.is_closed
              WHERE b.status = 'completed'
                AND (b.signer IS NULL
                     OR b.signer = ANY($1)

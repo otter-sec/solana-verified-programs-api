@@ -71,6 +71,13 @@ async fn process_program_upgrade(
     rpc: &RpcClient,
     program_id: &Address,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Helius watches every program upgrade, so most events are for programs
+    // we don't track. Only act on ones we've verified before; otherwise skip
+    // rather than create a program_state row for an unknown program.
+    if !db.has_completed_build(program_id).await? {
+        return Ok(());
+    }
+
     let cached_hash = db.cached_on_chain_hash(program_id).await?;
 
     let onchain_hash = match get_on_chain_hash(rpc, program_id).await {
