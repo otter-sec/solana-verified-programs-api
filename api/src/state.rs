@@ -19,6 +19,8 @@ pub struct AppState {
     /// Configured sweep cadence; the `/health/background-jobs` handler
     /// uses it to decide whether the last sweep is recent enough.
     pub sweep_interval_seconds: u64,
+    /// Max re-verification builds the sweep kicks per cycle.
+    pub max_reverifies_per_sweep: usize,
 }
 
 impl AppState {
@@ -27,6 +29,7 @@ impl AppState {
         rpc_url: &str,
         auth_secret: &str,
         sweep_interval_seconds: u64,
+        max_reverifies_per_sweep: usize,
     ) -> Self {
         Self {
             db,
@@ -34,6 +37,7 @@ impl AppState {
             rpc_url: rpc_url.into(),
             auth_secret: auth_secret.into(),
             sweep_interval_seconds,
+            max_reverifies_per_sweep,
         }
     }
 }

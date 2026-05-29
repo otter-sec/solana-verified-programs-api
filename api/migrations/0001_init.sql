@@ -34,12 +34,16 @@ CREATE INDEX IF NOT EXISTS builds_program_id_created_idx ON builds (program_id, 
 CREATE INDEX IF NOT EXISTS builds_program_completed_idx ON builds (program_id, completed_at DESC) WHERE status = 'completed';
 
 CREATE TABLE IF NOT EXISTS program_state (
-    program_id    TEXT PRIMARY KEY,
-    on_chain_hash TEXT,
-    authority     TEXT,
-    is_frozen     BOOLEAN NOT NULL DEFAULT FALSE,
-    is_closed     BOOLEAN NOT NULL DEFAULT FALSE,
-    last_checked  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    program_id       TEXT PRIMARY KEY,
+    on_chain_hash    TEXT,
+    authority        TEXT,
+    is_frozen        BOOLEAN NOT NULL DEFAULT FALSE,
+    is_closed        BOOLEAN NOT NULL DEFAULT FALSE,
+    last_checked     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Set TRUE when a sweep observes the on-chain hash change; the sweep's
+    -- reverify drain consumes it. Survives across cycles so a capped burst
+    -- isn't lost. New rows default FALSE so first-sighting doesn't reverify.
+    pending_reverify BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS program_state_last_checked_idx ON program_state (last_checked ASC);

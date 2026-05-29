@@ -19,6 +19,12 @@ pub struct Config {
     /// Maximum size of the Postgres connection pool (default: 50)
     #[serde(default = "default_db_max_connections")]
     pub db_max_connections: u32,
+    /// Max re-verification builds the sweep will kick off in a single
+    /// cycle (default: 3). Bounds the burst when many programs drift at
+    /// once (e.g. first sweep after a deploy); the rest are picked up on
+    /// later cycles.
+    #[serde(default = "default_max_reverifies_per_sweep")]
+    pub max_reverifies_per_sweep: usize,
 }
 
 impl Config {
@@ -37,4 +43,9 @@ fn default_sweep_interval() -> u64 {
 /// Default pool size: 50 connections
 fn default_db_max_connections() -> u32 {
     50
+}
+
+/// Default per-sweep re-verification cap: 3 builds
+fn default_max_reverifies_per_sweep() -> usize {
+    3
 }

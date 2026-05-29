@@ -247,9 +247,14 @@ impl DbClient {
         )
     }
 
-    /// Most recent non-failed build with identical params. Failed rows are
-    /// ignored -- they're retryable.
-    pub async fn find_duplicate(&self, b: &NewBuild) -> Result<Option<BuildRow>> {
+    /// Most recent build with identical params. `include_failed = false`
+    /// ignores failed rows (they're retryable); `true` counts every status.
+    /// `$11` toggles the failed filter so both callers share one query.
+    async fn latest_build_for_params(
+        &self,
+        b: &NewBuild,
+        include_failed: bool,
+    ) -> Result<Option<BuildRow>> {
         Ok(sqlx::query_as::<_, BuildRow>(
             "SELECT * FROM builds
              WHERE program_id = $1
@@ -262,7 +267,7 @@ impl DbClient {
                AND bpf_flag = $8
                AND (arch              IS NOT DISTINCT FROM $9)
                AND (signer            IS NOT DISTINCT FROM $10)
-               AND status <> 'failed'
+               AND ($11 OR status <> 'failed')
              ORDER BY created_at DESC
              LIMIT 1",
         )
@@ -276,8 +281,51 @@ impl DbClient {
         .bind(b.bpf_flag)
         .bind(&b.arch)
         .bind(b.signer)
+        .bind(include_failed)
         .fetch_optional(&self.pool)
         .await?)
+    }
+
+    /// Most recent non-failed build with identical params; failed rows are
+    /// ignored (they're retryable).
+    pub async fn find_duplicate(&self, b: &NewBuild) -> Result<Option<BuildRow>> {
+        self.latest_build_for_params(b, false).await
+    }
+
+    /// Whether *any* build with identical params exists, counting `failed`
+    /// rows -- so a failed attempt blocks a rebuild rather than retrying.
+    pub async fn has_build_for_params(&self, b: &NewBuild) -> Result<bool> {
+        Ok(self.latest_build_for_params(b, true).await?.is_some())
+    }
+
+    /// Up to `limit` programs the sweep flagged as drifted (`pending_reverify`)
+    /// and that are still buildable. Oldest-checked first, so a capped burst
+    /// drains over successive cycles. Returns `(program_id, authority)` --
+    /// authority seeds the Otter Verify PDA lookup.
+    pub async fn pending_reverify_candidates(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<(Address, Option<String>)>> {
+        Ok(sqlx::query_as(
+            "SELECT program_id, authority FROM program_state
+             WHERE pending_reverify AND NOT is_closed AND NOT is_frozen
+             ORDER BY last_checked ASC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Clears the `pending_reverify` flag once the sweep has acted on a
+    /// program (kicked a build, or decided there was nothing to do). It only
+    /// comes back via a fresh drift in [`upsert_program_state`].
+    pub async fn clear_pending_reverify(&self, program_id: &Address) -> Result<()> {
+        sqlx::query("UPDATE program_state SET pending_reverify = FALSE WHERE program_id = $1")
+            .bind(program_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// One row per signer who has a completed claim on this program.
@@ -409,6 +457,11 @@ impl DbClient {
     /// Full refresh from a snapshot. A `None` hash on the snapshot preserves
     /// the existing column rather than clobbering it, so a transient hash
     /// fetch failure doesn't lose previously known data.
+    ///
+    /// Flips `pending_reverify` TRUE when the incoming hash actually differs
+    /// from the stored one -- that's the sweep's drift signal, drained by
+    /// [`pending_reverify_candidates`]. New rows leave it at its FALSE
+    /// default, so a program's first sighting doesn't queue a reverify.
     pub async fn upsert_program_state(
         &self,
         program_id: &Address,
@@ -423,7 +476,10 @@ impl DbClient {
                  authority     = EXCLUDED.authority,
                  is_frozen     = EXCLUDED.is_frozen,
                  is_closed     = EXCLUDED.is_closed,
-                 last_checked  = NOW()",
+                 last_checked  = NOW(),
+                 pending_reverify = program_state.pending_reverify
+                     OR (EXCLUDED.on_chain_hash IS NOT NULL
+                         AND EXCLUDED.on_chain_hash IS DISTINCT FROM program_state.on_chain_hash)",
         )
         .bind(program_id)
         .bind(&state.executable_hash)
@@ -436,14 +492,17 @@ impl DbClient {
         Ok(())
     }
 
-    /// Updates the cached on-chain hash for a program after an upgrade.
-    /// The build -> verified mapping is implicit (best_build joins live).
+    /// Updates the cached on-chain hash for a program after an upgrade, and
+    /// sets `pending_reverify` directly: this advances the stored hash, so the
+    /// sweep's own drift check wouldn't catch it -- the flag is the backstop.
     pub async fn unverify_program(&self, program_id: &Address, on_chain_hash: &str) -> Result<()> {
         sqlx::query(
             "INSERT INTO program_state (program_id, on_chain_hash, last_checked)
              VALUES ($1, $2, NOW())
              ON CONFLICT (program_id) DO UPDATE
-             SET on_chain_hash = EXCLUDED.on_chain_hash, last_checked = NOW()",
+             SET on_chain_hash = EXCLUDED.on_chain_hash,
+                 last_checked = NOW(),
+                 pending_reverify = TRUE",
         )
         .bind(program_id)
         .bind(on_chain_hash)

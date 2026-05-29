@@ -47,6 +47,7 @@ async fn main() {
         &config.rpc_url,
         &config.auth_secret,
         config.sweep_interval_seconds,
+        config.max_reverifies_per_sweep,
     );
 
     let bg_job_manager =
@@ -54,7 +55,7 @@ async fn main() {
     let initial_health = bg_job_manager.get_health_status().await;
     tracing::info!("Background job initial status: {:?}", initial_health);
 
-    services::background_jobs::spawn(db, state.rpc.clone(), config.sweep_interval_seconds);
+    services::background_jobs::spawn(state.clone());
 
     let app = api::initialize_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
