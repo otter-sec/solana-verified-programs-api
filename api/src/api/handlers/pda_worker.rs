@@ -84,7 +84,8 @@ async fn process_otter_verify_instruction(
         .db
         .cached_on_chain_hash(program_id)
         .await
-        .unwrap_or_default();
+        .ok()
+        .flatten();
 
     let onchain_hash = match get_on_chain_hash(&state.rpc, program_id).await {
         Ok(hash) => hash,
@@ -95,7 +96,9 @@ async fn process_otter_verify_instruction(
         Err(e) => return Err(e.into()),
     };
 
-    if onchain_hash != cached_hash {
+    // No cached hash (never seen) counts as changed: a PDA event means the
+    // program is being verified, so go ahead and (re)build it.
+    if cached_hash.as_deref() != Some(onchain_hash.as_str()) {
         state.db.unverify_program(program_id, &onchain_hash).await?;
         // start new build
         let params = state

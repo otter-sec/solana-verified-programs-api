@@ -443,16 +443,13 @@ impl DbClient {
             .map_err(|e| ApiError::Custom(format!("check_is_verified: {e}")))
     }
 
-    /// `program_state.on_chain_hash` for `program_id`, or "" when the row
-    /// is absent / the column is NULL. Empty string is the sentinel callers
-    /// compare against -- never a real hash, so any non-empty fresh value
-    /// will compare unequal.
-    pub async fn cached_on_chain_hash(&self, program_id: &Address) -> Result<String> {
+    /// The cached `on_chain_hash` for `program_id`, or `None` when there's
+    /// no `program_state` row (or the column is NULL).
+    pub async fn cached_on_chain_hash(&self, program_id: &Address) -> Result<Option<String>> {
         Ok(self
             .get_program_state(program_id)
             .await?
-            .and_then(|s| s.on_chain_hash)
-            .unwrap_or_default())
+            .and_then(|s| s.on_chain_hash))
     }
 
     /// Cached on-chain state for a program.

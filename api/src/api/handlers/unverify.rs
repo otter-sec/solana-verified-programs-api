@@ -89,7 +89,7 @@ async fn process_program_upgrade(
         Err(e) => return Err(e.into()),
     };
 
-    if onchain_hash != cached_hash {
+    if cached_hash.as_deref() != Some(onchain_hash.as_str()) {
         info!("Program {} has been upgraded, unverifying", program_id);
         db.unverify_program(program_id, &onchain_hash).await?;
         info!("Successfully unverified program {}", program_id);

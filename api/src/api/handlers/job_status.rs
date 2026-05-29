@@ -34,6 +34,8 @@ pub(crate) async fn get_job_status(
             let cached_hash = db
                 .cached_on_chain_hash(&job.program_id)
                 .await
+                .ok()
+                .flatten()
                 .unwrap_or_default();
             (
                 StatusCode::OK,
