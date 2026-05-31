@@ -232,6 +232,32 @@ async fn unverify_noop_when_hash_unchanged() {
 }
 
 #[tokio::test]
+async fn unverify_skips_unverified_program() {
+    let rpc = MockRpc::start().await;
+    let program_id = Pubkey::new_unique();
+    let (app, db, _pg) = boot_with_rpc(&rpc.uri()).await;
+    let addr = Address(program_id);
+
+    // No completed build -> a program we never verified, so the handler must
+    // skip it: no RPC lookup, and no junk program_state row created.
+    let (status, _) =
+        post_with_auth(app, "/unverify", AUTH_SECRET, &upgrade_payload(&program_id)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Give the spawned task a beat to run, then assert it did nothing.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        db.get_program_state(&addr).await.unwrap().is_none(),
+        "unknown program must not get a program_state row"
+    );
+    assert_eq!(
+        rpc.request_count().await,
+        0,
+        "handler should skip before making any RPC call"
+    );
+}
+
+#[tokio::test]
 async fn unverify_ignores_non_upgrade_instructions() {
     let rpc = MockRpc::start().await;
     let program_id = Pubkey::new_unique();
