@@ -10,18 +10,18 @@ use common::rpc::{
     account_value, compute_program_hash, program_account_bytes, program_data_account_bytes,
     program_data_pda, MockRpc,
 };
-use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_pubkey::Pubkey;
 use solana_sdk_ids::bpf_loader_upgradeable;
 use verified_programs_api::db::{DbClient, NewBuild};
 use verified_programs_api::onchain::ProgramOnchainState;
+use verified_programs_api::state::AppState;
 use verified_programs_api::sweep;
 use verified_programs_api::types::Address;
 
-/// Build the DB + RPC client pair the sweep needs.
+/// Build the DB + `AppState` (wired to a mock RPC) the sweep needs.
 async fn boot_for_sweep() -> (
     DbClient,
-    RpcClient,
+    AppState,
     MockRpc,
     Option<
         testcontainers_modules::testcontainers::ContainerAsync<
@@ -35,13 +35,16 @@ async fn boot_for_sweep() -> (
         .expect("db connect");
     db.migrate().await.expect("migrate");
     let rpc_mock = MockRpc::start().await;
-    let rpc = RpcClient::new(rpc_mock.uri());
-    (db, rpc, rpc_mock, pg)
+    // max_reverifies_per_sweep = 0 keeps the drift-reverify drain inert, so
+    // these refresh-path tests stay deterministic without mocking the PDA
+    // lookups a reverify would make.
+    let app_state = AppState::new(db.clone(), &rpc_mock.uri(), "sweep-test", 300, 0);
+    (db, app_state, rpc_mock, pg)
 }
 
 #[tokio::test]
 async fn sweep_refreshes_open_program() {
-    let (db, rpc, rpc_mock, _pg) = boot_for_sweep().await;
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
     let program_id = Pubkey::new_unique();
     let pda = program_data_pda(&program_id);
     let authority = Pubkey::new_unique();
@@ -82,7 +85,7 @@ async fn sweep_refreshes_open_program() {
         )
         .await;
 
-    sweep::run_once(&db, &rpc).await.expect("sweep");
+    sweep::run_once(&app_state).await.expect("sweep");
 
     let state = db.get_program_state(&addr).await.unwrap().unwrap();
     assert_eq!(state.on_chain_hash.as_deref(), Some(expected_hash.as_str()));
@@ -92,7 +95,7 @@ async fn sweep_refreshes_open_program() {
 
 #[tokio::test]
 async fn sweep_marks_program_closed() {
-    let (db, rpc, rpc_mock, _pg) = boot_for_sweep().await;
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
     let program_id = Pubkey::new_unique();
     let addr = Address(program_id);
 
@@ -112,7 +115,7 @@ async fn sweep_marks_program_closed() {
         .expect_get_multiple_accounts_for(&[program_id], vec![None])
         .await;
 
-    sweep::run_once(&db, &rpc).await.expect("sweep");
+    sweep::run_once(&app_state).await.expect("sweep");
 
     let state = db.get_program_state(&addr).await.unwrap().unwrap();
     assert!(state.is_closed);
@@ -120,7 +123,7 @@ async fn sweep_marks_program_closed() {
 
 #[tokio::test]
 async fn sweep_marks_program_frozen() {
-    let (db, rpc, rpc_mock, _pg) = boot_for_sweep().await;
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
     let program_id = Pubkey::new_unique();
     let pda = program_data_pda(&program_id);
     let addr = Address(program_id);
@@ -159,7 +162,7 @@ async fn sweep_marks_program_frozen() {
         )
         .await;
 
-    sweep::run_once(&db, &rpc).await.expect("sweep");
+    sweep::run_once(&app_state).await.expect("sweep");
 
     let state = db.get_program_state(&addr).await.unwrap().unwrap();
     assert!(state.is_frozen, "no authority -> frozen");
@@ -167,7 +170,7 @@ async fn sweep_marks_program_frozen() {
 
 #[tokio::test]
 async fn sweep_bootstraps_state_for_orphan_build() {
-    let (db, rpc, rpc_mock, _pg) = boot_for_sweep().await;
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
     let program_id = Pubkey::new_unique();
     let pda = program_data_pda(&program_id);
     let authority = Pubkey::new_unique();
@@ -222,7 +225,7 @@ async fn sweep_bootstraps_state_for_orphan_build() {
         "no state row pre-sweep"
     );
 
-    sweep::run_once(&db, &rpc).await.expect("sweep");
+    sweep::run_once(&app_state).await.expect("sweep");
 
     let state = db.get_program_state(&addr).await.unwrap().unwrap();
     assert_eq!(state.on_chain_hash.as_deref(), Some(expected_hash.as_str()));
@@ -230,7 +233,7 @@ async fn sweep_bootstraps_state_for_orphan_build() {
 
 #[tokio::test]
 async fn sweep_batches_at_chunk_size() {
-    let (db, rpc, rpc_mock, _pg) = boot_for_sweep().await;
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
 
     // Seed 105 program_state rows so the sweep has to split into two
     // getMultipleAccounts calls (chunk size = 100).
@@ -252,7 +255,7 @@ async fn sweep_batches_at_chunk_size() {
     // only care about how many RPC calls were made.
     rpc_mock.expect_get_multiple_accounts(vec![None; 100]).await;
 
-    sweep::run_once(&db, &rpc).await.expect("sweep");
+    sweep::run_once(&app_state).await.expect("sweep");
 
     let calls = rpc_mock.method_call_count("getMultipleAccounts").await;
     assert_eq!(

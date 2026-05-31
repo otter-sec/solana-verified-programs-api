@@ -42,7 +42,7 @@ pub async fn boot_with_rpc(
         .await
         .expect("db connect");
     db.migrate().await.expect("migrate");
-    let state = AppState::new(db.clone(), rpc_url, AUTH_SECRET, 300);
+    let state = AppState::new(db.clone(), rpc_url, AUTH_SECRET, 300, 5);
     (initialize_router(state), db, container)
 }
 

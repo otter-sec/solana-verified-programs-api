@@ -15,7 +15,7 @@ use serde_json::json;
 use solana_pubkey::Pubkey;
 use solana_sdk_ids::bpf_loader_upgradeable;
 use std::time::Duration;
-use verified_programs_api::db::NewBuild;
+use verified_programs_api::db::{DbClient, NewBuild};
 use verified_programs_api::onchain::{ProgramOnchainState, OTTER_VERIFY_PROGRAM_ID};
 use verified_programs_api::types::Address;
 
@@ -66,6 +66,31 @@ fn upgrade_payload(program_id: &Pubkey) -> String {
     payload.to_string()
 }
 
+/// `/unverify` only acts on programs we've verified before (those with a
+/// completed build); otherwise it skips them. Seed a completed build so the
+/// program under test counts as tracked.
+async fn seed_tracked_program(db: &DbClient, program_id: &Address) {
+    let build_id = db
+        .insert_build(&NewBuild {
+            repository: "https://github.com/x/y".to_string(),
+            commit_hash: Some("deadbeef".to_string()),
+            program_id: *program_id,
+            lib_name: None,
+            base_docker_image: None,
+            mount_path: None,
+            cargo_args: None,
+            cargo_build_sbf_args: None,
+            bpf_flag: false,
+            arch: None,
+            signer: None,
+        })
+        .await
+        .expect("insert build");
+    db.mark_build_completed(build_id, program_id, "seeded_hash")
+        .await
+        .expect("complete build");
+}
+
 #[tokio::test]
 async fn unverify_marks_closed_when_program_data_missing() {
     let rpc = MockRpc::start().await;
@@ -78,11 +103,13 @@ async fn unverify_marks_closed_when_program_data_missing() {
         .await;
 
     let (app, db, _pg) = boot_with_rpc(&rpc.uri()).await;
+    let addr = Address(program_id);
+    seed_tracked_program(&db, &addr).await;
+
     let (status, _) =
         post_with_auth(app, "/unverify", AUTH_SECRET, &upgrade_payload(&program_id)).await;
     assert_eq!(status, StatusCode::OK);
 
-    let addr = Address(program_id);
     let ok = wait_until(Duration::from_secs(5), || async {
         matches!(db.get_program_state(&addr).await, Ok(Some(s)) if s.is_closed)
     })
@@ -131,13 +158,19 @@ async fn unverify_updates_hash_when_program_upgraded() {
     )
     .await
     .unwrap();
+    seed_tracked_program(&db, &addr).await;
 
     let (status, _) =
         post_with_auth(app, "/unverify", AUTH_SECRET, &upgrade_payload(&program_id)).await;
     assert_eq!(status, StatusCode::OK);
 
     let ok = wait_until(Duration::from_secs(5), || async {
-        db.cached_on_chain_hash(&addr).await.ok().as_deref() == Some(new_hash.as_str())
+        db.cached_on_chain_hash(&addr)
+            .await
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some(new_hash.as_str())
     })
     .await;
     assert!(ok, "on_chain_hash should be updated to {new_hash}");
@@ -429,8 +462,9 @@ async fn pda_dedupes_existing_inprogress_build() {
     let ok = wait_until(Duration::from_secs(5), || async {
         db.cached_on_chain_hash(&program_id)
             .await
-            .map(|h| !h.is_empty())
-            .unwrap_or(false)
+            .ok()
+            .flatten()
+            .is_some_and(|h| !h.is_empty())
     })
     .await;
     assert!(ok, "expected unverify_program to update on_chain_hash");
