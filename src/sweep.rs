@@ -76,9 +76,7 @@ pub fn health(state: &AppState) -> BackgroundJobHealth {
 
 /// Executes a single sweep cycle: pulls the program IDs that need
 /// refreshing, fetches their on-chain state, and upserts the results
-/// into `program_state`. Exposed for tests and for manual triggers
-/// (e.g. a future admin endpoint); the production loop in [`spawn`]
-/// calls this on a timer.
+/// into `program_state`. `spawn` runs this on a timer.
 pub async fn run_once(state: &AppState) -> Result<()> {
     let db = &state.db;
     let ids = db.sweep_program_ids().await?;

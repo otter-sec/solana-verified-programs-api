@@ -82,9 +82,7 @@ impl DbClient {
         Ok(())
     }
 
-    /// Underlying connection pool. Exposed so tests (and any future
-    /// admin tooling) can run ad-hoc queries; production paths should
-    /// keep going through the methods on `DbClient`.
+    /// Raw pool for tests' ad-hoc queries; production code uses the typed methods above.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
