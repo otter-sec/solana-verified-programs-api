@@ -1,6 +1,6 @@
 //! v1 (Diesel-era) -> v2 schema migration: seed the old shape, run
 //! `db.migrate()`, assert the data ended up in v2's tables and the v1
-//! tables are gone.
+//! tables are retained (dropped later by a follow-up, not by 0001).
 
 mod common;
 
@@ -121,7 +121,10 @@ async fn migrates_v1_schema_to_v2() {
     .fetch_one(&pool)
     .await
     .expect("v1 check");
-    assert!(!v1_exists.0, "v1 tables should be dropped");
+    assert!(
+        v1_exists.0,
+        "v1 tables are retained for a reversible cutover (dropped by a follow-up)"
+    );
 }
 
 /// Running `migrate()` twice on a clean DB should be a no-op the second
@@ -152,7 +155,7 @@ async fn migration_idempotent_on_v2_schema() {
 
 /// Migrate against a v1 schema with no data: tables exist but every
 /// row count is zero. The data-move `DO` block runs but inserts
-/// nothing; v1 tables are still dropped at the end.
+/// nothing; v1 tables are retained either way.
 #[tokio::test]
 async fn migration_handles_v1_with_no_data() {
     let (url, _pg) = pg_for_test().await;
@@ -226,7 +229,10 @@ async fn migration_handles_v1_with_no_data() {
     .fetch_one(&pool)
     .await
     .expect("v1 check");
-    assert!(!v1_exists.0, "v1 tables should be dropped even when empty");
+    assert!(
+        v1_exists.0,
+        "v1 tables are retained even when empty (dropped by a follow-up)"
+    );
 }
 
 /// Multiple completed builds for the same program (different commits)
