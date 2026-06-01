@@ -2,7 +2,9 @@
 --   1. a fresh database
 --   2. a v1 database (Diesel-managed schema with solana_program_builds /
 --      verified_programs / program_authority)
--- After this migration runs, v1 tables are gone and v2 carries the data.
+-- After this migration runs, v2 carries the data; the v1 tables are kept (not
+-- dropped) so the cutover stays reversible, and dropped in a follow-up once v2
+-- is confirmed healthy.
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'build_status') THEN
@@ -126,9 +128,5 @@ DO $$ BEGIN
     FULL OUTER JOIN program_authority pa ON pa.program_id = latest_vp.program_id
     ON CONFLICT (program_id) DO NOTHING;
 
-    -- Order matters: verified_programs has a FK to solana_program_builds.
-    DROP TABLE verified_programs;
-    DROP TABLE program_authority;
-    DROP TABLE solana_program_builds;
   END IF;
 END $$;
