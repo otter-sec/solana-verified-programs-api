@@ -615,6 +615,7 @@ impl DbClient {
             mount_path: build_params.mount_path,
             bpf_flag: Some(build_params.bpf_flag),
             cargo_args: build_params.cargo_args,
+            cargo_build_sbf_args: None,
             arch: build_params.arch,
             webhook_url: None,
         };

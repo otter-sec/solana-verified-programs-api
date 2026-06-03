@@ -193,6 +193,9 @@ pub fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Comman
     if let Some(ref base_image) = payload.base_image {
         cmd.arg("--base-image").arg(base_image);
     }
+    if let Some(ref sbf_args) = payload.cargo_build_sbf_args {
+        cmd.arg(format!("--cargo-build-sbf-args={sbf_args}"));
+    }
     if let Some(ref mount_path) = payload.mount_path {
         cmd.arg("--mount-path").arg(mount_path);
     }
