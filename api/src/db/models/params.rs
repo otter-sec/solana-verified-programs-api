@@ -20,6 +20,8 @@ pub struct SolanaProgramBuildParams {
     pub mount_path: Option<String>,
     /// Additional cargo build arguments
     pub cargo_args: Option<Vec<String>>,
+    /// Passed to `solana-verify` as `--cargo-build-sbf-args=...`
+    pub cargo_build_sbf_args: Option<String>,
     /// Architecture target
     pub arch: Option<String>,
     /// Optional webhook URL to POST verification result/error when job completes
@@ -48,6 +50,7 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
             base_image: otter.get_base_image(),
             mount_path: otter.get_mount_path(),
             cargo_args: otter.get_cargo_args(),
+            cargo_build_sbf_args: otter.get_cargo_build_sbf_args(),
             arch: otter.get_arch(),
             webhook_url: None,
         }

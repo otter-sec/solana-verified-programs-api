@@ -76,6 +76,32 @@ impl OtterBuildParams {
             .position(|arg| arg == "--arch")
             .map(|index| self.args[index + 1].clone())
     }
+
+    /// `solana-verify --cargo-build-sbf-args` value
+    pub fn get_cargo_build_sbf_args(&self) -> Option<String> {
+        const PREFIX: &str = "--cargo-build-sbf-args";
+        for (i, arg) in self.args.iter().enumerate() {
+            if arg == PREFIX {
+                return self.args.get(i + 1).map(|v| strip_surrounding_quotes(v));
+            }
+            if let Some(value) = arg
+                .strip_prefix(PREFIX)
+                .and_then(|rest| rest.strip_prefix('='))
+            {
+                return Some(strip_surrounding_quotes(value));
+            }
+        }
+        None
+    }
+}
+
+fn strip_surrounding_quotes(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        trimmed[1..trimmed.len() - 1].to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Retrieves Otter Verify PDA for a program and signer
@@ -261,6 +287,51 @@ mod tests {
         assert_eq!(build_params.program_id, program_id);
         assert!(build_params.lib_name.unwrap() == "squads_mpl");
         assert!(build_params.bpf_flag.unwrap());
+    }
+
+    #[test]
+    fn get_cargo_build_sbf_args_from_token_pda_args() {
+        let otter = OtterBuildParams {
+            address: Pubkey::default(),
+            signer: Pubkey::default(),
+            version: String::new(),
+            git_url: String::new(),
+            commit: String::new(),
+            args: vec![
+                "--library-name".to_string(),
+                "pinocchio_token_program".to_string(),
+                "--base-image".to_string(),
+                "solanafoundation/solana-verifiable-build:3.1.9".to_string(),
+                "--cargo-build-sbf-args=\"--tools-version v1.54\"".to_string(),
+            ],
+            deployed_slot: 0,
+            bump: 0,
+        };
+        assert_eq!(
+            otter.get_cargo_build_sbf_args().as_deref(),
+            Some("--tools-version v1.54")
+        );
+    }
+
+    #[test]
+    fn get_cargo_build_sbf_args_two_token_form() {
+        let otter = OtterBuildParams {
+            address: Pubkey::default(),
+            signer: Pubkey::default(),
+            version: String::new(),
+            git_url: String::new(),
+            commit: String::new(),
+            args: vec![
+                "--cargo-build-sbf-args".to_string(),
+                "\"--tools-version v1.54\"".to_string(),
+            ],
+            deployed_slot: 0,
+            bump: 0,
+        };
+        assert_eq!(
+            otter.get_cargo_build_sbf_args().as_deref(),
+            Some("--tools-version v1.54")
+        );
     }
 
     #[tokio::test]
