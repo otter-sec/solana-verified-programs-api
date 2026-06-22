@@ -5,14 +5,14 @@
 //! for upgrades the `/pda` webhook missed.
 
 use crate::{
-    db::{DbClient, NewBuild},
+    db::NewBuild,
     services::onchain::{get_otter_verify_params, snapshot_programs},
     services::verification,
     state::AppState,
     validation::Address,
 };
 use solana_pubkey::Pubkey;
-use std::{str::FromStr, time::Duration};
+use std::{str::FromStr, sync::atomic::Ordering, time::Duration};
 use tracing::{error, info};
 
 /// Spawns the sweep task. Runs for the process's lifetime.
@@ -27,59 +27,48 @@ pub fn spawn(state: AppState) {
         info!("sweep loop started, interval={interval_seconds}s");
         loop {
             ticker.tick().await;
-            if let Err(e) = run_once(&state).await {
-                error!("sweep cycle: {}", e);
+            match run_once(&state).await {
+                // Stamp liveness only on a completed cycle, so a dead or stuck
+                // sweep actually trips `/health/background-jobs`.
+                Ok(()) => state
+                    .last_sweep_at
+                    .store(chrono::Utc::now().timestamp(), Ordering::Relaxed),
+                Err(e) => error!("sweep cycle: {}", e),
             }
         }
     });
 }
 
-/// Health view for the `/health/background-jobs` endpoint, derived from
-/// the timestamp on the oldest `program_state` row.
-pub struct BackgroundJobManager<'a> {
-    db: &'a DbClient,
-    sweep_interval_seconds: u64,
-}
-
-impl<'a> BackgroundJobManager<'a> {
-    pub fn new(db: &'a DbClient, sweep_interval_seconds: u64) -> Self {
-        Self {
-            db,
-            sweep_interval_seconds,
-        }
+/// Health view for the `/health/background-jobs` endpoint, derived from the
+/// sweep's own liveness timestamp (`AppState::last_sweep_at`) rather than
+/// `program_state.last_checked` -- the latter is bumped by every verify and
+/// webhook write, so it would report a dead sweep as healthy.
+pub fn health(state: &AppState) -> crate::responses::BackgroundJobHealth {
+    use crate::responses::{BackgroundJobHealth, BackgroundJobStatus};
+    // Unix-seconds of the last completed sweep; `0` = none since startup.
+    let last_sweep_time = state.last_sweep_at.load(Ordering::Relaxed);
+    if last_sweep_time == 0 {
+        return BackgroundJobHealth {
+            status: BackgroundJobStatus::Unknown,
+            last_program_check: None,
+            message: "no sweep cycle has completed since startup".into(),
+        };
     }
-
-    pub async fn get_health_status(&self) -> crate::responses::BackgroundJobHealth {
-        use crate::responses::{BackgroundJobHealth, BackgroundJobStatus};
-        let last = self.db.last_sweep_at().await.ok().flatten();
-        let now = chrono::Utc::now();
-        let interval = chrono::Duration::seconds(self.sweep_interval_seconds as i64);
-        match last {
-            Some(t) => {
-                let lag = now - t;
-                if lag > interval * 2 {
-                    BackgroundJobHealth {
-                        status: BackgroundJobStatus::Inactive,
-                        last_program_check: Some(t.naive_utc()),
-                        message: format!(
-                            "Last sweep was {}s ago, expected interval {}s",
-                            lag.num_seconds(),
-                            interval.num_seconds()
-                        ),
-                    }
-                } else {
-                    BackgroundJobHealth {
-                        status: BackgroundJobStatus::Active,
-                        last_program_check: Some(t.naive_utc()),
-                        message: "Background sweep running normally".into(),
-                    }
-                }
-            }
-            None => BackgroundJobHealth {
-                status: BackgroundJobStatus::Unknown,
-                last_program_check: None,
-                message: "no program_state rows yet".into(),
-            },
+    let last_check =
+        chrono::DateTime::from_timestamp_secs(last_sweep_time).map(|dt| dt.naive_utc());
+    let lag = chrono::Utc::now().timestamp() - last_sweep_time;
+    let interval = state.sweep_interval_seconds as i64;
+    if lag > interval * 2 {
+        BackgroundJobHealth {
+            status: BackgroundJobStatus::Inactive,
+            last_program_check: last_check,
+            message: format!("Last sweep completed {lag}s ago, expected interval {interval}s"),
+        }
+    } else {
+        BackgroundJobHealth {
+            status: BackgroundJobStatus::Active,
+            last_program_check: last_check,
+            message: "Background sweep running normally".into(),
         }
     }
 }

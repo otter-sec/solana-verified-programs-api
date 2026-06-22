@@ -50,11 +50,6 @@ async fn main() {
         config.max_reverifies_per_sweep,
     );
 
-    let bg_job_manager =
-        services::background_jobs::BackgroundJobManager::new(&db, config.sweep_interval_seconds);
-    let initial_health = bg_job_manager.get_health_status().await;
-    tracing::info!("Background job initial status: {:?}", initial_health);
-
     services::background_jobs::spawn(state.clone());
 
     let app = api::initialize_router(state);

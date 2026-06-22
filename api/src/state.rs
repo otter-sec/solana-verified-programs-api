@@ -5,7 +5,7 @@
 use crate::db::DbClient;
 use axum::extract::FromRef;
 use solana_client::nonblocking::rpc_client::RpcClient;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicI64, Arc};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -21,6 +21,9 @@ pub struct AppState {
     pub sweep_interval_seconds: u64,
     /// Max re-verification builds the sweep kicks per cycle.
     pub max_reverifies_per_sweep: usize,
+    /// Unix-seconds of the last completed sweep, written only by the sweep
+    /// loop; `0` = none since startup. Drives `/health/background-jobs`.
+    pub last_sweep_at: Arc<AtomicI64>,
 }
 
 impl AppState {
@@ -38,6 +41,7 @@ impl AppState {
             auth_secret: auth_secret.into(),
             sweep_interval_seconds,
             max_reverifies_per_sweep,
+            last_sweep_at: Arc::new(AtomicI64::new(0)),
         }
     }
 }

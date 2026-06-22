@@ -622,15 +622,6 @@ impl DbClient {
         .await?)
     }
 
-    /// Proxy for "is the sweep still running" -- used by the health endpoints.
-    pub async fn last_sweep_at(&self) -> Result<Option<DateTime<Utc>>> {
-        Ok(
-            sqlx::query_scalar("SELECT MAX(last_checked) FROM program_state")
-                .fetch_one(&self.pool)
-                .await?,
-        )
-    }
-
     /// Records the on-disk log filename for a failed build.
     pub async fn insert_build_log(
         &self,
