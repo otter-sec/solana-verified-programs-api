@@ -66,10 +66,25 @@ async fn status_all_for_unknown_program_empty() {
 #[tokio::test]
 async fn resolve_hash_empty_db() {
     let (app, _pg) = boot().await;
-    let (status, body) = get(app, "/resolve-hash/deadbeef").await;
+    // Valid 64-char hex that just isn't in the DB -> 200 with no builds.
+    let hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    let (status, body) = get(app, &format!("/resolve-hash/{hash}")).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["executable_hash"], "deadbeef");
+    assert_eq!(body["executable_hash"], hash);
     assert!(body["builds"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn resolve_hash_invalid_is_400() {
+    let (app, _pg) = boot().await;
+    // Wrong length and non-hex chars are both rejected before any DB query.
+    for bad in [
+        "deadbeef",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ] {
+        let (status, _) = get(app.clone(), &format!("/resolve-hash/{bad}")).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "input: {bad}");
+    }
 }
 
 #[tokio::test]
