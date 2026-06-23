@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`GET /resolve-hash/{executable_hash}` endpoint**: content-addressed lookup over the verified-build catalogue. Given a 64-char executable hash, returns every completed build that produced it, each flagged with `matches_deployed` (true when the hash matches the program's currently-deployed on-chain hash).
+- **Integration test suite** (`tests/`): end-to-end coverage of route behaviour, the v1→v2 migration, the background sweep, and webhook callbacks, plus a `verify-smoke` workflow and `workflow_dispatch` trigger on CI.
 
 
 ## [1.5.5] - 2026-06-29
