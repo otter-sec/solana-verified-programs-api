@@ -325,6 +325,45 @@ async fn seed_program(db: &DbClient, opts: SeedOpts) -> verified_programs_api::t
     program_id
 }
 
+/// The standard `NewBuild` the seed helpers use: trusted signer, seed
+/// repo/commit, no optional build args.
+fn new_build(
+    program_id: verified_programs_api::types::Address,
+) -> verified_programs_api::db::NewBuild {
+    use std::str::FromStr;
+    use verified_programs_api::types::Address;
+
+    verified_programs_api::db::NewBuild {
+        repository: SEED_REPO.to_string(),
+        commit_hash: Some(SEED_COMMIT.to_string()),
+        program_id,
+        lib_name: None,
+        base_docker_image: None,
+        mount_path: None,
+        cargo_args: None,
+        cargo_build_sbf_args: None,
+        bpf_flag: false,
+        arch: None,
+        signer: Some(Address::from_str(TRUSTED_SIGNER).unwrap()),
+    }
+}
+
+/// Inserts and completes a build for `program_id` at `hash` *without* writing
+/// a `program_state` row -- used to exercise the resolve-hash LEFT JOIN miss.
+async fn seed_completed_build(
+    db: &DbClient,
+    program_id: verified_programs_api::types::Address,
+    hash: &str,
+) {
+    let id = db
+        .insert_build(&new_build(program_id))
+        .await
+        .expect("insert build");
+    db.mark_build_completed(id, &program_id, hash)
+        .await
+        .expect("complete build");
+}
+
 #[tokio::test]
 async fn status_for_verified_program() {
     let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
@@ -497,6 +536,81 @@ async fn resolve_hash_returns_matching_with_flag() {
         .find(|e| e["program_id"] != a.to_string())
         .expect("entry for b");
     assert_eq!(entry_b["matches_deployed"], false);
+}
+
+#[tokio::test]
+async fn resolve_hash_is_case_insensitive() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    let program_id = seed_program(&db, SeedOpts::default()).await;
+
+    // Stored hashes are lowercase; an upper-case query must still match and
+    // the response echoes the normalised (lowercase) hash.
+    let (status, body) = get(app, &format!("/resolve-hash/{}", SEED_HASH.to_uppercase())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["executable_hash"], SEED_HASH);
+    let builds = body["builds"].as_array().expect("builds array");
+    assert_eq!(builds.len(), 1);
+    assert_eq!(builds[0]["program_id"], program_id.to_string());
+    assert_eq!(builds[0]["matches_deployed"], true);
+}
+
+#[tokio::test]
+async fn resolve_hash_returns_build_metadata() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    seed_program(&db, SeedOpts::default()).await;
+
+    let (status, body) = get(app, &format!("/resolve-hash/{SEED_HASH}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let entry = &body["builds"].as_array().expect("builds array")[0];
+    assert_eq!(entry["repository"], SEED_REPO);
+    assert_eq!(entry["commit"], SEED_COMMIT);
+    assert_eq!(entry["signer"], TRUSTED_SIGNER);
+    assert!(entry["build_id"].as_str().is_some_and(|s| !s.is_empty()));
+    assert!(!entry["completed_at"].is_null());
+}
+
+#[tokio::test]
+async fn resolve_hash_without_program_state_is_not_deployed() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    // A completed build whose program has no `program_state` row at all: the
+    // LEFT JOIN misses, so `matches_deployed` must come back false rather than
+    // dropping the build.
+    let program_id = verified_programs_api::types::Address(solana_pubkey::Pubkey::new_unique());
+    seed_completed_build(&db, program_id, SEED_HASH).await;
+
+    let (status, body) = get(app, &format!("/resolve-hash/{SEED_HASH}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let builds = body["builds"].as_array().expect("builds array");
+    assert_eq!(builds.len(), 1);
+    assert_eq!(builds[0]["program_id"], program_id.to_string());
+    assert_eq!(builds[0]["matches_deployed"], false);
+}
+
+#[tokio::test]
+async fn resolve_hash_excludes_non_completed_builds() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    // One completed build at SEED_HASH (should resolve)...
+    let completed = seed_program(&db, SeedOpts::default()).await;
+    // ...and a second build pinned to the same hash but left in_progress.
+    // The `status = 'completed'` filter must keep it out.
+    let pending_program =
+        verified_programs_api::types::Address(solana_pubkey::Pubkey::new_unique());
+    let pending = db
+        .insert_build(&new_build(pending_program))
+        .await
+        .expect("insert pending build");
+    sqlx::query("UPDATE builds SET executable_hash = $1 WHERE id = $2")
+        .bind(SEED_HASH)
+        .bind(pending)
+        .execute(db.pool())
+        .await
+        .expect("pin executable_hash");
+
+    let (status, body) = get(app, &format!("/resolve-hash/{SEED_HASH}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let builds = body["builds"].as_array().expect("builds array");
+    assert_eq!(builds.len(), 1, "only the completed build should resolve");
+    assert_eq!(builds[0]["program_id"], completed.to_string());
 }
 
 #[tokio::test]
