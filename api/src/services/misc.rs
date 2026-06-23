@@ -14,10 +14,7 @@ pub fn get_last_line(output: &str) -> Option<String> {
 /// Trims trailing `/` and `.git` from a repo URL.
 pub fn normalize_repository_url(repository: &str) -> String {
     let trimmed = repository.trim_end_matches('/');
-    trimmed
-        .strip_suffix(".git")
-        .unwrap_or(trimmed)
-        .to_string()
+    trimmed.strip_suffix(".git").unwrap_or(trimmed).to_string()
 }
 
 /// Builds `repo` or `repo/tree/{commit}` for API responses.
@@ -94,16 +91,10 @@ mod tests {
         );
 
         build.commit_hash = None;
-        assert_eq!(
-            build_repository_url(&build),
-            "https://github.com/user/repo"
-        );
+        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
 
         build.commit_hash = Some("".to_string());
-        assert_eq!(
-            build_repository_url(&build),
-            "https://github.com/user/repo"
-        );
+        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
 
         build.repository = "https://github.com/user/repo.git".to_string();
         build.commit_hash = Some("abc123".to_string());
@@ -113,10 +104,7 @@ mod tests {
         );
 
         build.commit_hash = None;
-        assert_eq!(
-            build_repository_url(&build),
-            "https://github.com/user/repo"
-        );
+        assert_eq!(build_repository_url(&build), "https://github.com/user/repo");
 
         build.repository = "https://github.com/user/repo.git/".to_string();
         build.commit_hash = Some("abc123".to_string());
