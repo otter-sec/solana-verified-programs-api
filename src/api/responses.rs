@@ -2,7 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 pub use crate::db::JobStatus;
-use crate::db::{BuildRow, ProgramStateRow};
+use crate::db::{BuildRow, ProgramStateRow, ResolvedBuildRow};
 use crate::types::Address;
 
 /// Formats `repo/tree/<commit>` for display in `/status`-style responses.
@@ -389,4 +389,18 @@ pub struct ResolveHashEntry {
     pub commit: Option<String>,
     pub completed_at: Option<NaiveDateTime>,
     pub matches_deployed: bool,
+}
+
+impl From<ResolvedBuildRow> for ResolveHashEntry {
+    fn from(b: ResolvedBuildRow) -> Self {
+        Self {
+            build_id: b.id.to_string(),
+            program_id: b.program_id,
+            signer: b.signer,
+            repository: b.repository,
+            commit: b.commit_hash,
+            completed_at: b.completed_at.map(|t| t.naive_utc()),
+            matches_deployed: b.matches_deployed,
+        }
+    }
 }

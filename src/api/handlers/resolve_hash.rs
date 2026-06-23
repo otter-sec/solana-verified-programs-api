@@ -2,7 +2,7 @@
 //! build that produced a given executable hash.
 
 use crate::{
-    api::responses::{ResolveHashEntry, ResolveHashResponse},
+    api::responses::ResolveHashResponse,
     db::DbClient,
     errors::{ApiError, Result},
 };
@@ -24,18 +24,7 @@ pub async fn resolve(
     }
 
     let builds = db.resolve_executable_hash(&hash).await?;
-    let entries = builds
-        .into_iter()
-        .map(|b| ResolveHashEntry {
-            build_id: b.id.to_string(),
-            program_id: b.program_id,
-            signer: b.signer,
-            repository: b.repository,
-            commit: b.commit_hash,
-            completed_at: b.completed_at.map(|t| t.naive_utc()),
-            matches_deployed: b.matches_deployed,
-        })
-        .collect();
+    let entries = builds.into_iter().map(Into::into).collect();
 
     Ok(Json(ResolveHashResponse {
         executable_hash: hash,
