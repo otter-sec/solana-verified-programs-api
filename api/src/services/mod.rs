@@ -27,5 +27,5 @@ pub mod rpc_manager;
 pub mod verification;
 
 // Re-export commonly used functions
-pub use misc::build_repository_url;
+pub use misc::{build_repository_url, build_repository_url_from_parts};
 pub use onchain::program_hash_retriver::get_on_chain_hash;

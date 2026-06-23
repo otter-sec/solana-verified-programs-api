@@ -2,6 +2,7 @@ use crate::db::{
     models::{JobStatus, JobVerificationResponse},
     DbClient,
 };
+use crate::services::build_repository_url_from_parts;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
@@ -31,9 +32,10 @@ pub(crate) async fn get_job_status(
                     info!("Job {} completed, fetching verification details", job_id);
                     match db.get_verified_build(&job.program_id, None).await {
                         Ok(verified_build) => {
-                            let repo_url = job.commit_hash.map_or(job.repository.clone(), |hash| {
-                                format!("{}/tree/{}", job.repository.trim_end_matches('/'), hash)
-                            });
+                            let repo_url = build_repository_url_from_parts(
+                                &job.repository,
+                                job.commit_hash.as_deref(),
+                            );
 
                             info!(
                                 "Successfully retrieved verification details for job {}",
