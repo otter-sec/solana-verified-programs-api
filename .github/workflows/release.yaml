@@ -18,7 +18,6 @@ jobs:
       matrix:
         image:
         - { name: 'api', dockerfile: 'api/Dockerfile' }
-        - { name: 'db-init', dockerfile: 'api/Dockerfile.db-init' }
     permissions:
       contents: read
       id-token: write
@@ -28,7 +27,7 @@ jobs:
     uses: otter-eng/workflows/.github/workflows/deploy-to-gke.yaml@main
     with:
       environment: prod
-      containers: "api=api:${{ github.ref_name }} db-init=db-init:${{ github.ref_name }}"
+      containers: "api=api:${{ github.ref_name }}"
     permissions:
       contents: read
       id-token: write

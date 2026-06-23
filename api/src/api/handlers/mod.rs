@@ -18,7 +18,7 @@ pub mod verified_programs_status; // Status of verified programs // PDA updates/
 
 // Re-export handlers for easier access
 pub(crate) use async_verify::{process_async_verification, process_async_verification_with_signer};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 pub(crate) use health::{background_job_status, health_check};
 pub(crate) use job_status::get_job_status;
 pub(crate) use logs::get_build_logs;
@@ -31,12 +31,51 @@ pub(crate) use verified_programs_list::{
 };
 pub(crate) use verified_programs_status::get_verified_programs_status;
 
-use crate::CONFIG;
+use serde::Deserialize;
+use serde_json::Value;
 
-/// Validates the authorization header against the configured secret
-pub fn is_authorized(headers: &HeaderMap) -> bool {
+/// Validates the authorization header against the configured secret.
+/// Uses a constant-time compare so the secret length isn't trivially
+/// timing-attackable from the network.
+pub fn is_authorized(headers: &HeaderMap, auth_secret: &str) -> bool {
     headers
         .get("AUTHORIZATION")
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|header_value| header_value == CONFIG.auth_secret)
+        .is_some_and(|h| constant_time_eq(h.as_bytes(), auth_secret.as_bytes()))
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut acc: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        acc |= x ^ y;
+    }
+    acc == 0
+}
+
+/// Subset of Helius's parsed-transaction payload we actually look at. Extra
+/// fields are ignored by serde's default behaviour.
+#[derive(Debug, Deserialize)]
+pub struct HeliusParsedTransaction {
+    pub instructions: Vec<Instruction>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Instruction {
+    pub accounts: Vec<String>,
+    pub data: String,
+    pub program_id: String,
+}
+
+pub(crate) fn parse_helius_transaction(
+    payload: &[Value],
+) -> std::result::Result<HeliusParsedTransaction, (StatusCode, &'static str)> {
+    if payload.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Empty payload"));
+    }
+    serde_json::from_value(payload[0].clone())
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid payload"))
 }

@@ -1,10 +1,6 @@
-*/target
+target/
 .env
-nginx/
-nginx.conf
-redis.conf
-/backupdata
-*/Cargo.lock
-redisdata
-test_db
 .env.test
+*.log
+proxy-ca.crt
+docker-compose.override.yml

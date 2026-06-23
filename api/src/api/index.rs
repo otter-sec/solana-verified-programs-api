@@ -1,5 +1,3 @@
-// src/api/index.rs
-
 use axum::{response::Html, Json};
 use serde_json::{json, Value};
 use std::sync::OnceLock;

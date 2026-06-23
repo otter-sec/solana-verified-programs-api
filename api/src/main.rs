@@ -1,48 +1,66 @@
-use axum::Server;
-use config::Config;
 use std::net::SocketAddr;
 
 mod api;
 mod config;
 mod db;
 mod errors;
-mod schema;
+mod responses;
 mod services;
+mod state;
 mod validation;
+
+use crate::state::AppState;
 
 /// Result type for API
 pub type Result<T> = std::result::Result<T, errors::ApiError>;
 
-/// Static configuration instance for the API
-static CONFIG: once_cell::sync::Lazy<Config> = once_cell::sync::Lazy::new(|| {
-    dotenv::dotenv().ok();
-    envy::from_env::<Config>().expect("Failed to load configuration")
-});
-
 #[tokio::main]
 async fn main() {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+    // Initialize logging. `fmt::init()` alone filters everything when
+    // RUST_LOG is unset; default to INFO so deployments aren't silent.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
 
-    // Initialize database and Redis connections
-    let db_client = db::DbClient::new(&CONFIG.database_url, &CONFIG.redis_url);
+    let config = config::Config::from_env().expect("Failed to load configuration");
 
-    // Start background jobs
-    let bg_job_manager = services::background_jobs::BackgroundJobManager::new(db_client.clone());
+    let db = db::DbClient::connect(
+        &config.database_url,
+        config.db_max_connections,
+        std::time::Duration::from_secs(config.sweep_interval_seconds),
+    )
+    .await
+    .expect("Failed to connect to database");
+    db.migrate().await.expect("Failed to apply migrations");
 
-    // Log initial health status
-    let initial_health = bg_job_manager.get_health_status().await;
-    tracing::info!("Background job initial status: {:?}", initial_health);
+    match db.fail_orphan_builds().await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!("Marked {} orphan in-progress builds as failed", n),
+        Err(e) => tracing::error!("Failed to clean up orphan builds: {}", e),
+    }
 
-    bg_job_manager.start_all_jobs().await;
+    let state = AppState::new(
+        db.clone(),
+        &config.rpc_url,
+        &config.auth_secret,
+        config.sweep_interval_seconds,
+        config.max_reverifies_per_sweep,
+    );
 
-    // Setup API router and start server
-    let app = api::initialize_router(db_client);
-    let addr = SocketAddr::from(([0, 0, 0, 0], CONFIG.port));
+    services::background_jobs::spawn(state.clone());
+
+    let app = api::initialize_router(state);
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!("Server starting on {}", addr);
 
-    Server::bind(&addr)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }

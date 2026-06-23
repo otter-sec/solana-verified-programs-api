@@ -1,8 +1,5 @@
-use crate::db::{
-    models::{PaginationMeta, VerifiedProgramListResponse, VerifiedProgramsQuery},
-    programs::PER_PAGE,
-    DbClient,
-};
+use crate::db::{DbClient, PER_PAGE};
+use crate::responses::{PaginationMeta, VerifiedProgramListResponse, VerifiedProgramsQuery};
 use crate::validation;
 use axum::{
     extract::{Path, Query, State},
@@ -30,7 +27,7 @@ pub(crate) async fn get_verified_programs_list(
 
 /// Handler for retrieving a paginated list of verified programs
 ///
-/// # Endpoint: GET /verified-programs/:page
+/// # Endpoint: GET /verified-programs/{page}
 ///
 /// # Returns
 /// * `(StatusCode, Json<VerifiedProgramListResponse>)` - Status code and list of verified program addresses

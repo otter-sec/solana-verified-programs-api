@@ -1,15 +1,5 @@
 name: solana-verifier
 services:
-  db-init:
-    build:
-      context: .
-      dockerfile: ./api/Dockerfile.db-init
-    env_file: .env
-    command: diesel migration run --migration-dir /migrations
-    depends_on:
-      db:
-        condition: service_healthy
-
   db:
     image: postgres:18
     platform: linux/amd64
@@ -26,26 +16,6 @@ services:
       retries: 5
       start_period: 10s
 
-  redis:
-    image: redis
-    env_file: .env
-    restart: always
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - redis:/data
-    command: /bin/sh -c "redis-server --requirepass $${REDIS_PASSWORD}"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-
   api:
     build:
       context: .
@@ -61,12 +31,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
 
 volumes:
   postgresql:
-  redis:
-
