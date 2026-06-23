@@ -103,6 +103,19 @@ pub struct BuildRow {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// A completed build for a given executable hash, with `matches_deployed`
+/// (hash == the program's on-chain hash) computed in the join.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResolvedBuildRow {
+    pub id: Uuid,
+    pub program_id: Address,
+    pub signer: Option<Address>,
+    pub repository: String,
+    pub commit_hash: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub matches_deployed: bool,
+}
+
 /// Subset of `program_state` callers actually read. `authority` and
 /// `last_checked` exist on the row but aren't surfaced anywhere yet.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -332,12 +345,17 @@ impl DbClient {
         .await?)
     }
 
-    /// Every completed build with this executable hash.
-    pub async fn builds_by_executable_hash(&self, hash: &str) -> Result<Vec<BuildRow>> {
-        Ok(sqlx::query_as::<_, BuildRow>(
-            "SELECT * FROM builds
-             WHERE executable_hash = $1 AND status = 'completed'
-             ORDER BY completed_at DESC",
+    /// Every completed build with this executable hash, each flagged for
+    /// whether the hash matches the program's on-chain hash. One query: index
+    /// lookup + `LEFT JOIN program_state`, no per-build round-trip.
+    pub async fn resolve_executable_hash(&self, hash: &str) -> Result<Vec<ResolvedBuildRow>> {
+        Ok(sqlx::query_as::<_, ResolvedBuildRow>(
+            "SELECT b.id, b.program_id, b.signer, b.repository, b.commit_hash, b.completed_at,
+                    COALESCE(ps.on_chain_hash = b.executable_hash, false) AS matches_deployed
+             FROM builds b
+             LEFT JOIN program_state ps ON ps.program_id = b.program_id
+             WHERE b.executable_hash = $1 AND b.status = 'completed'
+             ORDER BY b.completed_at DESC",
         )
         .bind(hash)
         .fetch_all(&self.pool)
