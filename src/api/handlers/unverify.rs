@@ -1,9 +1,9 @@
 use crate::{
     api::handlers::{is_authorized, parse_helius_transaction},
     db::DbClient,
-    services::onchain::get_on_chain_hash,
+    onchain::get_on_chain_hash,
     state::AppState,
-    validation::Address,
+    types::Address,
 };
 use axum::{
     extract::State,

@@ -1,12 +1,27 @@
+use crate::api::responses::{PaginationMeta, VerifiedProgramListResponse, VerifiedProgramsQuery};
 use crate::db::{DbClient, PER_PAGE};
-use crate::responses::{PaginationMeta, VerifiedProgramListResponse, VerifiedProgramsQuery};
-use crate::validation;
+use crate::types::{Address, WebhookUrl};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
+use std::str::FromStr;
 use tracing::{error, info};
+
+/// Search query must parse as either a Solana address or an https URL
+/// (matching `WebhookUrl`'s rules). Empty input is allowed -- it disables
+/// filtering.
+fn validate_search(s: &str) -> Result<(), &'static str> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Ok(());
+    }
+    if Address::from_str(s).is_ok() || WebhookUrl::from_str(s).is_ok() {
+        return Ok(());
+    }
+    Err("Search must be a valid Solana address or a valid URL")
+}
 
 /// Handler for retrieving a list of all verified programs
 ///
@@ -41,7 +56,7 @@ pub(crate) async fn get_verified_programs_list_paginated(
     let search: Option<&str> = query.search.as_deref();
 
     if let Some(s) = search {
-        if let Err(msg) = validation::validate_search(s) {
+        if let Err(msg) = validate_search(s) {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(VerifiedProgramListResponse {
@@ -54,7 +69,7 @@ pub(crate) async fn get_verified_programs_list_paginated(
                         has_prev_page: false,
                     },
                     verified_programs: vec![],
-                    error: Some(msg),
+                    error: Some(msg.to_string()),
                 }),
             );
         }

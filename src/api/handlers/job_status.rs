@@ -1,6 +1,6 @@
+use crate::api::responses::build_repository_url;
+use crate::api::responses::{JobReplyStatus, JobStatus, JobVerificationResponse};
 use crate::db::DbClient;
-use crate::responses::{JobReplyStatus, JobStatus, JobVerificationResponse};
-use crate::services::misc::build_repository_url;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;

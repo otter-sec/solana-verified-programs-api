@@ -4,12 +4,12 @@
 #![allow(clippy::result_large_err)]
 
 use crate::{
+    api::responses::{ApiResponse, ErrorResponse, Status},
     db::{DbClient, NewBuild},
     errors::ErrorMessages,
-    responses::{ApiResponse, ErrorResponse, Status},
-    services::onchain::{self, ProgramOnchainState},
+    onchain::{self, ProgramOnchainState},
     state::AppState,
-    validation::Address,
+    types::Address,
 };
 use axum::{http::StatusCode, Json};
 use tracing::error;

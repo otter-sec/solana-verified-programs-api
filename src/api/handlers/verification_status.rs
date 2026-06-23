@@ -1,8 +1,8 @@
-use crate::db::DbClient;
-use crate::responses::{
+use crate::api::responses::{
     ApiResponse, ErrorResponse, ExtendedStatusResponse, Status, StatusResponse, SuccessResponse,
     VerificationStatusParams,
 };
+use crate::db::DbClient;
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};

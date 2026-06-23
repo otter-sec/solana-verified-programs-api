@@ -3,9 +3,10 @@ use std::str::FromStr;
 use crate::{
     api::handlers::{async_verify::process_verification, is_authorized, parse_helius_transaction},
     db::NewBuild,
-    services::onchain::{get_on_chain_hash, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID},
+    errors::ApiError,
+    onchain::{get_on_chain_hash, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID},
     state::AppState,
-    validation::Address,
+    types::Address,
 };
 use axum::{
     extract::State,
@@ -105,10 +106,10 @@ async fn process_otter_verify_instruction(
             .rpc
             .get_account_data(pda_account)
             .await
-            .map_err(|e| crate::errors::ApiError::Custom(format!("RPC error: {e}")))?;
-        let body = params.get(8..).ok_or_else(|| {
-            crate::errors::ApiError::Custom("PDA account data is too short".to_string())
-        })?;
+            .map_err(|e| ApiError::Custom(format!("RPC error: {e}")))?;
+        let body = params
+            .get(8..)
+            .ok_or_else(|| ApiError::Custom("PDA account data is too short".to_string()))?;
         let otter_build_params = match OtterBuildParams::try_from_slice(body) {
             Ok(params) => params,
             Err(e) => {

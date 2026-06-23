@@ -1,8 +1,12 @@
-use crate::{responses::BackgroundJobStatus, services::background_jobs, state::AppState};
+use crate::{
+    api::responses::{BackgroundJobHealth, BackgroundJobStatus},
+    state::AppState,
+    sweep,
+};
 use axum::{extract::State, http::StatusCode, Json};
 
 pub async fn health_check(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
-    let bg_health = background_jobs::health(&state);
+    let bg_health = sweep::health(&state);
     let bg_ok = bg_health.status == BackgroundJobStatus::Active;
 
     let (db_status, db_ok) = match state.db.ping().await {
@@ -36,8 +40,8 @@ pub async fn health_check(State(state): State<AppState>) -> (StatusCode, Json<se
 
 pub async fn background_job_status(
     State(state): State<AppState>,
-) -> (StatusCode, Json<crate::responses::BackgroundJobHealth>) {
-    let health = background_jobs::health(&state);
+) -> (StatusCode, Json<BackgroundJobHealth>) {
+    let health = sweep::health(&state);
 
     let status_code = match health.status {
         BackgroundJobStatus::Active => StatusCode::OK,

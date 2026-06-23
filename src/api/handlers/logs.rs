@@ -1,4 +1,4 @@
-use crate::{db::DbClient, services::logging::read_logs};
+use crate::{build::logs::read_logs, db::DbClient};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
