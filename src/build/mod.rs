@@ -118,6 +118,9 @@ fn build_command(p: &NewBuild, rpc_url: &str) -> Command {
     if let Some(mp) = &p.mount_path {
         cmd.arg("--mount-path").arg(mp);
     }
+    if let Some(wp) = &p.workspace_path {
+        cmd.arg("--workspace-path").arg(wp);
+    }
     if p.bpf_flag {
         cmd.arg("--bpf");
     }
