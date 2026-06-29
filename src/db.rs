@@ -348,10 +348,15 @@ impl DbClient {
     /// Every completed build with this executable hash, each flagged for
     /// whether the hash matches the program's on-chain hash. One query: index
     /// lookup + `LEFT JOIN program_state`, no per-build round-trip.
+    ///
+    /// `matches_deployed` is false for a closed program (`NOT ps.is_closed`):
+    /// a closed program can retain a stale cached `on_chain_hash`, and a hash
+    /// can't be "deployed" to a program that no longer exists.
     pub async fn resolve_executable_hash(&self, hash: &str) -> Result<Vec<ResolvedBuildRow>> {
         Ok(sqlx::query_as::<_, ResolvedBuildRow>(
             "SELECT b.id, b.program_id, b.signer, b.repository, b.commit_hash, b.completed_at,
-                    COALESCE(ps.on_chain_hash = b.executable_hash, false) AS matches_deployed
+                    COALESCE(ps.on_chain_hash = b.executable_hash AND NOT ps.is_closed, false)
+                        AS matches_deployed
              FROM builds b
              LEFT JOIN program_state ps ON ps.program_id = b.program_id
              WHERE b.executable_hash = $1 AND b.status = 'completed'
