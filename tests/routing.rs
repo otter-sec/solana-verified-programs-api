@@ -77,11 +77,10 @@ async fn resolve_hash_empty_db() {
 #[tokio::test]
 async fn resolve_hash_invalid_is_400() {
     let (app, _pg) = boot().await;
-    // Wrong length and non-hex chars are both rejected before any DB query.
-    for bad in [
-        "deadbeef",
-        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-    ] {
+    let too_short = "deadbeef".to_string(); // 8, valid hex
+    let too_long = format!("{SEED_HASH}a"); // 65, valid hex
+    let non_hex = "z".repeat(64); // 64, not hex
+    for bad in [too_short, too_long, non_hex] {
         let (status, _) = get(app.clone(), &format!("/resolve-hash/{bad}")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "input: {bad}");
     }
