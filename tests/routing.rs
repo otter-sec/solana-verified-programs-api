@@ -129,7 +129,6 @@ const TRUSTED_SIGNER: &str = "9VWiUUhgNoRwTH5NVehYJEDwcotwYX3VgW4MChiHPAqU";
 /// the LATERAL join's `ORDER BY completed_at DESC` surfaces its
 /// `repo_url`. With the filter, the trusted row wins.
 #[tokio::test]
-#[ignore = "fails until trust filter ships on /status; tracked separately"]
 async fn status_filters_untrusted_signer() {
     let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
     let seed = seed_trusted_vs_untrusted(&db).await;
@@ -149,7 +148,6 @@ async fn status_filters_untrusted_signer() {
 /// endpoint's row for the seeded program surfaces the trusted signer's
 /// metadata, not the untrusted one's.
 #[tokio::test]
-#[ignore = "fails until trust filter ships on /verified-programs-status; tracked separately"]
 async fn verified_programs_status_filters_untrusted_signer() {
     let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
     let seed = seed_trusted_vs_untrusted(&db).await;
