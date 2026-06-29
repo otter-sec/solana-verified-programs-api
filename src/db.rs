@@ -114,6 +114,7 @@ pub struct ResolvedBuildRow {
     pub commit_hash: Option<String>,
     pub completed_at: Option<DateTime<Utc>>,
     pub matches_deployed: bool,
+    pub trusted: bool,
 }
 
 /// Subset of `program_state` callers actually read. `authority` and
@@ -345,24 +346,29 @@ impl DbClient {
         .await?)
     }
 
-    /// Every completed build with this executable hash, each flagged for
-    /// whether the hash matches the program's on-chain hash. One query: index
-    /// lookup + `LEFT JOIN program_state`, no per-build round-trip.
+    /// Every completed build with this executable hash, each flagged with
+    /// `matches_deployed` and `trusted`. One query: index lookup + `LEFT JOIN
+    /// program_state`, no per-build round-trip.
     ///
-    /// `matches_deployed` is false for a closed program (`NOT ps.is_closed`):
-    /// a closed program can retain a stale cached `on_chain_hash`, and a hash
-    /// can't be "deployed" to a program that no longer exists.
+    /// `matches_deployed` is false for a closed program (the stale cached hash
+    /// can't be "deployed" anywhere). `trusted` mirrors the verified-ness check:
+    /// signer is null, whitelisted, or the program's authority.
     pub async fn resolve_executable_hash(&self, hash: &str) -> Result<Vec<ResolvedBuildRow>> {
+        let trusted = trusted_signers();
         Ok(sqlx::query_as::<_, ResolvedBuildRow>(
             "SELECT b.id, b.program_id, b.signer, b.repository, b.commit_hash, b.completed_at,
                     COALESCE(ps.on_chain_hash = b.executable_hash AND NOT ps.is_closed, false)
-                        AS matches_deployed
+                        AS matches_deployed,
+                    (b.signer IS NULL
+                     OR b.signer = ANY($2)
+                     OR b.signer IS NOT DISTINCT FROM ps.authority) AS trusted
              FROM builds b
              LEFT JOIN program_state ps ON ps.program_id = b.program_id
              WHERE b.executable_hash = $1 AND b.status = 'completed'
              ORDER BY b.completed_at DESC",
         )
         .bind(hash)
+        .bind(&trusted)
         .fetch_all(&self.pool)
         .await?)
     }

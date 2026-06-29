@@ -389,6 +389,7 @@ pub struct ResolveHashEntry {
     pub commit: Option<String>,
     pub completed_at: Option<NaiveDateTime>,
     pub matches_deployed: bool,
+    pub trusted: bool,
 }
 
 impl From<ResolvedBuildRow> for ResolveHashEntry {
@@ -401,6 +402,7 @@ impl From<ResolvedBuildRow> for ResolveHashEntry {
             commit: b.commit_hash,
             completed_at: b.completed_at.map(|t| t.naive_utc()),
             matches_deployed: b.matches_deployed,
+            trusted: b.trusted,
         }
     }
 }
