@@ -495,9 +495,9 @@ impl DbClient {
         .await?)
     }
 
-    /// Full refresh from a snapshot. A `None` hash on the snapshot preserves
-    /// the existing column rather than clobbering it, so a transient hash
-    /// fetch failure doesn't lose previously known data.
+    /// Full refresh from a snapshot. A `None` hash or authority keeps the
+    /// stored value rather than clobbering it -- the sweep can't re-derive a
+    /// burned authority, only the verify path does.
     ///
     /// Flips `pending_reverify` TRUE when the incoming hash actually differs
     /// from the stored one -- that's the sweep's drift signal, drained by
@@ -514,7 +514,7 @@ impl DbClient {
              VALUES ($1, $2, $3, $4, $5, NOW())
              ON CONFLICT (program_id) DO UPDATE
              SET on_chain_hash = COALESCE(EXCLUDED.on_chain_hash, program_state.on_chain_hash),
-                 authority     = EXCLUDED.authority,
+                 authority     = COALESCE(EXCLUDED.authority, program_state.authority),
                  is_frozen     = EXCLUDED.is_frozen,
                  is_closed     = EXCLUDED.is_closed,
                  last_checked  = NOW(),
