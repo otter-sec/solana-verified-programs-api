@@ -45,6 +45,14 @@ impl OtterBuildParams {
             .map(|index| self.args[index + 1].clone())
     }
 
+    /// Gets the workspace path from build arguments
+    pub fn get_workspace_path(&self) -> Option<String> {
+        self.args
+            .iter()
+            .position(|arg| arg == "--workspace-path")
+            .map(|index| self.args[index + 1].clone())
+    }
+
     /// Gets the library name from build arguments
     pub fn get_library_name(&self) -> Option<String> {
         self.args
@@ -332,6 +340,34 @@ mod tests {
             otter.get_cargo_build_sbf_args().as_deref(),
             Some("--tools-version v1.54")
         );
+    }
+
+    #[test]
+    fn get_workspace_path_from_pda_args() {
+        let otter = OtterBuildParams {
+            address: Pubkey::default(),
+            signer: Pubkey::default(),
+            version: String::new(),
+            git_url: String::new(),
+            commit: String::new(),
+            args: vec![
+                "--mount-path".to_string(),
+                "".to_string(),
+                "--workspace-path".to_string(),
+                "svmgov/program".to_string(),
+                "--library-name".to_string(),
+                "svmgov_program".to_string(),
+            ],
+            deployed_slot: 0,
+            bump: 0,
+        };
+
+        assert_eq!(otter.get_mount_path().as_deref(), Some(""));
+        assert_eq!(
+            otter.get_workspace_path().as_deref(),
+            Some("svmgov/program")
+        );
+        assert_eq!(otter.get_library_name().as_deref(), Some("svmgov_program"));
     }
 
     #[tokio::test]

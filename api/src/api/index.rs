@@ -132,11 +132,21 @@ pub fn index() -> Json<Value> {
                             "required": false,
                             "description": "Custom mount path for repository in build container"
                         },
+                        "workspace_path": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Custom workspace path for monorepos. Passed to solana-verify --workspace-path"
+                        },
                         "cargo_args": {
                             "type": "array",
                             "items": "string",
                             "required": false,
-                            "description": "Additional cargo build arguments"
+                            "description": "Additional cargo build arguments passed after solana-verify --"
+                        },
+                        "cargo_build_sbf_args": {
+                            "type": "string",
+                            "required": false,
+                            "description": "Arguments passed to solana-verify --cargo-build-sbf-args"
                         },
                         "arch": {
                             "type": "string",

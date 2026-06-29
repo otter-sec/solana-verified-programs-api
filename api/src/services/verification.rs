@@ -199,6 +199,9 @@ pub fn build_verify_command(payload: &SolanaProgramBuildParams) -> Result<Comman
     if let Some(ref mount_path) = payload.mount_path {
         cmd.arg("--mount-path").arg(mount_path);
     }
+    if let Some(ref workspace_path) = payload.workspace_path {
+        cmd.arg("--workspace-path").arg(workspace_path);
+    }
     if payload.bpf_flag.unwrap_or(false) {
         cmd.arg("--bpf");
     }

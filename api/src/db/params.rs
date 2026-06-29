@@ -65,8 +65,16 @@ impl DbClient {
             query = query.filter(mount_path.eq(mount));
         }
 
+        if let Some(workspace) = &payload.workspace_path {
+            query = query.filter(workspace_path.eq(workspace));
+        }
+
         if let Some(args) = payload.cargo_args.clone() {
             query = query.filter(cargo_args.eq(args));
+        }
+
+        if let Some(sbf_args) = &payload.cargo_build_sbf_args {
+            query = query.filter(cargo_build_sbf_args.eq(sbf_args));
         }
 
         query = query.filter(signer.eq(pda_signer));
@@ -122,7 +130,9 @@ mod tests {
             lib_name: None,
             base_docker_image: None,
             mount_path: None,
+            workspace_path: None,
             cargo_args: None,
+            cargo_build_sbf_args: None,
             bpf_flag: true,
             created_at: Utc::now().naive_utc(),
             status: "in_progress".to_string(),

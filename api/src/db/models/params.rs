@@ -18,6 +18,8 @@ pub struct SolanaProgramBuildParams {
     pub base_image: Option<String>,
     /// Mount path in container
     pub mount_path: Option<String>,
+    /// Workspace path for monorepos. Passed to `solana-verify` as `--workspace-path`.
+    pub workspace_path: Option<String>,
     /// Additional cargo build arguments
     pub cargo_args: Option<Vec<String>>,
     /// Passed to `solana-verify` as `--cargo-build-sbf-args=...`
@@ -49,6 +51,7 @@ impl From<OtterBuildParams> for SolanaProgramBuildParams {
             bpf_flag: Some(otter.is_bpf()),
             base_image: otter.get_base_image(),
             mount_path: otter.get_mount_path(),
+            workspace_path: otter.get_workspace_path(),
             cargo_args: otter.get_cargo_args(),
             cargo_build_sbf_args: otter.get_cargo_build_sbf_args(),
             arch: otter.get_arch(),

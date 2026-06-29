@@ -39,8 +39,12 @@ pub struct SolanaProgramBuild {
     pub base_docker_image: Option<String>,
     /// Mount path in container
     pub mount_path: Option<String>,
+    /// Workspace path in repository for monorepos
+    pub workspace_path: Option<String>,
     /// Cargo build arguments
     pub cargo_args: Option<Vec<String>>,
+    /// Arguments passed to the underlying cargo build-sbf command
+    pub cargo_build_sbf_args: Option<String>,
     /// BPF compilation flag
     pub bpf_flag: bool,
     /// Build creation timestamp
@@ -66,7 +70,9 @@ impl<'a> From<&'a SolanaProgramBuildParams> for SolanaProgramBuild {
             created_at: Utc::now().naive_utc(),
             base_docker_image: params.base_image.clone(),
             mount_path: params.mount_path.clone(),
+            workspace_path: params.workspace_path.clone(),
             cargo_args: params.cargo_args.clone(),
+            cargo_build_sbf_args: params.cargo_build_sbf_args.clone(),
             status: JobStatus::InProgress.into(),
             signer: Some(DEFAULT_SIGNER.to_string()),
             arch: params.arch.clone(),
@@ -84,7 +90,9 @@ impl From<&VerificationData> for SolanaProgramBuild {
             lib_name: data.lib_name.clone(),
             base_docker_image: data.base_docker_image.clone(),
             mount_path: data.mount_path.clone(),
+            workspace_path: data.workspace_path.clone(),
             cargo_args: data.cargo_args.clone(),
+            cargo_build_sbf_args: data.cargo_build_sbf_args.clone(),
             bpf_flag: data.bpf_flag,
             created_at: data.verified_at,
             status: JobStatus::Completed.into(),
@@ -158,8 +166,12 @@ pub struct VerificationData {
     pub base_docker_image: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub mount_path: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub workspace_path: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Array<diesel::sql_types::Text>>)]
     pub cargo_args: Option<Vec<String>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub cargo_build_sbf_args: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub signer: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
