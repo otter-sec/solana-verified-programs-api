@@ -263,3 +263,65 @@ async fn sweep_batches_at_chunk_size() {
         "expected exactly 2 getMultipleAccounts calls (100 + 5), got {calls}"
     );
 }
+
+#[tokio::test]
+async fn sweep_preserves_recovered_authority_for_frozen_program() {
+    let (db, app_state, rpc_mock, _pg) = boot_for_sweep().await;
+    let program_id = Pubkey::new_unique();
+    let pda = program_data_pda(&program_id);
+    let addr = Address(program_id);
+
+    // A prior verify recovered the burned/Squads authority and stored it.
+    let recovered = Pubkey::new_unique().to_string();
+    db.upsert_program_state(
+        &addr,
+        &ProgramOnchainState {
+            authority: Some(recovered.clone()),
+            is_frozen: true,
+            is_closed: false,
+            executable_hash: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // The sweep sees the program as frozen (no on-chain authority); it doesn't
+    // run Squads recovery, so it snapshots authority = None.
+    rpc_mock
+        .expect_get_multiple_accounts_for(
+            &[program_id],
+            vec![Some(account_value(
+                &bpf_loader_upgradeable::ID,
+                &program_account_bytes(&pda),
+                1_000_000,
+            ))],
+        )
+        .await;
+    rpc_mock
+        .expect_get_multiple_accounts_for(
+            &[pda],
+            vec![Some(account_value(
+                &bpf_loader_upgradeable::ID,
+                &program_data_account_bytes(0, None, b"bytecode"),
+                1_000_000,
+            ))],
+        )
+        .await;
+
+    sweep::run_once(&app_state).await.expect("sweep");
+
+    // COALESCE must keep the recovered authority rather than wiping it to NULL.
+    let authority: Option<String> =
+        sqlx::query_scalar("SELECT authority FROM program_state WHERE program_id = $1")
+            .bind(addr)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        authority.as_deref(),
+        Some(recovered.as_str()),
+        "recovered authority must survive a sweep that sees None"
+    );
+    let state = db.get_program_state(&addr).await.unwrap().unwrap();
+    assert!(state.is_frozen, "still frozen");
+}

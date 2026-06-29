@@ -614,6 +614,100 @@ async fn resolve_hash_excludes_non_completed_builds() {
 }
 
 #[tokio::test]
+async fn resolve_hash_closed_program_not_deployed() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    // Program is closed but still carries a (now-stale) matching on_chain_hash.
+    let program_id = seed_program(
+        &db,
+        SeedOpts {
+            is_closed: true,
+            ..SeedOpts::default()
+        },
+    )
+    .await;
+
+    let (status, body) = get(app, &format!("/resolve-hash/{SEED_HASH}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let builds = body["builds"].as_array().expect("builds array");
+    assert_eq!(builds.len(), 1, "the build still resolves");
+    assert_eq!(builds[0]["program_id"], program_id.to_string());
+    assert_eq!(
+        builds[0]["matches_deployed"], false,
+        "a closed program can't match deployed"
+    );
+}
+
+#[tokio::test]
+async fn resolve_hash_trusted_reflects_signer() {
+    use std::str::FromStr;
+    use verified_programs_api::db::NewBuild;
+    use verified_programs_api::onchain::ProgramOnchainState;
+    use verified_programs_api::types::Address;
+
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    let program_id = Address(solana_pubkey::Pubkey::new_unique());
+    let authority = Address(solana_pubkey::Pubkey::new_unique());
+    let random = Address(solana_pubkey::Pubkey::new_unique());
+    let whitelisted = Address::from_str(TRUSTED_SIGNER).unwrap();
+
+    db.upsert_program_state(
+        &program_id,
+        &ProgramOnchainState {
+            authority: Some(authority.to_string()),
+            is_frozen: false,
+            is_closed: false,
+            executable_hash: Some(SEED_HASH.to_string()),
+        },
+    )
+    .await
+    .expect("upsert state");
+
+    // Three completed builds at the same hash: a whitelisted signer, the
+    // program authority, and a random signer.
+    for signer in [whitelisted, authority, random] {
+        let id = db
+            .insert_build(&NewBuild {
+                repository: SEED_REPO.to_string(),
+                commit_hash: Some(SEED_COMMIT.to_string()),
+                program_id,
+                lib_name: None,
+                base_docker_image: None,
+                mount_path: None,
+                cargo_args: None,
+                cargo_build_sbf_args: None,
+                bpf_flag: false,
+                arch: None,
+                signer: Some(signer),
+            })
+            .await
+            .expect("insert build");
+        db.mark_build_completed(id, &program_id, SEED_HASH)
+            .await
+            .expect("complete build");
+    }
+
+    let (status, body) = get(app, &format!("/resolve-hash/{SEED_HASH}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let builds = body["builds"].as_array().expect("builds array");
+    assert_eq!(builds.len(), 3);
+
+    let trusted_of = |s: &Address| {
+        builds
+            .iter()
+            .find(|b| b["signer"] == s.to_string())
+            .unwrap_or_else(|| panic!("no entry for signer {s}"))["trusted"]
+            .clone()
+    };
+    assert_eq!(
+        trusted_of(&whitelisted),
+        true,
+        "whitelisted signer is trusted"
+    );
+    assert_eq!(trusted_of(&authority), true, "program authority is trusted");
+    assert_eq!(trusted_of(&random), false, "random signer is not trusted");
+}
+
+#[tokio::test]
 async fn cache_invalidates_on_write() {
     let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
     let program_id = seed_program(&db, SeedOpts::default()).await;
