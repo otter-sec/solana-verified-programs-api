@@ -92,6 +92,7 @@ pub struct BuildRow {
     pub lib_name: Option<String>,
     pub base_docker_image: Option<String>,
     pub mount_path: Option<String>,
+    pub workspace_path: Option<String>,
     pub cargo_args: Option<Vec<String>>,
     pub bpf_flag: bool,
     pub arch: Option<String>,
@@ -149,6 +150,7 @@ pub struct NewBuild {
     pub lib_name: Option<String>,
     pub base_docker_image: Option<String>,
     pub mount_path: Option<String>,
+    pub workspace_path: Option<String>,
     pub cargo_args: Option<Vec<String>>,
     /// Passed to `solana-verify` as `--cargo-build-sbf-args=...`. Sourced from
     /// the on-chain PDA only; not persisted, so it's `None` on re-verification.
@@ -167,6 +169,7 @@ impl From<&OtterBuildParams> for NewBuild {
             lib_name: p.get_library_name(),
             base_docker_image: p.get_base_image(),
             mount_path: p.get_mount_path(),
+            workspace_path: p.get_workspace_path(),
             cargo_args: p.get_cargo_args(),
             cargo_build_sbf_args: p.get_cargo_build_sbf_args(),
             bpf_flag: p.is_bpf(),
@@ -183,9 +186,9 @@ impl DbClient {
         sqlx::query(
             "INSERT INTO builds (
                 id, repository, commit_hash, program_id, lib_name,
-                base_docker_image, mount_path, cargo_args, bpf_flag, arch,
+                base_docker_image, mount_path, workspace_path, cargo_args, bpf_flag, arch,
                 signer, status
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
         )
         .bind(id)
         .bind(&b.repository)
@@ -194,6 +197,7 @@ impl DbClient {
         .bind(&b.lib_name)
         .bind(&b.base_docker_image)
         .bind(&b.mount_path)
+        .bind(&b.workspace_path)
         .bind(&b.cargo_args)
         .bind(b.bpf_flag)
         .bind(&b.arch)
@@ -278,7 +282,7 @@ impl DbClient {
 
     /// Most recent build with identical params. `include_failed = false`
     /// ignores failed rows (they're retryable); `true` counts every status.
-    /// `$11` toggles the failed filter so both callers share one query.
+    /// `$12` toggles the failed filter so both callers share one query.
     async fn latest_build_for_params(
         &self,
         b: &NewBuild,
@@ -292,11 +296,12 @@ impl DbClient {
                AND (lib_name          IS NOT DISTINCT FROM $4)
                AND (base_docker_image IS NOT DISTINCT FROM $5)
                AND (mount_path        IS NOT DISTINCT FROM $6)
-               AND (cargo_args        IS NOT DISTINCT FROM $7)
-               AND bpf_flag = $8
-               AND (arch              IS NOT DISTINCT FROM $9)
-               AND (signer            IS NOT DISTINCT FROM $10)
-               AND ($11 OR status <> 'failed')
+               AND (workspace_path    IS NOT DISTINCT FROM $7)
+               AND (cargo_args        IS NOT DISTINCT FROM $8)
+               AND bpf_flag = $9
+               AND (arch              IS NOT DISTINCT FROM $10)
+               AND (signer            IS NOT DISTINCT FROM $11)
+               AND ($12 OR status <> 'failed')
              ORDER BY created_at DESC
              LIMIT 1",
         )
@@ -306,6 +311,7 @@ impl DbClient {
         .bind(&b.lib_name)
         .bind(&b.base_docker_image)
         .bind(&b.mount_path)
+        .bind(&b.workspace_path)
         .bind(&b.cargo_args)
         .bind(b.bpf_flag)
         .bind(&b.arch)

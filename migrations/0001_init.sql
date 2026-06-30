@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS builds (
     lib_name          TEXT,
     base_docker_image TEXT,
     mount_path        TEXT,
+    workspace_path    TEXT,
     cargo_args        TEXT[],
     bpf_flag          BOOLEAN NOT NULL DEFAULT FALSE,
     arch              TEXT,
