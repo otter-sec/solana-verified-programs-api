@@ -187,6 +187,7 @@ async fn sweep_bootstraps_state_for_orphan_build() {
             lib_name: None,
             base_docker_image: None,
             mount_path: None,
+            workspace_path: None,
             cargo_args: None,
             cargo_build_sbf_args: None,
             bpf_flag: false,
