@@ -104,6 +104,20 @@ pub struct BuildRow {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// A completed build for a given executable hash, with `matches_deployed`
+/// (hash == the program's on-chain hash) computed in the join.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResolvedBuildRow {
+    pub id: Uuid,
+    pub program_id: Address,
+    pub signer: Option<Address>,
+    pub repository: String,
+    pub commit_hash: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub matches_deployed: bool,
+    pub trusted: bool,
+}
+
 /// Subset of `program_state` callers actually read. `authority` and
 /// `last_checked` exist on the row but aren't surfaced anywhere yet.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -338,6 +352,33 @@ impl DbClient {
         .await?)
     }
 
+    /// Every completed build with this executable hash, each flagged with
+    /// `matches_deployed` and `trusted`. One query: index lookup + `LEFT JOIN
+    /// program_state`, no per-build round-trip.
+    ///
+    /// `matches_deployed` is false for a closed program (the stale cached hash
+    /// can't be "deployed" anywhere). `trusted` mirrors the verified-ness check:
+    /// signer is null, whitelisted, or the program's authority.
+    pub async fn resolve_executable_hash(&self, hash: &str) -> Result<Vec<ResolvedBuildRow>> {
+        let trusted = trusted_signers();
+        Ok(sqlx::query_as::<_, ResolvedBuildRow>(
+            "SELECT b.id, b.program_id, b.signer, b.repository, b.commit_hash, b.completed_at,
+                    COALESCE(ps.on_chain_hash = b.executable_hash AND NOT ps.is_closed, false)
+                        AS matches_deployed,
+                    (b.signer IS NULL
+                     OR b.signer = ANY($2)
+                     OR b.signer IS NOT DISTINCT FROM ps.authority) AS trusted
+             FROM builds b
+             LEFT JOIN program_state ps ON ps.program_id = b.program_id
+             WHERE b.executable_hash = $1 AND b.status = 'completed'
+             ORDER BY b.completed_at DESC",
+        )
+        .bind(hash)
+        .bind(&trusted)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     /// Clears the `pending_reverify` flag once the sweep has acted on a
     /// program (kicked a build, or decided there was nothing to do). It only
     /// comes back via a fresh drift in [`upsert_program_state`].
@@ -466,9 +507,9 @@ impl DbClient {
         .await?)
     }
 
-    /// Full refresh from a snapshot. A `None` hash on the snapshot preserves
-    /// the existing column rather than clobbering it, so a transient hash
-    /// fetch failure doesn't lose previously known data.
+    /// Full refresh from a snapshot. A `None` hash or authority keeps the
+    /// stored value rather than clobbering it -- the sweep can't re-derive a
+    /// burned authority, only the verify path does.
     ///
     /// Flips `pending_reverify` TRUE when the incoming hash actually differs
     /// from the stored one -- that's the sweep's drift signal, drained by
@@ -485,7 +526,7 @@ impl DbClient {
              VALUES ($1, $2, $3, $4, $5, NOW())
              ON CONFLICT (program_id) DO UPDATE
              SET on_chain_hash = COALESCE(EXCLUDED.on_chain_hash, program_state.on_chain_hash),
-                 authority     = EXCLUDED.authority,
+                 authority     = COALESCE(EXCLUDED.authority, program_state.authority),
                  is_frozen     = EXCLUDED.is_frozen,
                  is_closed     = EXCLUDED.is_closed,
                  last_checked  = NOW(),

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`GET /resolve-hash/{executable_hash}` endpoint**: content-addressed lookup over the verified-build catalogue. Given a 64-char executable hash, returns every completed build that produced it, each flagged with `matches_deployed` (true when the hash matches the program's currently-deployed on-chain hash).
+
+
 ## [1.5.5] - 2026-06-29
 
 ### Added

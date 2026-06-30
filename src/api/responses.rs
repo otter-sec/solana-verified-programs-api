@@ -2,7 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 pub use crate::db::JobStatus;
-use crate::db::{BuildRow, ProgramStateRow};
+use crate::db::{BuildRow, ProgramStateRow, ResolvedBuildRow};
 use crate::types::Address;
 
 /// Formats `repo/tree/<commit>` for display in `/status`-style responses.
@@ -369,4 +369,40 @@ pub struct BackgroundJobHealth {
     pub status: BackgroundJobStatus,
     pub last_program_check: Option<NaiveDateTime>,
     pub message: String,
+}
+
+/// Response shape for `GET /resolve-hash/{executable_hash}`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveHashResponse {
+    pub executable_hash: String,
+    pub builds: Vec<ResolveHashEntry>,
+}
+
+/// `matches_deployed` is true when this build's hash matches its
+/// program's cached `on_chain_hash`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveHashEntry {
+    pub build_id: String,
+    pub program_id: crate::types::Address,
+    pub signer: Option<crate::types::Address>,
+    pub repository: String,
+    pub commit: Option<String>,
+    pub completed_at: Option<NaiveDateTime>,
+    pub matches_deployed: bool,
+    pub trusted: bool,
+}
+
+impl From<ResolvedBuildRow> for ResolveHashEntry {
+    fn from(b: ResolvedBuildRow) -> Self {
+        Self {
+            build_id: b.id.to_string(),
+            program_id: b.program_id,
+            signer: b.signer,
+            repository: b.repository,
+            commit: b.commit_hash,
+            completed_at: b.completed_at.map(|t| t.naive_utc()),
+            matches_deployed: b.matches_deployed,
+            trusted: b.trusted,
+        }
+    }
 }
