@@ -5,7 +5,7 @@ name: Verify smoke
 # GitHub, and mainnet RPC, so it runs on a weekly cron rather than per-PR.
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Mondays 06:00 UTC
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
   workflow_dispatch:
 
 concurrency:
@@ -35,7 +35,8 @@ jobs:
             ${{ runner.os }}-verify-smoke-
 
       - name: Install solana-verify CLI
-        run: cargo install solana-verify --locked
+        run: bash ./install-verify.sh
+        working-directory: ${{ github.workspace }}
 
       - name: Run verify smoke test
         env:
