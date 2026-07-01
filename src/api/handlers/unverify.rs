@@ -1,15 +1,8 @@
 use crate::{
-    api::handlers::{is_authorized, parse_helius_transaction},
-    db::DbClient,
-    onchain::get_on_chain_hash,
-    state::AppState,
-    types::Address,
+    api::handlers::parse_helius_transaction, db::DbClient, onchain::get_on_chain_hash,
+    state::AppState, types::Address,
 };
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use serde_json::Value;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use std::str::FromStr;
@@ -22,19 +15,9 @@ const UPGRADE_INSTRUCTION_DATA: &str = "5Sxr3";
 /// 200 immediately and process in a background task.
 pub async fn handle_unverify(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(payload): Json<Vec<Value>>,
 ) -> (StatusCode, &'static str) {
     info!("Received unverify request");
-
-    if !is_authorized(&headers, &state.auth_secret) {
-        warn!("Unauthorized unverify attempt");
-        return (
-            StatusCode::UNAUTHORIZED,
-            "Missing or invalid authorization header",
-        );
-    }
-
     let helius_parsed_transaction = match parse_helius_transaction(&payload) {
         Ok(parsed_transaction) => parsed_transaction,
         Err(status) => return status,

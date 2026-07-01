@@ -105,7 +105,7 @@ curl https://verify.osec.io/resolve-hash/29e7713aa3c48e242e2847bc031fe2a03eb61aa
 
 ### Security
 
-To mitigate against false verification results, we rerun program verification every 24 hours. Note that verification should not be considered a strict security boundary.
+To mitigate against false verification results (`matches_onchain` being incorrect), program upgrades are listened for via a Helius webhook to keep `on_chain_hash` in sync. All programs are also fetched every ~5 minutes in case a webhook is missed or a program is closed.
 
 ## Otter Verify PDA Worker
 

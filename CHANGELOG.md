@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`GET /resolve-hash/{executable_hash}` endpoint**: content-addressed lookup over the verified-build catalogue. Given a 64-char executable hash, returns every completed build that produced it, each flagged with `matches_deployed` (true when the hash matches the program's currently-deployed on-chain hash).
+- **Integration test suite** (`tests/`): end-to-end coverage of route behaviour, the v1→v2 migration, the background sweep, and webhook callbacks, plus a `verify-smoke` workflow and `workflow_dispatch` trigger on CI.
+
+### Changed
+
+- **v2 rewrite of the API service**, replacing the v1 stack:
+  - Diesel + Redis → sqlx + an in-process cache
+  - `verified_programs` / `solana_program_builds` / `program_authority` tables → `builds` + `program_state`
+  - per-program `solana-verify` hash subprocess → in-process hashing over batched `getMultipleAccounts`
+  - hourly status job → drift-driven sweep with automatic re-verification
 
 
 ## [1.5.5] - 2026-06-29
