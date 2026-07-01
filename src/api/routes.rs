@@ -1,5 +1,6 @@
 use crate::state::AppState;
 use axum::http::Request;
+use axum::response::IntoResponse;
 use axum::{
     error_handling::HandleErrorLayer,
     http::{Method, StatusCode},
@@ -13,12 +14,13 @@ use tower::{buffer::BufferLayer, limit::RateLimitLayer, ServiceBuilder};
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
+use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::Span;
+use tracing::{warn, Span};
 
 use crate::api::handlers::index::{index, landing_page};
 use crate::api::handlers::*;
@@ -86,9 +88,31 @@ pub fn initialize_router(state: AppState) -> Router {
             },
         );
 
-    // Define routes with their rate limits
-    Router::new()
-        // Verification routes (stricter rate limits)
+    // The `Response` struct is ~130 bytes and required to be returned here, so we have
+    // to allow this clippy lint.
+    #[allow(clippy::result_large_err)]
+    let webhook_auth_layer = {
+        let auth_secret = state.auth_secret.clone();
+        ServiceBuilder::new().layer(ValidateRequestHeaderLayer::custom(
+            move |request: &mut Request<_>| {
+                if !is_authorized(request.headers(), &auth_secret) {
+                    warn!("Unauthorized webhook attempt");
+                    Err((
+                        StatusCode::UNAUTHORIZED,
+                        "Missing or invalid authorization header",
+                    )
+                        .into_response())
+                } else {
+                    Ok(())
+                }
+            },
+        ))
+    };
+
+    // We separate routers to prevent layers from bleeding through to other routes!
+
+    // Verification routes (stricter rate limits).
+    let verify_routes = Router::new()
         .route("/verify", post(process_async_verification))
         .route(
             "/verify-with-signer",
@@ -100,20 +124,15 @@ pub fn initialize_router(state: AppState) -> Router {
                 .layer(CompressionLayer::new().zstd(true))
                 .layer(rate_limit_per_ip(30, 1))
                 .layer(cors(Method::POST)),
-        )
-        .route("/unverify", post(handle_unverify))
-        .layer(
-            global_rate_limit(100)
-                .layer(CompressionLayer::new().zstd(true))
-                .layer(rate_limit_per_ip(1, 100))
-                .layer(cors(Method::POST)),
-        )
+        );
+
+    // Public read routes (looser rate limits).
+    let read_routes = Router::new()
         .route("/status-all/{address}", get(get_verification_status_all))
         .route("/status/{address}", get(get_verification_status))
         .route("/resolve-hash/{hash}", get(resolve_hash::resolve))
         .route("/job/{job_id}", get(get_job_status))
         .route("/logs/{build_id}", get(get_build_logs))
-        .route("/pda", post(handle_pda_updates_creations))
         .route("/verified-programs", get(get_verified_programs_list))
         .route(
             "/verified-programs/{page}",
@@ -128,13 +147,26 @@ pub fn initialize_router(state: AppState) -> Router {
                 .layer(CompressionLayer::new().zstd(true))
                 .layer(rate_limit_per_ip(1, 100))
                 .layer(cors(Method::GET)),
-        )
-        // Base route
+        );
+
+    // Webhook routes require the auth header and carry no rate limits.
+    let webhook_routes = Router::new()
+        .route("/unverify", post(handle_unverify))
+        .route("/pda", post(handle_pda_updates_creations))
+        .layer(webhook_auth_layer);
+
+    // Unmetered base routes.
+    let base_routes = Router::new()
         .route("/", get(|| async { landing_page() }))
         .route("/api", get(|| async { index() }))
         .route("/health", get(health_check))
-        .route("/health/background-jobs", get(background_job_status))
-        // Apply common middleware
+        .route("/health/background-jobs", get(background_job_status));
+
+    Router::new()
+        .merge(verify_routes)
+        .merge(read_routes)
+        .merge(webhook_routes)
+        .merge(base_routes)
         .layer(trace_layer)
         .with_state(state)
 }
