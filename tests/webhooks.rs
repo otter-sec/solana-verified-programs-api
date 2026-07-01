@@ -51,6 +51,20 @@ async fn unverify_without_auth_returns_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]
+async fn unverify_with_wrong_auth_returns_401() {
+    let (app, _pg) = boot().await;
+    let (status, _) = post_with_auth(app, "/unverify", "wrong", "[]").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn unverify_with_correct_auth_but_empty_payload_returns_400() {
+    let (app, _pg) = boot().await;
+    let (status, _) = post_with_auth(app, "/unverify", AUTH_SECRET, "[]").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
 // --- /unverify behaviour ---------------------------------------------------
 
 /// Builds a Helius "parsed transaction" array containing one upgrade
