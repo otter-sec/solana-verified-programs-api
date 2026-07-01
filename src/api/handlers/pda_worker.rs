@@ -1,18 +1,14 @@
 use std::str::FromStr;
 
 use crate::{
-    api::handlers::{async_verify::process_verification, is_authorized, parse_helius_transaction},
+    api::handlers::{async_verify::process_verification, parse_helius_transaction},
     db::NewBuild,
     errors::ApiError,
     onchain::{get_on_chain_hash, OtterBuildParams, OTTER_VERIFY_PROGRAM_ID},
     state::AppState,
     types::Address,
 };
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use borsh::BorshDeserialize;
 use serde_json::Value;
 use solana_pubkey::Pubkey;
@@ -20,18 +16,9 @@ use tracing::{error, info, warn};
 
 pub(crate) async fn handle_pda_updates_creations(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(payload): Json<Vec<Value>>,
 ) -> (StatusCode, &'static str) {
     info!("Received PDA updates/creation event");
-
-    if !is_authorized(&headers, &state.auth_secret) {
-        warn!("Unauthorized PDA webhook attempt");
-        return (
-            StatusCode::UNAUTHORIZED,
-            "Missing or invalid authorization header",
-        );
-    }
 
     let helius_parsed_transaction = match parse_helius_transaction(&payload) {
         Ok(parsed_transaction) => parsed_transaction,
