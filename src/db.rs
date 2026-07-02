@@ -81,6 +81,11 @@ impl DbClient {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
         Ok(())
     }
+
+    /// Raw pool for tests' ad-hoc queries; production code uses the typed methods above.
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
