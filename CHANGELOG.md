@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-03
+
 ### Added
 
 - **`GET /resolve-hash/{executable_hash}` endpoint**: content-addressed lookup over the verified-build catalogue. Given a 64-char executable hash, returns every completed build that produced it, each flagged with `matches_deployed` (true when the hash matches the program's currently-deployed on-chain hash).
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - per-program `solana-verify` hash subprocess → in-process hashing over batched `getMultipleAccounts`
   - hourly status job → drift-driven sweep with automatic re-verification
 - **Webhook endpoints (`/pda`, `/unverify`) are no longer rate-limited** — now gated only by the `AUTHORIZATION` header (previously `/unverify` was capped at 100 req/s).
+- **`solana-verify` version:** updated to `v0.5.1` in `Dockerfile`.
 
 ### Fixed
 
