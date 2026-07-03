@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `verified_programs` / `solana_program_builds` / `program_authority` tables → `builds` + `program_state`
   - per-program `solana-verify` hash subprocess → in-process hashing over batched `getMultipleAccounts`
   - hourly status job → drift-driven sweep with automatic re-verification
+- **Webhook endpoints (`/pda`, `/unverify`) are no longer rate-limited** — now gated only by the `AUTHORIZATION` header (previously `/unverify` was capped at 100 req/s).
+
+### Fixed
+
+- **Router middleware no longer leaks across route groups**: rate-limit and CORS layers applied to routes beyond their group (e.g. a GET CORS policy on the POST `/verify*` routes). Each group is now a separate merged router.
 
 
 ## [1.5.5] - 2026-06-29

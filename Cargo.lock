@@ -6246,6 +6246,7 @@ dependencies = [
  "http 1.4.0",
  "http-body",
  "http-body-util",
+ "mime",
  "pin-project-lite",
  "tokio",
  "tokio-util",
