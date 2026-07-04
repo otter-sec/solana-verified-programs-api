@@ -140,7 +140,9 @@ cp .env.example .env
 # update values in .env
 docker compose up --build
 ```
+author: Richard Patterson
 
 ## Contact
+
 
 For responsible disclosure of security issues or any other questions, please reach out to <contact@osec.io>
