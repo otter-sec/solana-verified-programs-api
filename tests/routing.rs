@@ -443,6 +443,66 @@ async fn status_for_frozen_program() {
     );
 }
 
+/// Inserts a completed build with no `executable_hash` (and no
+/// `completed_at`) directly -- the shape a build imported without a
+/// verification record takes, which the typed API can't produce.
+async fn insert_hashless_build(db: &DbClient, program_id: &str, signer: &str) {
+    sqlx::query(
+        "INSERT INTO builds
+           (id, repository, program_id, bpf_flag, signer, status,
+            executable_hash, created_at, completed_at)
+         VALUES (gen_random_uuid(), $1, $2, false, $3, 'completed', NULL, NOW(), NULL)",
+    )
+    .bind(SEED_REPO)
+    .bind(program_id)
+    .bind(signer)
+    .execute(db.pool())
+    .await
+    .expect("insert hash-less build");
+}
+
+/// Regression for `GET /status-all`. Two properties:
+/// 1. A signer's verified (hash-matching) build wins over a newer build that
+///    has a hash but doesn't match -- a plain `completed_at DESC` pick would
+///    surface the newer one and report the program unverified while `/status`
+///    reports it verified.
+/// 2. A signer whose only build has no hash is ignored -- not a verification.
+#[tokio::test]
+async fn status_all_prefers_verified_build() {
+    let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
+    // Trusted signer with a build whose hash matches the on-chain hash.
+    let program_id = seed_program(&db, SeedOpts::default()).await;
+
+    // Same signer, a newer completed build with a real but non-matching hash.
+    let newer = db
+        .insert_build(&new_build(program_id))
+        .await
+        .expect("insert newer build");
+    db.mark_build_completed(
+        newer,
+        &program_id,
+        "1111111111111111111111111111111111111111111111111111111111111111",
+    )
+    .await
+    .expect("complete newer build");
+
+    // A different signer whose only build has no hash: must be ignored.
+    let other_signer = solana_pubkey::Pubkey::new_unique().to_string();
+    insert_hashless_build(&db, &program_id.to_string(), &other_signer).await;
+
+    let (status, body) = get(app, &format!("/status-all/{program_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let entries = body.as_array().expect("status-all array");
+    assert_eq!(entries.len(), 1, "hash-less signer ignored");
+    assert_eq!(entries[0]["signer"], TRUSTED_SIGNER);
+    assert_eq!(
+        entries[0]["is_verified"], true,
+        "verified build must win over a newer unverified one"
+    );
+    assert_eq!(entries[0]["executable_hash"], SEED_HASH);
+    assert_eq!(entries[0]["on_chain_hash"], SEED_HASH);
+}
+
 #[tokio::test]
 async fn verified_programs_lists_seeded_programs() {
     let (app, db, _pg) = boot_with_rpc(RPC_URL).await;
