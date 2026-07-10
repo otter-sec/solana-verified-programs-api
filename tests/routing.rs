@@ -451,8 +451,9 @@ async fn insert_hashless_build(db: &DbClient, program_id: &str, signer: &str) {
         "INSERT INTO builds
            (id, repository, program_id, bpf_flag, signer, status,
             executable_hash, created_at, completed_at)
-         VALUES (gen_random_uuid(), $1, $2, false, $3, 'completed', NULL, NOW(), NULL)",
+         VALUES ($1, $2, $3, false, $4, 'completed', NULL, NOW(), NULL)",
     )
+    .bind(uuid::Uuid::new_v4())
     .bind(SEED_REPO)
     .bind(program_id)
     .bind(signer)
