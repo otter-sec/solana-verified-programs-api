@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-13
+
+### Fixed
+
+- **`GET /status-all/{address}` could report `is_verified: false` while `/status` was true**: now picks each signer's hash-matching build instead of the newest completed row ([#139](https://github.com/otter-sec/solana-verified-programs-api/pull/139)).
+
 ## [2.0.0] - 2026-07-06
 
 ### Added
