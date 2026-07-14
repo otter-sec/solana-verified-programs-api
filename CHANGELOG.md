@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-07-14
+
+### Changed
+
+- **Per-IP rate limit on status/list endpoints**: increased to ~100 req/s with a burst of 200 (was burst 100, then ~1/s refill). Stops Explorer CI from 429ing while paging `/verified-programs`.
+
 ## [2.0.1] - 2026-07-13
 
 ### Fixed

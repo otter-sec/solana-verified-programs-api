@@ -42,11 +42,11 @@ pub fn initialize_router(state: AppState) -> Router {
             .layer(RateLimitLayer::new(req_per_sec, Duration::from_secs(1)))
     };
 
-    let rate_limit_per_ip = |timeout: u64, limit: u32| {
+    let rate_limit_per_ip = |period: Duration, burst: u32| {
         let config = Arc::new(
             GovernorConfigBuilder::default()
-                .per_second(timeout)
-                .burst_size(limit)
+                .period(period)
+                .burst_size(burst)
                 .use_headers()
                 .key_extractor(SmartIpKeyExtractor)
                 .finish()
@@ -122,7 +122,7 @@ pub fn initialize_router(state: AppState) -> Router {
         .layer(
             global_rate_limit(5)
                 .layer(CompressionLayer::new().zstd(true))
-                .layer(rate_limit_per_ip(30, 1))
+                .layer(rate_limit_per_ip(Duration::from_secs(30), 1))
                 .layer(cors(Method::POST)),
         );
 
@@ -145,7 +145,8 @@ pub fn initialize_router(state: AppState) -> Router {
         .layer(
             global_rate_limit(10000)
                 .layer(CompressionLayer::new().zstd(true))
-                .layer(rate_limit_per_ip(1, 100))
+                // ~100 req/s per IP, burst 200 (was burst 100 then ~1/s refill).
+                .layer(rate_limit_per_ip(Duration::from_millis(10), 200))
                 .layer(cors(Method::GET)),
         );
 

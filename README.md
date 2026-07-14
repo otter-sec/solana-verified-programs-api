@@ -100,7 +100,7 @@ curl https://verify.osec.io/resolve-hash/29e7713aa3c48e242e2847bc031fe2a03eb61aa
 ### Rate Limits
 
 - **Verification endpoints**: 5 requests/second globally, 1 request per 30 seconds per IP
-- **Status/query endpoints**: 10,000 requests/second globally, 100 requests/second per IP
+- **Status/query endpoints**: 10,000 requests/second globally, ~100 requests/second per IP (burst 200)
 - **Webhook endpoints** (`/pda`, `/unverify`): not rate limited; require a valid `AUTHORIZATION` header instead
 
 ### Security
