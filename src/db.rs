@@ -405,12 +405,17 @@ impl DbClient {
         let state = self.get_program_state(&program_id).await?;
         let on_chain_hash = state.as_ref().and_then(|s| s.on_chain_hash.clone());
         let builds = sqlx::query_as::<_, BuildRow>(
-            "SELECT DISTINCT ON (signer) * FROM builds
-             WHERE program_id = $1 AND status = 'completed'
-               AND executable_hash IS NOT NULL
-             ORDER BY signer,
-                      COALESCE(executable_hash = $2::text, false) DESC,
-                      completed_at DESC NULLS LAST",
+            "WITH selected_builds AS (
+                 SELECT DISTINCT ON (signer) * FROM builds
+                 WHERE program_id = $1 AND status = 'completed'
+                   AND executable_hash IS NOT NULL
+                 ORDER BY signer,
+                          COALESCE(executable_hash = $2::text, false) DESC,
+                          completed_at DESC NULLS LAST
+             )
+             SELECT * FROM selected_builds
+             ORDER BY COALESCE(executable_hash = $2::text, false) DESC,
+                      signer",
         )
         .bind(program_id)
         .bind(&on_chain_hash)
