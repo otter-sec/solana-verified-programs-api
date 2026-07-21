@@ -397,7 +397,8 @@ impl DbClient {
 
     /// One row per signer, preferring their build whose `executable_hash`
     /// matches the on-chain hash (verified), else the most recent. Hash-less
-    /// builds are skipped.
+    /// builds are skipped. The returned rows are ordered with verified builds
+    /// first, then by signer for stable output.
     pub async fn get_all_verification_info(
         &self,
         program_id: Address,
