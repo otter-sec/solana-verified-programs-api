@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-07-21
+
+### Changed
+
+- **`GET /status-all/{address}` now returns verified builds first**: preserves one selected build per signer while ordering hash-matching entries before unverified entries.
+
 ## [2.0.2] - 2026-07-14
 
 ### Changed
