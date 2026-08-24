@@ -19,7 +19,7 @@ static LANDING_HTML: &str = concat!(
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Solana Verified Builds &middot; OtterSec</title>
+    <title>Solana Verified Builds</title>
     <meta
       name="description"
       content="Verified builds let anyone confirm that an on-chain Solana program matches its public source code."
@@ -112,9 +112,6 @@ static LANDING_HTML: &str = concat!(
         --foreground-05: color-mix(in oklab, var(--foreground) 5%, transparent);
         --foreground-01: color-mix(in oklab, var(--foreground) 1%, transparent);
 
-        --hero-1: light-dark(#94a8ce, #bbd0f7);
-        --hero-2: light-dark(#9ec0e0, #9ec0e0);
-        --hero-3: light-dark(#97baab, #97baab);
 
         --font-sans: "MD UI XL", "MD UI XL Fallback", sans-serif;
         --font-heading: "MD Primer", "MD Primer Fallback", sans-serif;
@@ -190,8 +187,6 @@ static LANDING_HTML: &str = concat!(
 
       body {
         min-block-size: 100svh;
-        display: grid;
-        grid-template-rows: 1fr auto;
         background-color: var(--background);
         color: var(--foreground);
         font-family: var(--font-sans);
@@ -207,48 +202,22 @@ static LANDING_HTML: &str = concat!(
         text-wrap: balance;
       }
 
-      /* ------------------------------------------------------------- *
-       * Background. A static stand-in for the grain shader on osec.io: *
-       * three soft cool lights over a tiled turbulence grain.          *
-       * ------------------------------------------------------------- */
+      /* ------------------------------------------------------------ *
+       * Background. Host for the grain shader; the versioned asset is *
+       * the same @paper-design/shaders truchet mount osec.io uses.    *
+       * ------------------------------------------------------------ */
       grain-bg {
         position: fixed;
         inset: 0;
         z-index: -1;
         display: block;
         pointer-events: none;
-        /* Ring bands rather than blobs: the osec.io hero reads as concentric
-           arcs of cool light sweeping off the top edge, and a soft radial
-           glow does not carry that. Each gradient is transparent through the
-           middle and lights up only across a narrow band. */
-        background-image:
-          radial-gradient(88rem 50rem at 24% -26rem,
-            transparent 0 58%,
-            color-mix(in oklab, var(--hero-2) 26%, transparent) 67%,
-            color-mix(in oklab, var(--hero-1) 52%, transparent) 72%,
-            color-mix(in oklab, var(--hero-2) 22%, transparent) 77%,
-            transparent 84%),
-          radial-gradient(124rem 68rem at 66% -40rem,
-            transparent 0 62%,
-            color-mix(in oklab, var(--hero-3) 26%, transparent) 70%,
-            color-mix(in oklab, var(--hero-1) 38%, transparent) 75%,
-            transparent 84%),
-          radial-gradient(70rem 38rem at 6% -10rem,
-            color-mix(in oklab, var(--hero-1) 14%, transparent),
-            transparent 68%);
-        mask-image: linear-gradient(to bottom, #000 0 34rem, transparent 46rem);
       }
 
-      /* Film grain. Kept very low: the noise should read as texture on the
-         lights above, never as a grey wash over the whole page. The colour
-         matrix flattens feTurbulence's RGB static to a neutral alpha mask. */
-      grain-bg::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        opacity: light-dark(0.5, 0.75);
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
-        mask-image: linear-gradient(to bottom, #000 0 42rem, transparent);
+      grain-bg canvas {
+        display: block;
+        inline-size: 100%;
+        block-size: 100%;
       }
 
       /* Fade content out under the fixed header. */
@@ -311,45 +280,6 @@ static LANDING_HTML: &str = concat!(
         backdrop-filter: blur(var(--blur-sm));
       }
 
-      [data-pill] {
-        --hairline-dir: to right;
-        --hairline-strength: 30%;
-
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.375rem;
-        padding: 0.375rem 1.5rem;
-        border-radius: var(--radius-full);
-        font-size: 1rem;
-        line-height: 1;
-        color: var(--pill-fg, var(--foreground-80));
-        white-space: nowrap;
-        transition: background-color 0.15s, color 0.15s;
-      }
-
-      [data-pill]:hover {
-        background-color: color-mix(in oklab, var(--muted) 50%, transparent);
-        color: var(--foreground);
-      }
-
-      [data-pill] svg {
-        inline-size: 1.125em;
-        block-size: 1.125em;
-      }
-
-      [data-pill-action] { padding-block: 0.75rem; }
-
-      [data-solid] {
-        background-image: linear-gradient(to right, var(--foreground), var(--foreground-80));
-        color: var(--background);
-      }
-
-      [data-solid]:hover {
-        background-image: linear-gradient(to right, var(--foreground-80), var(--foreground-80));
-        color: var(--background);
-      }
-
       [data-gradient-text] {
         background-image: linear-gradient(var(--gradient-text-dir, to right), var(--foreground), var(--foreground-80));
         -webkit-background-clip: text;
@@ -410,29 +340,12 @@ static LANDING_HTML: &str = concat!(
         inline-size: auto;
       }
 
-      brand-tag {
-        display: inline-block;
-        padding-inline-start: 0.75rem;
-        border-inline-start: 1px solid var(--foreground-20);
-        font-size: 1rem;
-        line-height: 1;
-        color: var(--foreground-60);
-      }
-
-      @media (width < 34rem) {
-        brand-tag { display: none; }
-      }
-
       header nav {
         display: flex;
         align-items: center;
         gap: var(--space-2xs);
         margin-inline: auto 0;
         margin-inline-end: -0.5rem;
-      }
-
-      @media (width < 30rem) {
-        header nav [data-pill] { display: none; }
       }
 
       /* --------- *
@@ -459,14 +372,6 @@ static LANDING_HTML: &str = concat!(
         font-size: 1rem;
         line-height: 1.35;
         color: var(--foreground-60);
-      }
-
-      hero-actions {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), max-content));
-        justify-content: start;
-        gap: 0.375rem;
-        margin-block-start: var(--space-m);
       }
 
       /* Inline code, for CLI flags and package names in prose. */
@@ -571,48 +476,6 @@ static LANDING_HTML: &str = concat!(
 
       code-sample .dim { color: var(--foreground-40); }
 
-      /* --------- *
-       * Footer.   *
-       * --------- */
-      page-footer {
-        display: block;
-        padding-block: var(--space-l);
-        border-block-start: 1px solid var(--foreground-10);
-      }
-
-      page-footer content-rail {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: var(--space-s) var(--space-m);
-      }
-
-      footer-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-m);
-        font-size: 1rem;
-        line-height: 1;
-      }
-
-      footer-links a { color: var(--foreground-60); }
-      footer-links a:hover { color: var(--foreground); }
-
-      page-footer small {
-        font-size: 1rem;
-        line-height: 1;
-        color: var(--foreground-40);
-      }
-
-      page-footer code {
-        font-family: var(--font-mono);
-        font-size: 0.9em;
-        padding: 0.1em 0.3em;
-        border-radius: var(--radius-sm);
-        background-color: color-mix(in oklab, var(--muted) 60%, transparent);
-      }
-
       /* Theme toggle icon swap. */
       dark-icon { display: none; }
       :root[data-theme="dark"] light-icon { display: none; }
@@ -634,13 +497,11 @@ static LANDING_HTML: &str = concat!(
     <header>
       <content-rail>
         <brand-lockup>
-          <a href="https://osec.io" aria-label="OtterSec">"##,
+          <span aria-label="OtterSec">"##,
     include_str!("../../../assets/lockup.svg"),
-    r##"</a>
-          <brand-tag>Verified Builds</brand-tag>
+    r##"</span>
         </brand-lockup>
         <nav aria-label="Primary">
-          <a href="/api" data-pill data-glass data-hairline>API reference</a>
           <button
             type="button"
             data-icon-button
@@ -673,26 +534,6 @@ static LANDING_HTML: &str = concat!(
             in a reproducible container and checks the result against what is
             deployed on mainnet.
           </hero-deck>
-          <hero-actions>
-            <a href="/api" data-pill data-pill-action data-solid>
-              Browse the API
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </a>
-            <a
-              href="https://github.com/otter-sec/solana-verified-programs-api"
-              data-pill
-              data-pill-action
-              data-glass
-              data-hairline
-            >
-              View the source
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M7 17 17 7M8 7h9v9" />
-              </svg>
-            </a>
-          </hero-actions>
         </page-hero>
 
         <card-grid>
@@ -713,8 +554,8 @@ static LANDING_HTML: &str = concat!(
           <panel-card data-glass data-hairline>
             <h2>Check a program</h2>
             <p>
-              Ask whether a deployed program is verified, which commit it was
-              built from, and when it was last checked.
+              Ask whether a deployed program is verified and compare its
+              on-chain and executable hashes.
             </p>
             <code-sample>
               <pre><span class="dim">GET</span> /status/&lt;PROGRAM_ID&gt;
@@ -724,10 +565,9 @@ static LANDING_HTML: &str = concat!(
           </panel-card>
 
           <panel-card data-glass data-hairline>
-            <h2>Docs and support</h2>
+            <h2>Documentation</h2>
             <p>
-              Read how verified builds work, or get in touch if a build does not
-              reproduce.
+              Read how verified builds work and explore the build tooling.
             </p>
             <ul>
               <li>
@@ -746,25 +586,14 @@ static LANDING_HTML: &str = concat!(
                   </svg>
                 </a>
               </li>
-              <li><a href="mailto:contact@osec.io">contact@osec.io</a></li>
             </ul>
           </panel-card>
         </card-grid>
       </content-rail>
     </main>
 
-    <page-footer>
-      <content-rail>
-        <footer-links>
-          <a href="/api">API reference</a>
-          <a href="https://github.com/otter-sec/solana-verified-programs-api">GitHub</a>
-          <a href="mailto:contact@osec.io">contact@osec.io</a>
-          <a href="https://osec.io">osec.io</a>
-        </footer-links>
-        <small>Endpoint list at <code>GET /api</code> &middot; Otter Audits LLC</small>
-      </content-rail>
-    </page-footer>
 
+    <script src="/assets/grain-6bef640a.js" defer></script>
     <script>
       document.addEventListener("click", function (event) {
         if (!event.target.closest || !event.target.closest("[data-theme-toggle]")) return;
@@ -1019,14 +848,19 @@ mod tests {
     use super::*;
     use crate::api::handlers::assets::ASSETS;
 
-    /// Facts the pre-retheme landing page carried. A visual rewrite is exactly
-    /// where content silently gets dropped, so pin each one.
+    /// The useful documentation destinations retained after simplifying the
+    /// landing page chrome.
     const REQUIRED_CONTENT: &[&str] = &[
-        "contact@osec.io",
-        "github.com/otter-sec/solana-verified-programs-api",
         "solana.com/docs/programs/verified-builds#how-do-i-create-verified-builds",
         "github.com/solana-foundation/solana-verifiable-build",
-        "/api",
+    ];
+
+    const REMOVED_CHROME: &[&str] = &[
+        "href=\"/api\"",
+        "href=\"https://github.com/otter-sec",
+        "href=\"https://osec.io\"",
+        "mailto:contact@osec.io",
+        "Endpoint list at",
     ];
 
     #[test]
@@ -1038,11 +872,21 @@ mod tests {
     }
 
     #[test]
-    fn landing_page_keeps_every_documented_fact() {
+    fn landing_page_keeps_documentation_links() {
         for fact in REQUIRED_CONTENT {
             assert!(
                 LANDING_HTML.contains(fact),
                 "landing page no longer mentions {fact}"
+            );
+        }
+    }
+
+    #[test]
+    fn landing_page_omits_removed_navigation_and_microcopy() {
+        for fragment in REMOVED_CHROME {
+            assert!(
+                !LANDING_HTML.contains(fragment),
+                "landing page still contains removed chrome: {fragment}"
             );
         }
     }
@@ -1069,10 +913,13 @@ mod tests {
             );
         }
 
+        // Stop at the first character that cannot appear in a filename, so a
+        // prose mention of a path in a comment reads as just the filename
+        // rather than swallowing everything up to the next quote.
         for reference in LANDING_HTML.split("/assets/").skip(1) {
             let name: String = reference
                 .chars()
-                .take_while(|c| *c != '"' && *c != ')' && *c != '\'')
+                .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
                 .collect();
             assert!(
                 ASSETS.iter().any(|(known, _, _)| *known == name),

@@ -164,7 +164,8 @@ pub fn initialize_router(state: AppState) -> Router {
         .route("/assets/{file}", get(assets::serve))
         .route("/api", get(|| async { index() }))
         .route("/health", get(health_check))
-        .route("/health/background-jobs", get(background_job_status));
+        .route("/health/background-jobs", get(background_job_status))
+        .layer(CompressionLayer::new().zstd(true));
 
     Router::new()
         .merge(verify_routes)

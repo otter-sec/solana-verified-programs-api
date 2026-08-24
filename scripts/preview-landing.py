@@ -12,6 +12,7 @@ the change immediately.
 
 import http.server
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -28,7 +29,18 @@ LITERAL = re.compile(
     re.S,
 )
 
-CONTENT_TYPES = {".woff2": "font/woff2", ".svg": "image/svg+xml"}
+# Mirror the content types the Rust asset handler sets. A wrong type here is
+# not cosmetic: browsers refuse to execute a script served as octet-stream.
+CONTENT_TYPES = {
+    ".woff2": "font/woff2",
+    ".svg": "image/svg+xml",
+    ".js": "text/javascript; charset=utf-8",
+}
+
+# Production serves the checked-in bundle through a content-versioned URL so
+# its immutable cache header stays honest. Keep the source filename convenient
+# for the documented rebuild command while mirroring that public URL here.
+ASSET_SOURCES = {"grain-6bef640a.js": "grain.js"}
 
 
 def render() -> bytes:
@@ -45,31 +57,76 @@ def render() -> bytes:
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+        self.handle_request(write_body=True)
+
+    def do_HEAD(self) -> None:  # noqa: N802 - stdlib naming
+        self.handle_request(write_body=False)
+
+    def handle_request(self, *, write_body: bool) -> None:
         path = self.path.split("?", 1)[0]
         if path == "/":
-            self.send(200, "text/html; charset=utf-8", render(), cache="no-store")
+            self.send(
+                200,
+                "text/html; charset=utf-8",
+                render(),
+                cache="no-store",
+                write_body=write_body,
+            )
         elif path.startswith("/assets/"):
-            self.send_asset(path[len("/assets/") :])
+            self.send_asset(path.removeprefix("/assets/"), write_body=write_body)
         else:
-            self.send(404, "text/plain", b"not found")
+            self.send(404, "text/plain", b"not found", write_body=write_body)
 
-    def send_asset(self, name: str) -> None:
-        target = ASSETS / name
-        # Resolve and confirm the result is still inside assets/ before reading.
-        if "/" in name or not target.is_file():
-            self.send(404, "text/plain", b"not found")
+    def send_asset(self, name: str, *, write_body: bool) -> None:
+        target = ASSETS / ASSET_SOURCES.get(name, name)
+        if "/" in name:
+            self.send(404, "text/plain", b"not found", write_body=write_body)
             return
-        content_type = CONTENT_TYPES.get(target.suffix, "application/octet-stream")
-        self.send(200, content_type, target.read_bytes())
 
-    def send(self, status: int, content_type: str, body: bytes, cache: str = "") -> None:
+        try:
+            if write_body:
+                body = target.read_bytes()
+                content_length = len(body)
+            else:
+                metadata = target.stat()
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise IsADirectoryError(target)
+                body = b""
+                content_length = metadata.st_size
+        except (FileNotFoundError, IsADirectoryError):
+            self.send(404, "text/plain", b"not found", write_body=write_body)
+            return
+
+        content_type = CONTENT_TYPES.get(target.suffix, "application/octet-stream")
+        self.send(
+            200,
+            content_type,
+            body,
+            content_length=content_length,
+            write_body=write_body,
+        )
+
+    def send(
+        self,
+        status: int,
+        content_type: str,
+        body: bytes,
+        cache: str = "",
+        *,
+        content_length: int | None = None,
+        write_body: bool = True,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header(
+            "Content-Length",
+            str(len(body) if content_length is None else content_length),
+        )
         if cache:
             self.send_header("Cache-Control", cache)
         self.end_headers()
-        self.wfile.write(body)
+        if write_body:
+            self.wfile.write(body)
 
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write(f"  {fmt % args}\n")

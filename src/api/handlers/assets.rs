@@ -36,6 +36,15 @@ pub static ASSETS: &[(&str, &[u8], &str)] = &[
         include_bytes!("../../../assets/Lilex-Variable.woff2"),
         WOFF2,
     ),
+    // The grain background shader, bundled from @paper-design/shaders — the
+    // same mount osec.io uses. See docs/plans for the bundle recipe.
+    (
+        // Public URL includes the bundle hash so the one-year immutable cache
+        // remains safe when a future shader rebuild changes the bytes.
+        "grain-6bef640a.js",
+        include_bytes!("../../../assets/grain.js"),
+        "text/javascript; charset=utf-8",
+    ),
 ];
 
 /// Handler for the static asset endpoint
