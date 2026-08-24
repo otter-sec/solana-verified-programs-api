@@ -112,6 +112,15 @@ static LANDING_HTML: &str = concat!(
         --foreground-05: color-mix(in oklab, var(--foreground) 5%, transparent);
         --foreground-01: color-mix(in oklab, var(--foreground) 1%, transparent);
 
+        /* osec.io Expressive Code theme tokens, reduced to this page's shell
+           and HTTP samples. */
+        --syntax-background: light-dark(#f9f9fb, #151518);
+        --syntax-foreground: var(--foreground);
+        --syntax-muted: var(--muted-foreground);
+        --syntax-keyword: light-dark(#5753c6, #b1a9ff);
+        --syntax-function: light-dark(#0d71ca, #70b8ff);
+        --syntax-constant: light-dark(#846011, #dbb774);
+
 
         --font-sans: "MD UI XL", "MD UI XL Fallback", sans-serif;
         --font-heading: "MD Primer", "MD Primer Fallback", sans-serif;
@@ -187,6 +196,9 @@ static LANDING_HTML: &str = concat!(
 
       body {
         min-block-size: 100svh;
+        display: grid;
+        grid-template-rows: 1fr auto;
+        grid-template-columns: minmax(0, 1fr);
         background-color: var(--background);
         color: var(--foreground);
         font-family: var(--font-sans);
@@ -392,7 +404,7 @@ static LANDING_HTML: &str = concat!(
         grid-template-columns: repeat(3, 1fr);
         column-gap: var(--grid-gutter);
         align-items: start;
-        padding-block-end: var(--space-xl);
+        padding-block-end: var(--space-l);
       }
 
       @media (width < 64rem) {
@@ -406,8 +418,7 @@ static LANDING_HTML: &str = concat!(
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
-        block-size: 100%;
-        padding: var(--space-m) var(--space-s) var(--space-l);
+        padding: var(--space-m) var(--space-s) var(--space-s);
       }
 
       panel-card h2 {
@@ -463,7 +474,8 @@ static LANDING_HTML: &str = concat!(
         margin-block-start: auto;
         padding: 0.75rem 0.875rem;
         border-radius: var(--radius-sm);
-        background-color: color-mix(in oklab, var(--muted) 60%, transparent);
+        border: 1px solid var(--foreground-05);
+        background-color: var(--syntax-background);
         overflow-x: auto;
       }
 
@@ -471,10 +483,30 @@ static LANDING_HTML: &str = concat!(
         font-family: var(--font-mono);
         font-size: var(--step--1);
         line-height: 1.6;
-        color: var(--foreground-80);
+        color: var(--syntax-foreground);
       }
 
-      code-sample .dim { color: var(--foreground-40); }
+      code-sample .tok-command { color: var(--syntax-function); }
+      code-sample .tok-subcommand { color: var(--syntax-foreground); }
+      code-sample .tok-flag,
+      code-sample .tok-punctuation { color: var(--syntax-muted); }
+      code-sample .tok-keyword { color: var(--syntax-keyword); }
+      code-sample .tok-placeholder { color: var(--syntax-constant); }
+
+      /* --------- *
+       * Footer.   *
+       * --------- */
+      page-footer {
+        display: block;
+        color: var(--muted-foreground);
+        font-size: var(--step--1);
+        line-height: 1;
+      }
+
+      page-footer content-rail {
+        padding-block: var(--space-s);
+        border-block-start: 1px solid var(--foreground-10);
+      }
 
       /* Theme toggle icon swap. */
       dark-icon { display: none; }
@@ -544,10 +576,10 @@ static LANDING_HTML: &str = concat!(
               <code>--remote</code> and the build runs here instead of on your machine.
             </p>
             <code-sample>
-              <pre>solana-verify verify-from-repo <span class="dim">\</span>
-  --remote -um <span class="dim">\</span>
-  --program-id &lt;PROGRAM_ID&gt; <span class="dim">\</span>
-  &lt;REPOSITORY_URL&gt;</pre>
+              <pre><span class="tok-command">solana-verify</span> <span class="tok-subcommand">verify-from-repo</span> <span class="tok-punctuation">\</span>
+  <span class="tok-flag">--remote -um</span> <span class="tok-punctuation">\</span>
+  <span class="tok-flag">--program-id</span> <span class="tok-placeholder">&lt;PROGRAM_ID&gt;</span> <span class="tok-punctuation">\</span>
+  <span class="tok-placeholder">&lt;REPOSITORY_URL&gt;</span></pre>
             </code-sample>
           </panel-card>
 
@@ -558,9 +590,9 @@ static LANDING_HTML: &str = concat!(
               on-chain and executable hashes.
             </p>
             <code-sample>
-              <pre><span class="dim">GET</span> /status/&lt;PROGRAM_ID&gt;
-<span class="dim">GET</span> /job/&lt;JOB_ID&gt;
-<span class="dim">GET</span> /verified-programs</pre>
+              <pre><span class="tok-keyword">GET</span> /status/<span class="tok-placeholder">&lt;PROGRAM_ID&gt;</span>
+<span class="tok-keyword">GET</span> /job/<span class="tok-placeholder">&lt;JOB_ID&gt;</span>
+<span class="tok-keyword">GET</span> /verified-programs</pre>
             </code-sample>
           </panel-card>
 
@@ -592,6 +624,9 @@ static LANDING_HTML: &str = concat!(
       </content-rail>
     </main>
 
+    <page-footer>
+      <content-rail>&copy; 2026 OtterSec</content-rail>
+    </page-footer>
 
     <script src="/assets/grain-6bef640a.js" defer></script>
     <script>
@@ -887,6 +922,49 @@ mod tests {
             assert!(
                 !LANDING_HTML.contains(fragment),
                 "landing page still contains removed chrome: {fragment}"
+            );
+        }
+    }
+
+    #[test]
+    fn landing_page_has_manual_syntax_tokens_and_minimal_footer() {
+        for declaration in [
+            "--syntax-background: light-dark(#f9f9fb, #151518);",
+            "--syntax-foreground: var(--foreground);",
+            "--syntax-muted: var(--muted-foreground);",
+            "--syntax-keyword: light-dark(#5753c6, #b1a9ff);",
+            "--syntax-function: light-dark(#0d71ca, #70b8ff);",
+            "--syntax-constant: light-dark(#846011, #dbb774);",
+        ] {
+            assert!(
+                LANDING_HTML.contains(declaration),
+                "landing page is missing syntax palette declaration: {declaration}"
+            );
+        }
+
+        for mapping in [
+            "code-sample .tok-command { color: var(--syntax-function); }",
+            "code-sample .tok-subcommand { color: var(--syntax-foreground); }",
+            "code-sample .tok-flag,\n      code-sample .tok-punctuation { color: var(--syntax-muted); }",
+            "code-sample .tok-keyword { color: var(--syntax-keyword); }",
+            "code-sample .tok-placeholder { color: var(--syntax-constant); }",
+        ] {
+            assert!(
+                LANDING_HTML.contains(mapping),
+                "landing page is missing syntax token mapping: {mapping}"
+            );
+        }
+
+        for fragment in [
+            "class=\"tok-command\">solana-verify",
+            "class=\"tok-flag\">--remote",
+            "class=\"tok-keyword\">GET",
+            "class=\"tok-placeholder\">&lt;PROGRAM_ID&gt;",
+            "&copy; 2026 OtterSec",
+        ] {
+            assert!(
+                LANDING_HTML.contains(fragment),
+                "landing page is missing syntax/footer fragment: {fragment}"
             );
         }
     }
