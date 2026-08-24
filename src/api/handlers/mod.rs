@@ -10,6 +10,7 @@ pub mod verification_status;
 pub mod verify_helpers; // Shared verification utilities // Program verification status
 
 // Status and information handlers
+pub mod assets; // Embedded brand assets for the landing page
 pub mod health; // Health check and background job status
 pub mod job_status; // Build job status
 pub mod logs; // Build logs retrieval

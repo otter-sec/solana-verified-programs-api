@@ -156,9 +156,12 @@ pub fn initialize_router(state: AppState) -> Router {
         .route("/pda", post(handle_pda_updates_creations))
         .layer(webhook_auth_layer);
 
-    // Unmetered base routes.
+    // Unmetered base routes. Brand assets sit here rather than behind the read
+    // governor so a cold first paint fetching several fonts at once is not
+    // rate limited.
     let base_routes = Router::new()
         .route("/", get(|| async { landing_page() }))
+        .route("/assets/{file}", get(assets::serve))
         .route("/api", get(|| async { index() }))
         .route("/health", get(health_check))
         .route("/health/background-jobs", get(background_job_status));
