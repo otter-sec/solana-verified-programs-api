@@ -441,7 +441,7 @@ static LANDING_HTML: &str = concat!(
 
       panel-card li a {
         display: inline-flex;
-        align-items: baseline;
+        align-items: center;
         gap: 0.375rem;
         font-size: 1rem;
         line-height: 1.2;
@@ -462,6 +462,15 @@ static LANDING_HTML: &str = concat!(
         flex-shrink: 0;
         inline-size: 0.875em;
         block-size: 0.875em;
+      }
+
+      panel-card li a .brand-icon {
+        inline-size: 1em;
+        block-size: 1em;
+        color: var(--foreground);
+      }
+
+      panel-card li a .external-icon {
         translate: 0 0.1em;
         opacity: 0.6;
       }
@@ -499,13 +508,12 @@ static LANDING_HTML: &str = concat!(
       page-footer {
         display: block;
         color: var(--muted-foreground);
-        font-size: var(--step--1);
+        font-size: 0.75rem;
         line-height: 1;
       }
 
       page-footer content-rail {
         padding-block: var(--space-s);
-        border-block-start: 1px solid var(--foreground-10);
       }
 
       /* Theme toggle icon swap. */
@@ -604,16 +612,23 @@ static LANDING_HTML: &str = concat!(
             <ul>
               <li>
                 <a href="https://solana.com/docs/programs/verified-builds#how-do-i-create-verified-builds">
-                  Solana docs: Verified Builds
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg class="brand-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M6.1 4.5h13.1a.65.65 0 0 1 .46 1.11l-2.2 2.2a1.4 1.4 0 0 1-.99.41H3.38a.65.65 0 0 1-.46-1.11l2.2-2.2a1.4 1.4 0 0 1 .99-.41Zm0 11.28h13.1a.65.65 0 0 1 .46 1.11l-2.2 2.2a1.4 1.4 0 0 1-.99.41H3.38a.65.65 0 0 1-.46-1.11l2.2-2.2a1.4 1.4 0 0 1 .99-.41ZM17.46 9.84a1.4 1.4 0 0 0-.99-.41H3.38a.65.65 0 0 0-.46 1.11l2.2 2.2c.26.26.62.41.99.41h13.1a.65.65 0 0 0 .46-1.11l-2.2-2.2Z" />
+                  </svg>
+                  <span>Solana docs: Verified Builds</span>
+                  <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M7 17 17 7M8 7h9v9" />
                   </svg>
                 </a>
               </li>
               <li>
                 <a href="https://github.com/solana-foundation/solana-verifiable-build">
-                  solana-verifiable-build
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.28-.36 6.72-1.61 6.72-7.25A5.67 5.67 0 0 0 19.22 3.3 5.3 5.3 0 0 0 19.08 1S17.9.63 15 2.48a13.38 13.38 0 0 0-6 0C6.1.63 4.92 1 4.92 1a5.3 5.3 0 0 0-.14 2.3 5.67 5.67 0 0 0-1.5 3.95c0 5.63 3.44 6.88 6.72 7.25A4.8 4.8 0 0 0 9 18v4" />
+                    <path d="M9 19c-3 .92-3-1.5-4.2-2" />
+                  </svg>
+                  <span>solana-verifiable-build</span>
+                  <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M7 17 17 7M8 7h9v9" />
                   </svg>
                 </a>
@@ -960,6 +975,8 @@ mod tests {
             "class=\"tok-flag\">--remote",
             "class=\"tok-keyword\">GET",
             "class=\"tok-placeholder\">&lt;PROGRAM_ID&gt;",
+            "color: var(--foreground);",
+            "font-size: 0.75rem;",
             "&copy; 2026 OtterSec",
         ] {
             assert!(
@@ -967,6 +984,21 @@ mod tests {
                 "landing page is missing syntax/footer fragment: {fragment}"
             );
         }
+
+        assert_eq!(
+            LANDING_HTML.matches("class=\"brand-icon\"").count(),
+            2,
+            "each documentation link should have one leading brand icon"
+        );
+        assert_eq!(
+            LANDING_HTML.matches("class=\"external-icon\"").count(),
+            2,
+            "each documentation link should retain one trailing external-link icon"
+        );
+        assert!(
+            !LANDING_HTML.contains("border-block-start: 1px solid var(--foreground-10);"),
+            "footer divider should remain removed"
+        );
     }
 
     #[test]
