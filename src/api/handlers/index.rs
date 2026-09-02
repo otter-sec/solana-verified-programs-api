@@ -538,7 +538,7 @@ static LANDING_HTML: &str = concat!(
       <content-rail>
         <brand-lockup>
           <span aria-label="OtterSec">"##,
-    include_str!("../../../assets/lockup.svg"),
+    include_str!("../../../assets/landing/lockup.svg"),
     r##"</span>
         </brand-lockup>
         <nav aria-label="Primary">

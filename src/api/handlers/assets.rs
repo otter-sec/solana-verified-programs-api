@@ -23,17 +23,17 @@ const WOFF2: &str = "font/woff2";
 pub static ASSETS: &[(&str, &[u8], &str)] = &[
     (
         "MDPrimer-Regular.woff2",
-        include_bytes!("../../../assets/MDPrimer-Regular.woff2"),
+        include_bytes!("../../../assets/landing/MDPrimer-Regular.woff2"),
         WOFF2,
     ),
     (
         "MDUIXL-Regular.woff2",
-        include_bytes!("../../../assets/MDUIXL-Regular.woff2"),
+        include_bytes!("../../../assets/landing/MDUIXL-Regular.woff2"),
         WOFF2,
     ),
     (
         "Lilex-Variable.woff2",
-        include_bytes!("../../../assets/Lilex-Variable.woff2"),
+        include_bytes!("../../../assets/landing/Lilex-Variable.woff2"),
         WOFF2,
     ),
     // The grain background shader, bundled from @paper-design/shaders — the
@@ -42,7 +42,7 @@ pub static ASSETS: &[(&str, &[u8], &str)] = &[
         // Public URL includes the bundle hash so the one-year immutable cache
         // remains safe when a future shader rebuild changes the bytes.
         "grain-6bef640a.js",
-        include_bytes!("../../../assets/grain.js"),
+        include_bytes!("../../../assets/landing/grain.js"),
         "text/javascript; charset=utf-8",
     ),
 ];

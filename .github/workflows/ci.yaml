@@ -17,6 +17,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.ASSETS_SSH_KEY != '' && 'recursive' || 'false' }}
+          ssh-key: ${{ secrets.ASSETS_SSH_KEY }}
+
+      - name: Install landing asset fixtures for CI
+        run: |
+          if [ ! -f assets/landing/MDPrimer-Regular.woff2 ]; then
+            mkdir -p assets/landing
+            cp assets-stubs/landing/* assets/landing/
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.94
