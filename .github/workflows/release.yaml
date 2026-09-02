@@ -7,12 +7,15 @@ on:
 
 jobs:
   build:
-    uses: otter-sec/workflows/.github/workflows/build-image.yaml@main
+    uses: otter-sec/workflows/.github/workflows/build-image.yaml@f363d55ed13828d2c9a2006b07c5f820151ef68b
     with:
       environment: prod
       name: ${{ matrix.image.name }}
       tag: ${{ github.ref_name }}
       dockerfile: ${{ matrix.image.dockerfile }}
+      use_submodule_ssh: true
+    secrets:
+      SUBMODULE_SSH_KEY: ${{ secrets.ASSETS_SSH_KEY }}
     strategy:
       fail-fast: true
       matrix:

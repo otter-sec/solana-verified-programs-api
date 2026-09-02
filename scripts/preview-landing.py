@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "src" / "api" / "handlers" / "index.rs"
-ASSETS = ROOT / "assets"
+ASSETS = ROOT / "assets" / "landing"
 LOCKUP = ASSETS / "lockup.svg"
 
 # Matches the `concat!(r##"..."##, include_str!(...), r##"..."##)` form the

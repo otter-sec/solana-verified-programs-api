@@ -18,6 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install landing asset fixtures for CI
+        run: |
+          if [ ! -f assets/landing/MDPrimer-Regular.woff2 ]; then
+            mkdir -p assets/landing
+            cp assets-stubs/landing/* assets/landing/
+          fi
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.94
         with:

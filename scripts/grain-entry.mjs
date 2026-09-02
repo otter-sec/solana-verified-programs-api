@@ -4,7 +4,7 @@
 // Build from this repo, resolving the dependency from the sibling osec.io
 // checkout (the design source of truth):
 //   NODE_PATH=../osec.io/node_modules bun build scripts/grain-entry.mjs \
-//     --minify --format=iife --target=browser --outfile=assets/grain.js
+//     --minify --format=iife --target=browser --outfile=assets/landing/grain.js
 import {
   getShaderColorFromString,
   getShaderNoiseTexture,
