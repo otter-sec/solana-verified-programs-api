@@ -17,9 +17,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.ASSETS_SSH_KEY != '' && 'recursive' || 'false' }}
-          ssh-key: ${{ secrets.ASSETS_SSH_KEY }}
 
       - name: Install landing asset fixtures for CI
         run: |
