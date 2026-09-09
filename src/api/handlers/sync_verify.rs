@@ -2,7 +2,8 @@ use super::async_verify::SolanaProgramBuildParams;
 use super::verify_helpers::{create_and_insert_build, create_internal_error, setup_verification};
 use crate::{
     api::responses::{
-        build_repository_url, ApiResponse, JobStatus, StatusResponse, VerifyResponse,
+        build_repository_url, ApiResponse, ErrorResponse, JobStatus, Status, StatusResponse,
+        VerifyResponse,
     },
     build,
     db::NewBuild,
@@ -33,6 +34,22 @@ async fn process_verification_sync(
     state: AppState,
     params: NewBuild,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let params = match build::sanitize_build_paths(&params) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    ErrorResponse {
+                        status: Status::Error,
+                        error: e.to_string(),
+                    }
+                    .into(),
+                ),
+            );
+        }
+    };
+
     if let Ok(Some(dup)) = state.db.find_duplicate(&params).await {
         return (
             StatusCode::OK,

@@ -51,7 +51,19 @@ pub async fn setup_verification(
                 error!("Failed to update program state: {:?}", e);
             }
 
-            Ok(NewBuild::from(&params))
+            match crate::build::sanitize_build_paths(&NewBuild::from(&params)) {
+                Ok(build) => Ok(build),
+                Err(e) => Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(
+                        ErrorResponse {
+                            status: Status::Error,
+                            error: e.to_string(),
+                        }
+                        .into(),
+                    ),
+                )),
+            }
         }
         Err(err) => {
             error!(

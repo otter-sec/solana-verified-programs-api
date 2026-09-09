@@ -13,7 +13,11 @@ use crate::{
 };
 use chrono::Utc;
 use solana_client::nonblocking::rpc_client::RpcClient;
-use std::{process::Stdio, time::Duration};
+use std::{
+    path::{Component, Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
 use tokio::{io::AsyncWriteExt, process::Command};
 use tracing::{error, info};
 use uuid::Uuid;
@@ -39,6 +43,7 @@ pub async fn run_build(
     db: &DbClient,
     rpc_url: &str,
 ) -> Result<VerifyOutcome> {
+    let params = sanitize_build_paths(params)?;
     let log_id = Uuid::new_v4().to_string();
     info!(
         program = %params.program_id,
@@ -46,7 +51,7 @@ pub async fn run_build(
         "starting solana-verify"
     );
 
-    let mut cmd = build_command(params, rpc_url);
+    let mut cmd = build_command(&params, rpc_url);
     let mut child = cmd
         .spawn()
         .map_err(|e| ApiError::Build(format!("spawn solana-verify: {e}")))?;
@@ -252,6 +257,54 @@ fn extract_hash_with_prefix(output: &str, prefix: &str) -> Option<String> {
         .map(|line| line.trim_start_matches(prefix.trim()).trim().to_owned())
 }
 
+/// Rejects absolute paths and `..` escapes after normalization
+pub fn sanitize_relative_path(path: &str) -> Result<String> {
+    let path = path.trim();
+    let p = Path::new(path);
+    if p.is_absolute()
+        || matches!(
+            p.components().next(),
+            Some(Component::RootDir | Component::Prefix(_))
+        )
+    {
+        return Err(ApiError::BadRequest("path must be relative".to_string()));
+    }
+
+    let mut normal = PathBuf::new();
+    for component in p.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normal.pop() {
+                    return Err(ApiError::BadRequest(
+                        "path must not escape its base directory".to_string(),
+                    ));
+                }
+            }
+            Component::Normal(part) => normal.push(part),
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(ApiError::BadRequest("path must be relative".to_string()));
+            }
+        }
+    }
+
+    Ok(normal.to_string_lossy().into_owned())
+}
+
+/// Sanitizes `mount_path` and `workspace_path`
+pub fn sanitize_build_paths(params: &NewBuild) -> Result<NewBuild> {
+    let mut params = params.clone();
+    if let Some(mp) = params.mount_path.take() {
+        let sanitized = sanitize_relative_path(&mp)?;
+        params.mount_path = (!sanitized.is_empty()).then_some(sanitized);
+    }
+    if let Some(wp) = params.workspace_path.take() {
+        let sanitized = sanitize_relative_path(&wp)?;
+        params.workspace_path = (!sanitized.is_empty()).then_some(sanitized);
+    }
+    Ok(params)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,5 +316,68 @@ mod tests {
             extract_hash_with_prefix(output, "Program Hash:"),
             Some("abc123".to_string())
         );
+    }
+
+    #[test]
+    fn accepts_relative_paths() {
+        assert_eq!(
+            sanitize_relative_path("programs/foo").unwrap(),
+            "programs/foo"
+        );
+        assert_eq!(
+            sanitize_relative_path("./programs/foo").unwrap(),
+            "programs/foo"
+        );
+        assert_eq!(sanitize_relative_path("foo/./bar").unwrap(), "foo/bar");
+        assert_eq!(sanitize_relative_path("a/b/../c").unwrap(), "a/c");
+        assert_eq!(sanitize_relative_path("").unwrap(), "");
+        assert_eq!(sanitize_relative_path(".").unwrap(), "");
+    }
+
+    #[test]
+    fn discards_empty_paths_after_normalize() {
+        let base = NewBuild {
+            repository: "https://github.com/example/repo".into(),
+            commit_hash: None,
+            program_id: Address(solana_pubkey::Pubkey::default()),
+            lib_name: None,
+            base_docker_image: None,
+            mount_path: Some(".".into()),
+            workspace_path: Some("".into()),
+            cargo_args: None,
+            cargo_build_sbf_args: None,
+            bpf_flag: false,
+            arch: None,
+            signer: None,
+        };
+        let sanitized = sanitize_build_paths(&base).unwrap();
+        assert_eq!(sanitized.mount_path, None);
+        assert_eq!(sanitized.workspace_path, None);
+
+        let with_paths = NewBuild {
+            mount_path: Some("./programs/foo".into()),
+            workspace_path: Some("a/../b".into()),
+            ..base
+        };
+        let sanitized = sanitize_build_paths(&with_paths).unwrap();
+        assert_eq!(sanitized.mount_path.as_deref(), Some("programs/foo"));
+        assert_eq!(sanitized.workspace_path.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn rejects_absolute_paths() {
+        assert!(sanitize_relative_path("/etc/passwd").is_err());
+        assert!(sanitize_relative_path("/").is_err());
+    }
+
+    #[test]
+    fn rejects_paths_that_escape_after_normalize() {
+        assert!(sanitize_relative_path("..").is_err());
+        assert!(sanitize_relative_path("../").is_err());
+        assert!(sanitize_relative_path("../../").is_err());
+        assert!(sanitize_relative_path("a/../../").is_err());
+        assert!(sanitize_relative_path("a/../b/../../c").is_err());
+        assert!(sanitize_relative_path("./../../").is_err());
+        assert!(sanitize_relative_path("foo/../../../etc").is_err());
     }
 }

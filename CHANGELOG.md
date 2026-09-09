@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - [Unreleased]
+
+### Fixed
+
+- **Reject escaping `mount_path` / `workspace_path`**: only relative paths are allowed; values are normalized so sequences like `a/../../` cannot leave the build directory.
+
 ## [2.0.6] - 2026-09-02
 
 ### Changed
