@@ -1,6 +1,6 @@
 use super::verify_helpers::{create_and_insert_build, setup_verification};
 use crate::{
-    api::responses::{ApiResponse, JobStatus, VerifyResponse},
+    api::responses::{ApiResponse, ErrorResponse, JobStatus, Status, VerifyResponse},
     build,
     db::{DbClient, NewBuild},
     onchain::is_program_data_missing,
@@ -77,6 +77,22 @@ pub async fn process_verification(
     payload: NewBuild,
     webhook_url: Option<String>,
 ) -> (StatusCode, Json<ApiResponse>) {
+    let payload = match build::sanitize_build_paths(&payload) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    ErrorResponse {
+                        status: Status::Error,
+                        error: e.to_string(),
+                    }
+                    .into(),
+                ),
+            );
+        }
+    };
+
     // Check for existing verification
     if let Ok(Some(dup)) = state.db.find_duplicate(&payload).await {
         check_program_closed(&state.db, &state.rpc, &payload.program_id).await;
