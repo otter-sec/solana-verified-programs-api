@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Reject escaping `mount_path` / `workspace_path`**: only relative paths are allowed; values are normalized so sequences like `a/../../` cannot leave the build directory.
+- **Fix unsafe `mount_path`**: reject absolute paths and `..`, ignore `mount_path` and use it as `workspace_path` when that field is missing, so Docker always mounts the full repo.
 
 ## [2.0.6] - 2026-09-02
 

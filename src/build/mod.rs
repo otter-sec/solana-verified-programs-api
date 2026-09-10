@@ -257,7 +257,7 @@ fn extract_hash_with_prefix(output: &str, prefix: &str) -> Option<String> {
         .map(|line| line.trim_start_matches(prefix.trim()).trim().to_owned())
 }
 
-/// Rejects absolute paths and `..` escapes after normalization
+/// Rejects absolute paths and any `..` components. Only `CurDir` / `Normal` allowed.
 pub fn sanitize_relative_path(path: &str) -> Result<String> {
     let path = path.trim();
     let p = Path::new(path);
@@ -274,14 +274,12 @@ pub fn sanitize_relative_path(path: &str) -> Result<String> {
     for component in p.components() {
         match component {
             Component::CurDir => {}
-            Component::ParentDir => {
-                if !normal.pop() {
-                    return Err(ApiError::BadRequest(
-                        "path must not escape its base directory".to_string(),
-                    ));
-                }
-            }
             Component::Normal(part) => normal.push(part),
+            Component::ParentDir => {
+                return Err(ApiError::BadRequest(
+                    "path must not contain '..'".to_string(),
+                ));
+            }
             Component::RootDir | Component::Prefix(_) => {
                 return Err(ApiError::BadRequest("path must be relative".to_string()));
             }
@@ -291,7 +289,7 @@ pub fn sanitize_relative_path(path: &str) -> Result<String> {
     Ok(normal.to_string_lossy().into_owned())
 }
 
-/// Sanitizes `mount_path` and `workspace_path`
+/// Sanitizes paths, maps legacy `mount_path` into `workspace_path`, and drops mount.
 pub fn sanitize_build_paths(params: &NewBuild) -> Result<NewBuild> {
     let mut params = params.clone();
     if let Some(mp) = params.mount_path.take() {
@@ -301,6 +299,11 @@ pub fn sanitize_build_paths(params: &NewBuild) -> Result<NewBuild> {
     if let Some(wp) = params.workspace_path.take() {
         let sanitized = sanitize_relative_path(&wp)?;
         params.workspace_path = (!sanitized.is_empty()).then_some(sanitized);
+    }
+
+    let legacy_mount_path = params.mount_path.take();
+    if params.workspace_path.is_none() {
+        params.workspace_path = legacy_mount_path;
     }
     Ok(params)
 }
@@ -329,39 +332,60 @@ mod tests {
             "programs/foo"
         );
         assert_eq!(sanitize_relative_path("foo/./bar").unwrap(), "foo/bar");
-        assert_eq!(sanitize_relative_path("a/b/../c").unwrap(), "a/c");
         assert_eq!(sanitize_relative_path("").unwrap(), "");
         assert_eq!(sanitize_relative_path(".").unwrap(), "");
     }
 
-    #[test]
-    fn discards_empty_paths_after_normalize() {
-        let base = NewBuild {
+    fn sample_build() -> NewBuild {
+        NewBuild {
             repository: "https://github.com/example/repo".into(),
             commit_hash: None,
             program_id: Address(solana_pubkey::Pubkey::default()),
             lib_name: None,
             base_docker_image: None,
-            mount_path: Some(".".into()),
-            workspace_path: Some("".into()),
+            mount_path: None,
+            workspace_path: None,
             cargo_args: None,
             cargo_build_sbf_args: None,
             bpf_flag: false,
             arch: None,
             signer: None,
-        };
-        let sanitized = sanitize_build_paths(&base).unwrap();
+        }
+    }
+
+    #[test]
+    fn discards_empty_paths() {
+        let sanitized = sanitize_build_paths(&NewBuild {
+            mount_path: Some(".".into()),
+            workspace_path: Some("".into()),
+            ..sample_build()
+        })
+        .unwrap();
         assert_eq!(sanitized.mount_path, None);
         assert_eq!(sanitized.workspace_path, None);
+    }
 
-        let with_paths = NewBuild {
+    #[test]
+    fn remaps_mount_path_to_workspace_when_unset() {
+        let sanitized = sanitize_build_paths(&NewBuild {
             mount_path: Some("./programs/foo".into()),
-            workspace_path: Some("a/../b".into()),
-            ..base
-        };
-        let sanitized = sanitize_build_paths(&with_paths).unwrap();
-        assert_eq!(sanitized.mount_path.as_deref(), Some("programs/foo"));
-        assert_eq!(sanitized.workspace_path.as_deref(), Some("b"));
+            ..sample_build()
+        })
+        .unwrap();
+        assert_eq!(sanitized.mount_path, None);
+        assert_eq!(sanitized.workspace_path.as_deref(), Some("programs/foo"));
+    }
+
+    #[test]
+    fn keeps_workspace_and_drops_mount_when_both_set() {
+        let sanitized = sanitize_build_paths(&NewBuild {
+            mount_path: Some("programs/foo".into()),
+            workspace_path: Some("packages/bar".into()),
+            ..sample_build()
+        })
+        .unwrap();
+        assert_eq!(sanitized.mount_path, None);
+        assert_eq!(sanitized.workspace_path.as_deref(), Some("packages/bar"));
     }
 
     #[test]
@@ -371,12 +395,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_paths_that_escape_after_normalize() {
+    fn rejects_parent_dir_components() {
         assert!(sanitize_relative_path("..").is_err());
         assert!(sanitize_relative_path("../").is_err());
         assert!(sanitize_relative_path("../../").is_err());
+        assert!(sanitize_relative_path("a/../b").is_err());
+        assert!(sanitize_relative_path("a/b/../c").is_err());
         assert!(sanitize_relative_path("a/../../").is_err());
-        assert!(sanitize_relative_path("a/../b/../../c").is_err());
         assert!(sanitize_relative_path("./../../").is_err());
         assert!(sanitize_relative_path("foo/../../../etc").is_err());
     }
