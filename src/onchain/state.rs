@@ -10,7 +10,8 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 use solana_account_decoder::parse_bpf_loader::{
-    parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiProgram, UiProgramData,
+    parse_bpf_upgradeable_loader, BpfUpgradeableLoaderAccountType, UiBuffer, UiProgram,
+    UiProgramData,
 };
 use solana_client::{
     nonblocking::rpc_client::RpcClient, rpc_client::GetConfirmedSignaturesForAddress2Config,
@@ -174,6 +175,24 @@ async fn snapshot_chunk(
     Ok(())
 }
 
+/// Account type for errors, without the executable bytes
+fn describe_bpf_loader_account(account: &BpfUpgradeableLoaderAccountType) -> String {
+    match account {
+        BpfUpgradeableLoaderAccountType::Uninitialized => "Uninitialized".to_string(),
+        BpfUpgradeableLoaderAccountType::Buffer(UiBuffer { authority, .. }) => {
+            format!("Buffer(authority: {authority:?})")
+        }
+        BpfUpgradeableLoaderAccountType::Program(UiProgram { program_data }) => {
+            format!("Program(program_data: {program_data})")
+        }
+        BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData {
+            slot, authority, ..
+        }) => {
+            format!("ProgramData(slot: {slot}, authority: {authority:?})")
+        }
+    }
+}
+
 /// `Ok(Some(_))` -- has authority. `Ok(None)` -- frozen (no authority).
 /// `Err(_)` -- parse failure, caller should not interpret either way.
 fn parse_program_data_authority(data: &[u8]) -> Result<Option<String>> {
@@ -182,7 +201,8 @@ fn parse_program_data_authority(data: &[u8]) -> Result<Option<String>> {
             Ok(authority)
         }
         other => Err(ApiError::Custom(format!(
-            "expected ProgramData account, got: {other:?}"
+            "expected ProgramData account, got: {}",
+            describe_bpf_loader_account(&other)
         ))),
     }
 }
@@ -257,7 +277,8 @@ fn extract_program_data_pda(data: &[u8]) -> Result<Pubkey> {
             Pubkey::from_str(&program_data).map_err(Into::into)
         }
         other => Err(ApiError::Custom(format!(
-            "expected Program account, got: {other:?}"
+            "expected Program account, got: {}",
+            describe_bpf_loader_account(&other)
         ))),
     }
 }
@@ -368,6 +389,34 @@ mod tests {
             compute_program_hash(&data),
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         );
+    }
+
+    #[test]
+    fn describe_bpf_loader_account_omits_executable_bytes() {
+        use solana_account_decoder::{UiAccountData, UiAccountEncoding};
+
+        let huge = "abcdefghijklmnopqrstuvwxyz".to_string() + &"A".repeat(10_000);
+        let program_data = BpfUpgradeableLoaderAccountType::ProgramData(UiProgramData {
+            slot: 42,
+            authority: Some("Auth111111111111111111111111111111111111111".into()),
+            data: UiAccountData::Binary(huge.clone(), UiAccountEncoding::Base64),
+        });
+        let described = describe_bpf_loader_account(&program_data);
+        assert!(described.contains("ProgramData"));
+        assert!(described.contains("42"));
+        assert!(
+            !described.contains(&huge),
+            "must not dump executable base64 into logs"
+        );
+        assert!(!described.contains("Binary"));
+
+        let buffer = BpfUpgradeableLoaderAccountType::Buffer(UiBuffer {
+            authority: None,
+            data: UiAccountData::Binary(huge.clone(), UiAccountEncoding::Base64),
+        });
+        let described = describe_bpf_loader_account(&buffer);
+        assert!(described.starts_with("Buffer("));
+        assert!(!described.contains(&huge));
     }
 
     #[tokio::test]

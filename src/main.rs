@@ -1,19 +1,5 @@
 use std::net::SocketAddr;
-
-mod api;
-mod build;
-mod config;
-mod db;
-mod errors;
-mod onchain;
-mod state;
-mod sweep;
-mod types;
-
-use crate::state::AppState;
-
-/// Result type for the API.
-pub type Result<T> = std::result::Result<T, errors::ApiError>;
+use verified_programs_api::{api::routes, config, db, state::AppState, sweep};
 
 #[tokio::main]
 async fn main() {
@@ -51,7 +37,7 @@ async fn main() {
 
     sweep::spawn(state.clone());
 
-    let app = api::routes::initialize_router(state);
+    let app = routes::initialize_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!("Server starting on {}", addr);
 

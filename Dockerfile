@@ -13,7 +13,7 @@ COPY . .
 
 RUN cargo build --release
 
-RUN cargo install solana-verify --git https://github.com/solana-foundation/solana-verifiable-build --tag v0.5.0
+RUN ./install-verify.sh
 
 FROM debian:stable-slim AS api_final
 

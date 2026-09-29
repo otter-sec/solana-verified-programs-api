@@ -81,6 +81,11 @@ impl DbClient {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
         Ok(())
     }
+
+    /// Raw pool for tests' ad-hoc queries; production code uses the typed methods above.
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
@@ -390,18 +395,31 @@ impl DbClient {
         Ok(())
     }
 
-    /// One row per signer who has a completed claim on this program.
+    /// One row per signer, preferring their build whose `executable_hash`
+    /// matches the on-chain hash (verified), else the most recent. Hash-less
+    /// builds are skipped. The returned rows are ordered with verified builds
+    /// first, then by signer for stable output.
     pub async fn get_all_verification_info(
         &self,
         program_id: Address,
     ) -> Result<Vec<VerificationResponseWithSigner>> {
         let state = self.get_program_state(&program_id).await?;
+        let on_chain_hash = state.as_ref().and_then(|s| s.on_chain_hash.clone());
         let builds = sqlx::query_as::<_, BuildRow>(
-            "SELECT DISTINCT ON (signer) * FROM builds
-             WHERE program_id = $1 AND status = 'completed'
-             ORDER BY signer, completed_at DESC",
+            "WITH selected_builds AS (
+                 SELECT DISTINCT ON (signer) * FROM builds
+                 WHERE program_id = $1 AND status = 'completed'
+                   AND executable_hash IS NOT NULL
+                 ORDER BY signer,
+                          COALESCE(executable_hash = $2::text, false) DESC,
+                          completed_at DESC NULLS LAST
+             )
+             SELECT * FROM selected_builds
+             ORDER BY COALESCE(executable_hash = $2::text, false) DESC,
+                      signer",
         )
         .bind(program_id)
+        .bind(&on_chain_hash)
         .fetch_all(&self.pool)
         .await?;
 
